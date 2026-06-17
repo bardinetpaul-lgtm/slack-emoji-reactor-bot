@@ -68,37 +68,39 @@ app.event('reaction_added', async ({ event, client, logger }) => {
 
       originalAuthorId = result.messages[0].user;
     } catch (historyError) {
-      // Le bot n'a peut-être pas accès au channel
       logger.error(`❌ Impossible de lire le channel ${channelId}:`, historyError.message);
       logger.info('💡 Assure-toi que le bot est invité dans le channel (/invite @BotName)');
       return;
     }
 
-    // 3️⃣ Choisir 2 médias aléatoires
+    // 3️⃣ Récupérer le nom du réacteur
+    const reactorInfo = await client.users.info({ user: reactingUserId });
+    const reactorName = reactorInfo.user.real_name || reactorInfo.user.name;
+
+    // 4️⃣ Choisir 2 médias aléatoires
     const mediaForReactor = await getRandomMedia();
     const mediaForAuthor = await getRandomMedia();
 
-    // 4️⃣ Envoyer un DM à celui qui a réagi
+    // 5️⃣ DM au réacteur
     await sendDM(client, reactingUserId, {
-      text: `Tu as réagi avec :${TARGET_EMOJI}: ! Voici ta surprise 🎁`,
+      text: `Hey @${reactorName} tu as réagi avec jean pip coucou !`,
       blocks: buildMediaBlocks({
-        headerText: `✨ Tu as réagi avec :${TARGET_EMOJI}: !\nVoici ta surprise :`,
+        headerText: `Hey <@${reactingUserId}> tu as réagi avec jean pip coucou :${TARGET_EMOJI}:`,
         media: mediaForReactor,
       }),
     });
 
     logger.info(`📨 DM envoyé au réacteur <@${reactingUserId}>`);
 
-    // 5️⃣ Envoyer un DM à l'auteur du message original
+    // 6️⃣ DM à l'auteur du message original
     if (originalAuthorId && originalAuthorId !== reactingUserId) {
-      // Récupérer le nom du réacteur
-      const reactorInfo = await client.users.info({ user: reactingUserId });
-      const reactorName = reactorInfo.user.real_name || reactorInfo.user.name;
+      const authorInfo = await client.users.info({ user: originalAuthorId });
+      const authorName = authorInfo.user.real_name || authorInfo.user.name;
 
       await sendDM(client, originalAuthorId, {
-        text: `${reactorName} a réagi à ton message avec :${TARGET_EMOJI}: !`,
+        text: `Bonjour jeune @${authorName}, ${reactorName} t'a envoyé un Jeanpip !`,
         blocks: buildMediaBlocks({
-          headerText: `🎉 *${reactorName}* a réagi à ton message avec :${TARGET_EMOJI}: !\nVoici un petit cadeau :`,
+          headerText: `Bonjour jeune <@${originalAuthorId}>, <@${reactingUserId}> t'a envoyé un Jeanpip ! :${TARGET_EMOJI}:`,
           media: mediaForAuthor,
         }),
       });
