@@ -4,6 +4,26 @@
 // ═══════════════════════════════════════════════════════════
 
 /**
+ * Vérifie si une URL est une image publiquement accessible
+ * (Slack ne peut pas afficher les images qui nécessitent une auth)
+ */
+function isPublicImageUrl(url) {
+  const publicDomains = [
+    'media.giphy.com',
+    'i.imgur.com',
+    'images.unsplash.com',
+    'cdn.pixabay.com',
+    'res.cloudinary.com',
+  ];
+  try {
+    const hostname = new URL(url).hostname;
+    return publicDomains.some((domain) => hostname.includes(domain));
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Construit les blocs Slack pour afficher un média
  * @param {Object} options
  * @param {string} options.headerText - Texte d'en-tête (supporte mrkdwn)
@@ -24,8 +44,8 @@ function buildMediaBlocks({ headerText, media }) {
     },
   ];
 
-  if (media.type === 'image') {
-    // Slack supporte nativement les blocs image
+  if (media.type === 'image' && isPublicImageUrl(media.url)) {
+    // Image publique → Slack peut l'afficher en inline
     blocks.push({
       type: 'image',
       image_url: media.url,
@@ -36,13 +56,21 @@ function buildMediaBlocks({ headerText, media }) {
       },
     });
   } else if (media.type === 'video') {
-    // Pour les vidéos, on envoie un lien cliquable
-    // (Slack ne supporte pas les blocs vidéo en DM natif)
+    // Vidéo → lien cliquable
     blocks.push({
       type: 'section',
       text: {
         type: 'mrkdwn',
         text: `🎬 *${media.title}*\n<${media.url}|▶️ Clique ici pour voir la vidéo>`,
+      },
+    });
+  } else {
+    // Image privée (slack-files, etc.) → lien cliquable
+    blocks.push({
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: `🖼️ *${media.title}*\n<${media.url}|👉 Clique ici pour voir l'image>`,
       },
     });
   }
