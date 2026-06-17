@@ -1,0 +1,17 @@
+{
+  "name": "slack-emoji-reactor-bot",
+  "version": "1.0.0",
+  "description": "Bot Slack qui envoie des images/vidéos aléatoires en DM quand quelqu'un réagit avec un emoji spécifique",
+  "main": "src/app.js",
+  "scripts": {
+    "start": "node src/app.js",
+    "dev": "node --watch src/app.js"
+  },
+  "keywords": ["slack", "bot", "emoji", "reaction"],
+  "author": "PaulBRD",
+  "license": "MIT",
+  "dependencies": {
+    "@slack/bolt": "^4.1.0",
+    "dotenv": "^16.4.7"
+  }
+}
