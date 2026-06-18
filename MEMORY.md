@@ -138,6 +138,58 @@ Puis : `git pull` → `Ctrl+C` → `npm start`
 
 ---
 
+## 🚀 Évolutions possibles (discutées mais pas encore implémentées)
+
+### 1. Déploiement 24/7
+**Problème :** Le bot s'arrête quand le PC est éteint.
+**Solution :** Déployer sur une plateforme cloud :
+| Option | Coût | Difficulté |
+|---|---|---|
+| Railway.app ⭐ (recommandé) | 5$/mois (trial gratuit) | 🟢 Très facile |
+| Render | Gratuit (mais s'éteint après 15min) | 🟢 Facile |
+| Fly.io | Gratuit tier | 🟡 Moyen |
+| VPS (OVH, Hetzner) | ~3-5€/mois | 🔴 Avancé |
+
+> Avec Socket Mode, pas besoin d'URL publique. Railway se connecte au repo GitHub et redéploie automatiquement à chaque push.
+
+### 2. Support multi-emoji
+**Idée :** Surveiller plusieurs emojis différents, pas seulement `:jeanpip:`.
+**Implémentation :** Transformer `TARGET_EMOJI` en liste dans `.env` :
+```env
+TARGET_EMOJIS=jeanpip,partyparrot,fire
+```
+Chaque emoji pourrait avoir sa propre banque de médias.
+
+### 3. Cooldown anti-spam
+**Problème :** Si quelqu'un spam 50 réactions :jeanpip: d'affilée, le bot envoie 50 DMs.
+**Solution :** Ajouter un cooldown par utilisateur (ex: 1 réaction prise en compte toutes les 30 secondes).
+
+### 4. Auto-join dans tous les channels publics
+**Idée :** Le bot rejoint automatiquement tous les channels publics au démarrage, plus besoin de faire `/invite` manuellement.
+**Prérequis :** Ajouter les scopes `channels:join` + `channels:read` sur api.slack.com.
+
+### 5. Amélioration de l'aléatoire
+**Options discutées :**
+| Besoin | Solution |
+|---|---|
+| Éviter les doublons entre réacteur et auteur | Tirer le 2ème en excluant le 1er |
+| Ne jamais renvoyer le même 2 fois de suite | Mémoriser le dernier tirage |
+| Rotation complète des 25 avant de boucler | Système de shuffle (mélanger le deck) |
+
+### 6. Logs dans un channel Slack
+**Idée :** Envoyer un récap de chaque utilisation dans un channel admin dédié (ex: `#jeanpip-logs`) pour monitorer l'activité du bot.
+
+### 7. Giphy API dynamique
+**Idée :** Au lieu de se limiter à la banque locale, utiliser l'API Giphy pour des GIFs aléatoires infinis.
+**Prérequis :** Créer un compte sur developers.giphy.com et ajouter `GIPHY_API_KEY` dans `.env`.
+**Note :** Déjà supporté dans le code (`src/media.js`), il suffit d'ajouter la clé.
+
+### 8. Ré-hébergement des images
+**Problème :** Les URLs `slack-files.com` sont privées → affichées en lien cliquable au lieu d'image inline.
+**Solution :** Ré-héberger les images sur un service public (Imgur, Cloudinary, S3) pour qu'elles s'affichent directement dans le DM Slack.
+
+---
+
 ## 🚨 Règle d'or
 
 > **Quand le bot ne fonctionne pas → vérifier EN PREMIER qu'il est bien invité dans le channel.**
