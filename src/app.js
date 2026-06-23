@@ -120,6 +120,18 @@ async function punishSpammer(client, userId, logger) {
   logger.info(`✅ Punition terminée pour <@${userId}>`);
 }
 
+/**
+ * Vérifie si un utilisateur est un bot
+ */
+async function isBot(client, userId) {
+  try {
+    const userInfo = await client.users.info({ user: userId });
+    return userInfo.user.is_bot || false;
+  } catch {
+    return false;
+  }
+}
+
 // ─────────────────────────────────────────────
 // 🚀 Initialisation de l'app Slack Bolt
 // ─────────────────────────────────────────────
@@ -149,8 +161,11 @@ app.event('message', async ({ event, client, logger }) => {
     // Ignorer les messages du bot lui-même
     if (event.user === botUserId) return;
 
-    // Ignorer les messages modifiés, supprimés, etc.
+    // Ignorer les messages de bots / apps / intégrations
     if (event.subtype) return;
+    if (event.bot_id) return;
+    if (event.app_id) return;
+    if (!event.user) return;
 
     // Vérifier que c'est une des cibles
     if (!TARGET_USER_IDS.includes(event.user)) return;
@@ -230,7 +245,14 @@ app.event('reaction_added', async ({ event, client, logger }) => {
         return;
       }
 
-      originalAuthorId = result.messages[0].user;
+      const originalMessage = result.messages[0];
+      originalAuthorId = originalMessage.user;
+
+      // 🛡️ Si le message a été posté par un bot → pas de DM à l'auteur
+      if (originalMessage.bot_id || !originalAuthorId) {
+        logger.info('ℹ️  Message posté par un bot, pas de DM à l\'auteur');
+        originalAuthorId = null;
+      }
     } catch (historyError) {
       logger.error(`❌ Impossible de lire le channel ${channelId}:`, historyError.message);
       logger.info('💡 Assure-toi que le bot est invité dans le channel (/invite @BotName)');
@@ -245,31 +267,39 @@ app.event('reaction_added', async ({ event, client, logger }) => {
     const mediaForReactor = await getRandomMedia();
     const mediaForAuthor = await getRandomMedia();
 
-    // 5️⃣ DM au réacteur
-    await sendDM(client, reactingUserId, {
-      text: `Hey @${reactorName} tu as réagi avec jean pip coucou !`,
-      blocks: buildMediaBlocks({
-        headerText: `Hey <@${reactingUserId}> tu as réagi avec jean pip coucou :${TARGET_EMOJI}:`,
-        media: mediaForReactor,
-      }),
-    });
-
-    logger.info(`📨 DM envoyé au réacteur <@${reactingUserId}>`);
-
-    // 6️⃣ DM à l'auteur du message original
-    if (originalAuthorId && originalAuthorId !== reactingUserId) {
-      const authorInfo = await client.users.info({ user: originalAuthorId });
-      const authorName = authorInfo.user.real_name || authorInfo.user.name;
-
-      await sendDM(client, originalAuthorId, {
-        text: `Bonjour jeune @${authorName}, ${reactorName} t'a envoyé un Jeanpip !`,
+    // 5️⃣ DM au réacteur (seulement si c'est un humain)
+    if (!reactorInfo.user.is_bot) {
+      await sendDM(client, reactingUserId, {
+        text: `Hey @${reactorName} tu as réagi avec jean pip coucou !`,
         blocks: buildMediaBlocks({
-          headerText: `Bonjour jeune <@${originalAuthorId}>, <@${reactingUserId}> t'a envoyé un Jeanpip ! :${TARGET_EMOJI}:`,
-          media: mediaForAuthor,
+          headerText: `Hey <@${reactingUserId}> tu as réagi avec jean pip coucou :${TARGET_EMOJI}:`,
+          media: mediaForReactor,
         }),
       });
 
-      logger.info(`📨 DM envoyé à l'auteur <@${originalAuthorId}>`);
+      logger.info(`📨 DM envoyé au réacteur <@${reactingUserId}>`);
+    }
+
+    // 6️⃣ DM à l'auteur du message original (seulement si humain et différent du réacteur)
+    if (originalAuthorId && originalAuthorId !== reactingUserId) {
+      // Vérifier que l'auteur n'est pas un bot
+      const authorIsBot = await isBot(client, originalAuthorId);
+      if (!authorIsBot) {
+        const authorInfo = await client.users.info({ user: originalAuthorId });
+        const authorName = authorInfo.user.real_name || authorInfo.user.name;
+
+        await sendDM(client, originalAuthorId, {
+          text: `Bonjour jeune @${authorName}, ${reactorName} t'a envoyé un Jeanpip !`,
+          blocks: buildMediaBlocks({
+            headerText: `Bonjour jeune <@${originalAuthorId}>, <@${reactingUserId}> t'a envoyé un Jeanpip ! :${TARGET_EMOJI}:`,
+            media: mediaForAuthor,
+          }),
+        });
+
+        logger.info(`📨 DM envoyé à l'auteur <@${originalAuthorId}>`);
+      } else {
+        logger.info(`ℹ️  Auteur <@${originalAuthorId}> est un bot, pas de DM`);
+      }
     }
 
     logger.info('✅ Flow terminé avec succès');
@@ -313,6 +343,8 @@ async function sendDM(client, userId, message) {
   if (TARGET_USER_IDS.length > 0) {
     console.log(`  🎪  Cibles auto-react (${TARGET_USER_IDS.length}) :`);
     TARGET_USER_IDS.forEach((id) => console.log(`       → <@${id}>`));
+  } else {
+    console.log('  🎪  Aucune cible auto-react configurée');
   }
   console.log('══════════════════════════════════════════');
   console.log('');
