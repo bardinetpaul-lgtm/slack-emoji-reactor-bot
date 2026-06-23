@@ -33,7 +33,7 @@ const TARGET_USER_IDS = process.env.TARGET_USER_IDS
 // 🚨 Anti-spam config
 // ─────────────────────────────────────────────
 const SPAM_THRESHOLD_SECONDS = 8;
-const SPAM_PUNISHMENT_INTERVAL_MS = 10000; // 10 secondes
+const SPAM_PUNISHMENT_INTERVAL_MS = 5000; // 5 secondes
 
 // Les 10 photos troll envoyées dans l'ordre au spammeur
 const SPAM_TROLL_SEQUENCE = [
@@ -82,7 +82,7 @@ function isSpam(userId, channelId, messageTs) {
 }
 
 /**
- * Punir le spammeur : 10 DMs avec des photos troll différentes, une toutes les 10s
+ * Punir le spammeur : 10 DMs avec des photos troll différentes, une toutes les 5s
  */
 async function punishSpammer(client, userId, logger) {
   // Éviter de double-punir si déjà en cours
@@ -93,7 +93,7 @@ async function punishSpammer(client, userId, logger) {
 
   spammersBeingPunished.add(userId);
   const total = SPAM_TROLL_SEQUENCE.length;
-  logger.info(`💀 PUNITION ANTI-SPAM lancée pour <@${userId}> : ${total} Jeanpips en ${total * 10}s`);
+  logger.info(`💀 PUNITION ANTI-SPAM lancée pour <@${userId}> : ${total} Jeanpips en ${total * 5}s`);
 
   for (let i = 0; i < total; i++) {
     try {
@@ -107,7 +107,7 @@ async function punishSpammer(client, userId, logger) {
 
       logger.info(`💀 Punition ${i + 1}/${total} envoyée à <@${userId}>`);
 
-      // Attendre 10 secondes avant le prochain (sauf le dernier)
+      // Attendre 5 secondes avant le prochain (sauf le dernier)
       if (i < total - 1) {
         await new Promise((resolve) => setTimeout(resolve, SPAM_PUNISHMENT_INTERVAL_MS));
       }
@@ -309,7 +309,7 @@ async function sendDM(client, userId, message) {
   console.log('  ⚡️  Slack Emoji Reactor Bot lancé !');
   console.log(`  🎯  Emoji surveillé : :${TARGET_EMOJI}:`);
   console.log(`  🤖  Bot ID : ${botUserId}`);
-  console.log(`  🚨  Anti-spam : ${SPAM_THRESHOLD_SECONDS}s seuil → ${SPAM_TROLL_SEQUENCE.length}x troll`);
+  console.log(`  🚨  Anti-spam : ${SPAM_THRESHOLD_SECONDS}s seuil → ${SPAM_TROLL_SEQUENCE.length}x troll (toutes les 5s)`);
   if (TARGET_USER_IDS.length > 0) {
     console.log(`  🎪  Cibles auto-react (${TARGET_USER_IDS.length}) :`);
     TARGET_USER_IDS.forEach((id) => console.log(`       → <@${id}>`));
