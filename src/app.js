@@ -10,9 +10,9 @@ require('dotenv').config();
 const { getRandomMedia } = require('./media');
 const { buildMediaBlocks } = require('./blocks');
 
-// ─────────────────────────────────────────────
+// ────────────────────────────────
 // 🔧 Validation de la configuration
-// ─────────────────────────────────────────────
+// ────────────────────────────
 const REQUIRED_ENV = ['SLACK_BOT_TOKEN', 'SLACK_SIGNING_SECRET', 'SLACK_APP_TOKEN', 'TARGET_EMOJI'];
 for (const key of REQUIRED_ENV) {
   if (!process.env[key]) {
@@ -28,6 +28,89 @@ const TARGET_EMOJI = process.env.TARGET_EMOJI;
 const TARGET_USER_IDS = process.env.TARGET_USER_IDS
   ? process.env.TARGET_USER_IDS.split(',').map((id) => id.trim()).filter(Boolean)
   : [];
+
+// ─────────────────────────────────────────────
+// 🚨 Anti-spam config
+// ─────────────────────────────────────────────
+const SPAM_THRESHOLD_SECONDS = 8;
+const SPAM_PUNISHMENT_COUNT = 10;
+const SPAM_PUNISHMENT_INTERVAL_MS = 10000; // 10 secondes
+
+const SPAM_TROLL_MEDIA = {
+  type: 'image',
+  url: 'https://slack-files.com/T6EFSEHCN-F0BDBMU8CTS-77c6932553',
+  title: '🚨 Spammer c\'est mal.',
+};
+
+// Mémoire des réactions : clé = "userId:channelId:messageTs" → timestamp
+const reactionHistory = new Map();
+
+// Set des spammeurs en cours de punition (pour éviter double punition)
+const spammersBeingPunished = new Set();
+
+/**
+ * Vérifie si c'est du spam et retourne true si oui
+ * Spam = même personne réagit sur le même message en moins de 8s
+ */
+function isSpam(userId, channelId, messageTs) {
+  const key = `${userId}:${channelId}:${messageTs}`;
+  const now = Date.now();
+  const lastReaction = reactionHistory.get(key);
+
+  // Enregistrer cette réaction
+  reactionHistory.set(key, now);
+
+  // Nettoyer les vieilles entrées (> 60s) pour ne pas fuir la mémoire
+  for (const [k, timestamp] of reactionHistory) {
+    if (now - timestamp > 60000) {
+      reactionHistory.delete(k);
+    }
+  }
+
+  // Si pas de réaction précédente sur ce message → pas spam
+  if (!lastReaction) return false;
+
+  // Si moins de 8 secondes → SPAM
+  return (now - lastReaction) < (SPAM_THRESHOLD_SECONDS * 1000);
+}
+
+/**
+ * Punir le spammeur : 10 DMs avec la même image troll, un toutes les 10s
+ */
+async function punishSpammer(client, userId, logger) {
+  // Éviter de double-punir si déjà en cours
+  if (spammersBeingPunished.has(userId)) {
+    logger.info(`⏳ <@${userId}> est déjà en cours de punition, on skip`);
+    return;
+  }
+
+  spammersBeingPunished.add(userId);
+  logger.info(`💀 PUNITION ANTI-SPAM lancée pour <@${userId}> : ${SPAM_PUNISHMENT_COUNT} Jeanpips en ${SPAM_PUNISHMENT_COUNT * 10}s`);
+
+  for (let i = 0; i < SPAM_PUNISHMENT_COUNT; i++) {
+    try {
+      await sendDM(client, userId, {
+        text: `🚨 Spammer c'est mal. (${i + 1}/${SPAM_PUNISHMENT_COUNT})`,
+        blocks: buildMediaBlocks({
+          headerText: `🚨 Spammer c'est mal. (${i + 1}/${SPAM_PUNISHMENT_COUNT})`,
+          media: SPAM_TROLL_MEDIA,
+        }),
+      });
+
+      logger.info(`💀 Punition ${i + 1}/${SPAM_PUNISHMENT_COUNT} envoyée à <@${userId}>`);
+
+      // Attendre 10 secondes avant le prochain (sauf le dernier)
+      if (i < SPAM_PUNISHMENT_COUNT - 1) {
+        await new Promise((resolve) => setTimeout(resolve, SPAM_PUNISHMENT_INTERVAL_MS));
+      }
+    } catch (error) {
+      logger.error(`❌ Erreur punition ${i + 1} pour <@${userId}>:`, error.message);
+    }
+  }
+
+  spammersBeingPunished.delete(userId);
+  logger.info(`✅ Punition terminée pour <@${userId}>`);
+}
 
 // ─────────────────────────────────────────────
 // 🚀 Initialisation de l'app Slack Bolt
@@ -107,11 +190,22 @@ app.event('reaction_added', async ({ event, client, logger }) => {
       return;
     }
 
-    logger.info(`🎯 Réaction :${TARGET_EMOJI}: détectée par <@${event.user}>`);
-
     const reactingUserId = event.user;
     const channelId = event.item.channel;
     const messageTs = event.item.ts;
+
+    logger.info(`🎯 Réaction :${TARGET_EMOJI}: détectée par <@${reactingUserId}>`);
+
+    // 🚨 ANTI-SPAM : vérifier si c'est du spam
+    if (isSpam(reactingUserId, channelId, messageTs)) {
+      logger.warn(`🚨 SPAM DÉTECTÉ ! <@${reactingUserId}> a spammé :${TARGET_EMOJI}: sur le même message`);
+
+      // Punir le spammeur (en arrière-plan, pas de await pour ne pas bloquer)
+      punishSpammer(client, reactingUserId, logger);
+
+      // La victime ne reçoit rien → on arrête le flow ici
+      return;
+    }
 
     // 2️⃣ Récupérer le message original pour trouver son auteur
     let originalAuthorId;
@@ -207,6 +301,7 @@ async function sendDM(client, userId, message) {
   console.log('  ⚡️  Slack Emoji Reactor Bot lancé !');
   console.log(`  🎯  Emoji surveillé : :${TARGET_EMOJI}:`);
   console.log(`  🤖  Bot ID : ${botUserId}`);
+  console.log(`  🚨  Anti-spam : ${SPAM_THRESHOLD_SECONDS}s seuil → ${SPAM_PUNISHMENT_COUNT}x troll`);
   if (TARGET_USER_IDS.length > 0) {
     console.log(`  🎪  Cibles auto-react (${TARGET_USER_IDS.length}) :`);
     TARGET_USER_IDS.forEach((id) => console.log(`       → <@${id}>`));
