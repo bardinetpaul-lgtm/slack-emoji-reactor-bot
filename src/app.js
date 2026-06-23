@@ -23,6 +23,8 @@ for (const key of REQUIRED_ENV) {
 }
 
 const TARGET_EMOJI = process.env.TARGET_EMOJI;
+const TARGET_USER_ID = process.env.TARGET_USER_ID || '';
+const TARGET_USER_MESSAGE = process.env.TARGET_USER_MESSAGE || `Hey <@${TARGET_USER_ID}>, tu as posté un message et tu mérites un Jeanpip ! :${TARGET_EMOJI}:`;
 
 // ─────────────────────────────────────────────
 // 🚀 Initialisation de l'app Slack Bolt
@@ -36,12 +38,67 @@ const app = new App({
 });
 
 // ─────────────────────────────────────────────
+// 🤖 Récupérer l'ID du bot au démarrage
+// ─────────────────────────────────────
+let botUserId = null;
+
+// ─────────────────────────────────────────────
+// 📡 Listener : message (auto-react sur la cible)
+// ─────────────────────────────────────────────
+app.event('message', async ({ event, client, logger }) => {
+  try {
+    // Ignorer si pas de cible configurée
+    if (!TARGET_USER_ID) return;
+
+    // Ignorer les messages du bot lui-même
+    if (event.user === botUserId) return;
+
+    // Ignorer les messages modifiés, supprimés, etc.
+    if (event.subtype) return;
+
+    // Vérifier que c'est la cible
+    if (event.user !== TARGET_USER_ID) return;
+
+    logger.info(`🎯 Message de la cible <@${TARGET_USER_ID}> détecté dans <#${event.channel}>`);
+
+    // 1️⃣ Réagir avec :jeanpip: sur le message
+    await client.reactions.add({
+      channel: event.channel,
+      name: TARGET_EMOJI,
+      timestamp: event.ts,
+    });
+
+    logger.info(`✅ Réaction :${TARGET_EMOJI}: ajoutée au message`);
+
+    // 2️⃣ Envoyer un DM à la cible avec un média aléatoire
+    const media = await getRandomMedia();
+
+    await sendDM(client, TARGET_USER_ID, {
+      text: TARGET_USER_MESSAGE,
+      blocks: buildMediaBlocks({
+        headerText: TARGET_USER_MESSAGE,
+        media: media,
+      }),
+    });
+
+    logger.info(`📨 DM envoyé à la cible <@${TARGET_USER_ID}>`);
+  } catch (error) {
+    logger.error('❌ Erreur dans message listener:', error);
+  }
+});
+
+// ─────────────────────────────────────────────
 // 📡 Listener : reaction_added
 // ─────────────────────────────────────────────
 app.event('reaction_added', async ({ event, client, logger }) => {
   try {
     // 1️⃣ Vérifier que c'est le bon emoji
     if (event.reaction !== TARGET_EMOJI) {
+      return;
+    }
+
+    // 🛡️ Ignorer les réactions du bot lui-même (anti-boucle)
+    if (event.user === botUserId) {
       return;
     }
 
@@ -116,7 +173,7 @@ app.event('reaction_added', async ({ event, client, logger }) => {
 
 // ─────────────────────────────────────────────
 // 💬 Helper : Envoyer un DM
-// ─────────────────────────────────────────────
+// ────────────────────────────────────
 async function sendDM(client, userId, message) {
   const conversation = await client.conversations.open({
     users: userId,
@@ -134,10 +191,19 @@ async function sendDM(client, userId, message) {
 // ─────────────────────────────────────────────
 (async () => {
   await app.start();
+
+  // Récupérer l'ID du bot pour l'anti-boucle
+  const authResult = await app.client.auth.test();
+  botUserId = authResult.user_id;
+
   console.log('');
-  console.log('══════════════════════════════════════════');
+  console.log('══════════════════════════════════');
   console.log('  ⚡️  Slack Emoji Reactor Bot lancé !');
   console.log(`  🎯  Emoji surveillé : :${TARGET_EMOJI}:`);
+  console.log(`  🤖  Bot ID : ${botUserId}`);
+  if (TARGET_USER_ID) {
+    console.log(`  🎪  Cible auto-react : <@${TARGET_USER_ID}>`);
+  }
   console.log('══════════════════════════════════════════');
   console.log('');
 })();
