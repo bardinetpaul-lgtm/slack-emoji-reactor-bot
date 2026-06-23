@@ -10,9 +10,9 @@ require('dotenv').config();
 const { getRandomMedia } = require('./media');
 const { buildMediaBlocks } = require('./blocks');
 
-// ────────────────────────────────
+// ─────────────────────────────────────────────
 // 🔧 Validation de la configuration
-// ────────────────────────────
+// ─────────────────────────────────────────────
 const REQUIRED_ENV = ['SLACK_BOT_TOKEN', 'SLACK_SIGNING_SECRET', 'SLACK_APP_TOKEN', 'TARGET_EMOJI'];
 for (const key of REQUIRED_ENV) {
   if (!process.env[key]) {
@@ -33,14 +33,21 @@ const TARGET_USER_IDS = process.env.TARGET_USER_IDS
 // 🚨 Anti-spam config
 // ─────────────────────────────────────────────
 const SPAM_THRESHOLD_SECONDS = 8;
-const SPAM_PUNISHMENT_COUNT = 10;
 const SPAM_PUNISHMENT_INTERVAL_MS = 10000; // 10 secondes
 
-const SPAM_TROLL_MEDIA = {
-  type: 'image',
-  url: 'https://slack-files.com/T6EFSEHCN-F0BDBMU8CTS-77c6932553',
-  title: '🚨 Spammer c\'est mal.',
-};
+// Les 10 photos troll envoyées dans l'ordre au spammeur
+const SPAM_TROLL_SEQUENCE = [
+  { type: 'image', url: 'https://slack-files.com/T6EFSEHCN-F0BDBMU8CTS-77c6932553', title: '🚨 Spammer c\'est mal.' },
+  { type: 'image', url: 'https://slack-files.com/T6EFSEHCN-F0BCE3SGC7P-941026d6a8', title: '🚨 Spammer c\'est mal.' },
+  { type: 'image', url: 'https://slack-files.com/T6EFSEHCN-F0BC21YHVAB-83455d1ed8', title: '🚨 Spammer c\'est mal.' },
+  { type: 'image', url: 'https://slack-files.com/T6EFSEHCN-F0BDBQLPEF2-af87fefb2a', title: '🚨 Spammer c\'est mal.' },
+  { type: 'image', url: 'https://slack-files.com/T6EFSEHCN-F0BCE55GUBX-07592141a1', title: '🚨 Spammer c\'est mal.' },
+  { type: 'image', url: 'https://slack-files.com/T6EFSEHCN-F0BCE5J6URK-53abe5b196', title: '🚨 Spammer c\'est mal.' },
+  { type: 'image', url: 'https://slack-files.com/T6EFSEHCN-F0BC23V6JKH-e490b68a5e', title: '🚨 Spammer c\'est mal.' },
+  { type: 'image', url: 'https://slack-files.com/T6EFSEHCN-F0BCB7W1FH9-737f44b887', title: '🚨 Spammer c\'est mal.' },
+  { type: 'image', url: 'https://slack-files.com/T6EFSEHCN-F0BCFG6PKFY-7090b859e8', title: '🚨 Spammer c\'est mal.' },
+  { type: 'image', url: 'https://slack-files.com/T6EFSEHCN-F0BCM8HH7FE-514efee20f', title: '🚨 Spammer c\'est mal.' },
+];
 
 // Mémoire des réactions : clé = "userId:channelId:messageTs" → timestamp
 const reactionHistory = new Map();
@@ -75,7 +82,7 @@ function isSpam(userId, channelId, messageTs) {
 }
 
 /**
- * Punir le spammeur : 10 DMs avec la même image troll, un toutes les 10s
+ * Punir le spammeur : 10 DMs avec des photos troll différentes, une toutes les 10s
  */
 async function punishSpammer(client, userId, logger) {
   // Éviter de double-punir si déjà en cours
@@ -85,22 +92,23 @@ async function punishSpammer(client, userId, logger) {
   }
 
   spammersBeingPunished.add(userId);
-  logger.info(`💀 PUNITION ANTI-SPAM lancée pour <@${userId}> : ${SPAM_PUNISHMENT_COUNT} Jeanpips en ${SPAM_PUNISHMENT_COUNT * 10}s`);
+  const total = SPAM_TROLL_SEQUENCE.length;
+  logger.info(`💀 PUNITION ANTI-SPAM lancée pour <@${userId}> : ${total} Jeanpips en ${total * 10}s`);
 
-  for (let i = 0; i < SPAM_PUNISHMENT_COUNT; i++) {
+  for (let i = 0; i < total; i++) {
     try {
       await sendDM(client, userId, {
-        text: `🚨 Spammer c'est mal. (${i + 1}/${SPAM_PUNISHMENT_COUNT})`,
+        text: `🚨 Spammer c'est mal. (${i + 1}/${total})`,
         blocks: buildMediaBlocks({
-          headerText: `🚨 Spammer c'est mal. (${i + 1}/${SPAM_PUNISHMENT_COUNT})`,
-          media: SPAM_TROLL_MEDIA,
+          headerText: `🚨 Spammer c'est mal. (${i + 1}/${total})`,
+          media: SPAM_TROLL_SEQUENCE[i],
         }),
       });
 
-      logger.info(`💀 Punition ${i + 1}/${SPAM_PUNISHMENT_COUNT} envoyée à <@${userId}>`);
+      logger.info(`💀 Punition ${i + 1}/${total} envoyée à <@${userId}>`);
 
       // Attendre 10 secondes avant le prochain (sauf le dernier)
-      if (i < SPAM_PUNISHMENT_COUNT - 1) {
+      if (i < total - 1) {
         await new Promise((resolve) => setTimeout(resolve, SPAM_PUNISHMENT_INTERVAL_MS));
       }
     } catch (error) {
@@ -301,7 +309,7 @@ async function sendDM(client, userId, message) {
   console.log('  ⚡️  Slack Emoji Reactor Bot lancé !');
   console.log(`  🎯  Emoji surveillé : :${TARGET_EMOJI}:`);
   console.log(`  🤖  Bot ID : ${botUserId}`);
-  console.log(`  🚨  Anti-spam : ${SPAM_THRESHOLD_SECONDS}s seuil → ${SPAM_PUNISHMENT_COUNT}x troll`);
+  console.log(`  🚨  Anti-spam : ${SPAM_THRESHOLD_SECONDS}s seuil → ${SPAM_TROLL_SEQUENCE.length}x troll`);
   if (TARGET_USER_IDS.length > 0) {
     console.log(`  🎪  Cibles auto-react (${TARGET_USER_IDS.length}) :`);
     TARGET_USER_IDS.forEach((id) => console.log(`       → <@${id}>`));
