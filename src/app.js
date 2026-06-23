@@ -2,7 +2,7 @@
 //  🤖 SLACK EMOJI REACTOR BOT
 //  Envoie des images/vidéos aléatoires en DM quand
 //  quelqu'un réagit avec un emoji spécifique
-// ════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════
 
 const { App, LogLevel } = require('@slack/bolt');
 require('dotenv').config();
@@ -10,7 +10,7 @@ require('dotenv').config();
 const { getRandomMedia } = require('./media');
 const { buildMediaBlocks } = require('./blocks');
 
-// ────────────────────────────────────
+// ─────────────────────────────────────────────
 // 🔧 Validation de la configuration
 // ─────────────────────────────────────────────
 const REQUIRED_ENV = ['SLACK_BOT_TOKEN', 'SLACK_SIGNING_SECRET', 'SLACK_APP_TOKEN', 'TARGET_EMOJI'];
@@ -29,7 +29,7 @@ const TARGET_USER_IDS = process.env.TARGET_USER_IDS
   ? process.env.TARGET_USER_IDS.split(',').map((id) => id.trim()).filter(Boolean)
   : [];
 
-// ────────────────────────────
+// ─────────────────────────────────────────────
 // 🚀 Initialisation de l'app Slack Bolt
 // ─────────────────────────────────────────────
 const app = new App({
@@ -40,13 +40,15 @@ const app = new App({
   logLevel: LogLevel.INFO,
 });
 
-// ─────────────────────────────────
+// ─────────────────────────────────────────────
 // 🤖 Récupérer l'ID du bot au démarrage
 // ─────────────────────────────────────────────
 let botUserId = null;
+let botName = 'Jeanpip Bot';
 
 // ─────────────────────────────────────────────
 // 📡 Listener : message (auto-react sur les cibles)
+//    + déclenche le flow normal (DM à la cible)
 // ─────────────────────────────────────────────
 app.event('message', async ({ event, client, logger }) => {
   try {
@@ -64,7 +66,7 @@ app.event('message', async ({ event, client, logger }) => {
 
     logger.info(`🎯 Message de la cible <@${event.user}> détecté dans <#${event.channel}>`);
 
-    // Réagir avec :jeanpip: sur le message, c'est tout
+    // 1️⃣ Réagir avec :jeanpip: sur le message
     await client.reactions.add({
       channel: event.channel,
       name: TARGET_EMOJI,
@@ -72,6 +74,19 @@ app.event('message', async ({ event, client, logger }) => {
     });
 
     logger.info(`✅ Réaction :${TARGET_EMOJI}: ajoutée au message de <@${event.user}>`);
+
+    // 2️⃣ Déclencher le flow normal → DM à la cible
+    const media = await getRandomMedia();
+
+    await sendDM(client, event.user, {
+      text: `Bonjour jeune, ${botName} t'a envoyé un Jeanpip !`,
+      blocks: buildMediaBlocks({
+        headerText: `Bonjour jeune <@${event.user}>, ${botName} t'a envoyé un Jeanpip ! :${TARGET_EMOJI}:`,
+        media: media,
+      }),
+    });
+
+    logger.info(`📨 DM envoyé à la cible <@${event.user}>`);
   } catch (error) {
     logger.error('❌ Erreur dans message listener:', error);
   }
@@ -178,13 +193,14 @@ async function sendDM(client, userId, message) {
 
 // ─────────────────────────────────────────────
 // ▶️  Démarrage du bot
-// ─────────────────────────────────────
+// ─────────────────────────────────────────────
 (async () => {
   await app.start();
 
   // Récupérer l'ID du bot pour l'anti-boucle
   const authResult = await app.client.auth.test();
   botUserId = authResult.user_id;
+  botName = authResult.user || 'Jeanpip Bot';
 
   console.log('');
   console.log('══════════════════════════════════════════');
