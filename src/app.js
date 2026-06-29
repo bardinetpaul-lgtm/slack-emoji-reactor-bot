@@ -186,7 +186,7 @@ app.event('reaction_added', async ({ event, client, logger }) => {
       return;
     }
 
-    // 📊 Incrémenter le score du réacteur
+    // 📊 Incrémenter le score
     const { justUnlocked, score } = scores.incrementScore(reactingUserId);
     logger.info(`📊 Score de <@${reactingUserId}> : ${score}`);
 
@@ -271,7 +271,6 @@ app.command('/jeanpip-attack', async ({ command, ack, client, logger }) => {
     const isAdmin = JEANPIP_ADMINS.includes(userId);
     const userHasAttack = scores.hasAttack(userId);
 
-    // Vérifier les droits
     if (!isAdmin && !userHasAttack) {
       const currentScore = scores.getScore(userId);
       await safeSendDM(client, userId, {
@@ -281,66 +280,44 @@ app.command('/jeanpip-attack', async ({ command, ack, client, logger }) => {
             type: 'section',
             text: {
               type: 'mrkdwn',
-              text: `❌ *Tu n'as pas encore débloqué l'Attaque Jeanpip !*\n\nTon score cette semaine : *${currentScore}/${scores.ATTACK_THRESHOLD}* :${TARGET_EMOJI}:\n\nEnvoie des Jeanpips pour débloquer la feature !`,
+              text: `❌ *Tu n'as pas encore débloqué l'Attaque Jeanpip !*\n\nTon score cette semaine : *${currentScore}/${scores.ATTACK_THRESHOLD}* :${TARGET_EMOJI}:\n\nEnvoie des Jeanpips pour débloquer la feature ! 💪\n\n_Tape \`/jeanpip-help\` pour voir toutes les features disponibles._`,
             },
           },
         ],
       }, logger);
-      logger.info(`⛔ <@${userId}> n'a pas les droits pour /jeanpip-attack (score: ${currentScore})`);
       return;
     }
 
-    // Récupérer les 7 derniers auteurs uniques du channel
     logger.info(`⚔️  Attaque Jeanpip lancée par <@${userId}> dans <#${channelId}>`);
 
-    const result = await client.conversations.history({
-      channel: channelId,
-      limit: 50,
-    });
-
+    const result = await client.conversations.history({ channel: channelId, limit: 50 });
     const victims = [];
     const seen = new Set();
 
     for (const msg of result.messages) {
-      // Ignorer les messages sans user, les bots et l'attaquant
       if (!msg.user) continue;
       if (msg.bot_id) continue;
       if (msg.user === userId) continue;
       if (msg.user === botUserId) continue;
       if (seen.has(msg.user)) continue;
-
       seen.add(msg.user);
       victims.push(msg.user);
-
       if (victims.length >= 7) break;
     }
 
     if (victims.length === 0) {
       await safeSendDM(client, userId, {
         text: `😅 Pas assez de monde à attaquer dans ce channel !`,
-        blocks: [
-          {
-            type: 'section',
-            text: {
-              type: 'mrkdwn',
-              text: `😅 *Pas assez de monde à attaquer dans ce channel !*\nAucune victime trouvée parmi les derniers messages.`,
-            },
-          },
-        ],
+        blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `😅 *Pas assez de monde à attaquer dans ce channel !*` } }],
       }, logger);
       return;
     }
 
-    // Consommer l'attaque (si pas admin)
-    if (!isAdmin) {
-      scores.consumeAttack(userId);
-    }
+    if (!isAdmin) scores.consumeAttack(userId);
 
-    // Récupérer le nom de l'attaquant
     const attackerInfo = await client.users.info({ user: userId });
     const attackerName = attackerInfo.user.real_name || attackerInfo.user.name;
 
-    // Envoyer un DM à chaque victime
     let sent = 0;
     for (const victimId of victims) {
       try {
@@ -348,51 +325,112 @@ app.command('/jeanpip-attack', async ({ command, ack, client, logger }) => {
         const ok = await safeSendDM(client, victimId, {
           text: `🚨 ALERTE ! ${attackerName} a lancé une Attaque Jeanpip !`,
           blocks: [
-            {
-              type: 'section',
-              text: {
-                type: 'mrkdwn',
-                text: `🚨 *ALERTE ATTAQUE JEANPIP !*\n*<@${userId}>* t'a ciblé avec une Attaque Jeanpip dans <#${channelId}> ! :${TARGET_EMOJI}:`,
-              },
-            },
+            { type: 'section', text: { type: 'mrkdwn', text: `🚨 *ALERTE ATTAQUE JEANPIP !*\n*<@${userId}>* t'a ciblé dans <#${channelId}> ! :${TARGET_EMOJI}:` } },
             { type: 'divider' },
-            {
-              type: 'section',
-              text: {
-                type: 'mrkdwn',
-                text: `🖼️ *${media.title}*\n<${media.url}|👉 Clique ici pour voir l'image>`,
-              },
-            },
-            {
-              type: 'context',
-              elements: [{ type: 'mrkdwn', text: '🤖 _Envoyé par Emoji Reactor Bot_' }],
-            },
+            { type: 'section', text: { type: 'mrkdwn', text: `🖼️ *${media.title}*\n<${media.url}|👉 Clique ici pour voir l'image>` } },
+            { type: 'context', elements: [{ type: 'mrkdwn', text: '🤖 _Envoyé par Emoji Reactor Bot_' }] },
           ],
         }, logger);
         if (ok) sent++;
-        logger.info(`⚔️  Attaque envoyée à <@${victimId}>`);
       } catch (error) {
         logger.error(`❌ Erreur envoi attaque à <@${victimId}>:`, error.message);
       }
     }
 
-    // Confirmation à l'attaquant
     await safeSendDM(client, userId, {
       text: `⚔️ Attaque Jeanpip lancée sur ${sent} personnes !`,
+      blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `⚔️ *Attaque Jeanpip lancée !*\n\nTu as ciblé *${sent} personne(s)* dans <#${channelId}> :${TARGET_EMOJI}:\n${victims.map(v => `• <@${v}>`).join('\n')}` } }],
+    }, logger);
+
+    logger.info(`✅ Attaque Jeanpip terminée : ${sent}/${victims.length} victimes`);
+  } catch (error) {
+    logger.error('❌ Erreur dans /jeanpip-attack:', error);
+  }
+});
+
+// ─────────────────────────────────────────────
+// ❓ Slash command : /jeanpip-help
+// ─────────────────────────────────────────────
+app.command('/jeanpip-help', async ({ command, ack, client, logger }) => {
+  await ack();
+
+  const userId = command.user_id;
+  const isAdmin = JEANPIP_ADMINS.includes(userId);
+  const currentScore = scores.getScore(userId);
+  const userHasAttack = scores.hasAttack(userId);
+
+  try {
+    await safeSendDM(client, userId, {
+      text: `👋 Voici toutes les features du Jeanpip Bot !`,
       blocks: [
+        // Header
+        {
+          type: 'header',
+          text: { type: 'plain_text', text: `🤖 Jeanpip Bot — Guide complet` },
+        },
+        { type: 'divider' },
+
+        // Feature 1 : Réaction Jeanpip
         {
           type: 'section',
           text: {
             type: 'mrkdwn',
-            text: `⚔️ *Attaque Jeanpip lancée !*\n\nTu as ciblé *${sent} personne(s)* dans <#${channelId}> :${TARGET_EMOJI}:\n${victims.map(v => `• <@${v}>`).join('\n')}`,
+            text: `:${TARGET_EMOJI}: *Réaction Jeanpip*\nQuand quelqu'un réagit avec :${TARGET_EMOJI}: sur un message :\n• La personne qui a réagi reçoit un DM avec une image/vidéo aléatoire\n• L'auteur du message reçoit aussi un DM avec une image/vidéo aléatoire`,
           },
+        },
+        { type: 'divider' },
+
+        // Feature 2 : Score
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: `📊 *Ton score cette semaine*\nTu as envoyé *${currentScore}/${scores.ATTACK_THRESHOLD}* :${TARGET_EMOJI}: cette semaine\n${userHasAttack
+              ? '✅ *Tu as une Attaque Jeanpip disponible ! Lance \`/jeanpip-attack\` !*'
+              : `⏳ Il te manque *${Math.max(0, scores.ATTACK_THRESHOLD - currentScore)}* Jeanpip(s) pour débloquer l'Attaque`
+            }\n\n_Les scores se remettent à 0 chaque dimanche à 20h_`,
+          },
+        },
+        { type: 'divider' },
+
+        // Feature 3 : Attaque Jeanpip
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: `⚔️ *Attaque Jeanpip — \`/jeanpip-attack\`*\nEnvoie un Jeanpip aux *7 dernières personnes* ayant posté dans le channel où tu lances la commande !\n\n*Comment débloquer :*\n• Envoie *${scores.ATTACK_THRESHOLD} Jeanpips* dans la semaine\n• Tu reçois un DM de notification quand c'est débloqué\n• Lance \`/jeanpip-attack\` dans le channel de ton choix\n• Ton compteur repart à 0, tu peux redébloquer ensuite !\n\n⚠️ _Si tu ne l'actives pas avant dimanche 20h → tu perds l'attaque_${isAdmin ? '\n\n👑 *Tu es admin : tu as accès illimité à cette commande !*' : ''}`,
+          },
+        },
+        { type: 'divider' },
+
+        // Feature 4 : Anti-spam
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: `🚨 *Anti-spam*\nSi tu réagis plusieurs fois avec :${TARGET_EMOJI}: sur le *même message* en moins de *8 secondes* :\n• La victime ne reçoit rien ✅\n• Toi tu reçois *10 images troll* en rafale toutes les 5 secondes 💀\n\n_Spammer c'est mal._`,
+          },
+        },
+        { type: 'divider' },
+
+        // Toutes les commandes
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: `📋 *Toutes les commandes*\n\`/jeanpip-help\` → Affiche ce message avec ton score actuel\n\`/jeanpip-attack\` → Lance une Attaque Jeanpip sur le channel`,
+          },
+        },
+        {
+          type: 'context',
+          elements: [{ type: 'mrkdwn', text: '🤖 _Jeanpip Bot — Fait avec ❤️_' }],
         },
       ],
     }, logger);
 
-    logger.info(`✅ Attaque Jeanpip terminée : ${sent}/${victims.length} victimes touchées`);
+    logger.info(`📖 /jeanpip-help envoyé à <@${userId}>`);
   } catch (error) {
-    logger.error('❌ Erreur dans /jeanpip-attack:', error);
+    logger.error('❌ Erreur dans /jeanpip-help:', error);
   }
 });
 
@@ -418,10 +456,7 @@ async function sendDM(client, userId, message) {
   botUserId = authResult.user_id;
   botName = authResult.user || 'Jeanpip Bot';
 
-  // Vérifier le reset hebdomadaire au démarrage
   scores.checkAndReset();
-
-  // Vérifier le reset toutes les heures
   setInterval(() => scores.checkAndReset(), 60 * 60 * 1000);
 
   console.log('');
@@ -432,7 +467,7 @@ async function sendDM(client, userId, message) {
   console.log(`  🚨  Anti-spam : ${SPAM_THRESHOLD_SECONDS}s seuil → ${SPAM_TROLL_SEQUENCE.length}x troll`);
   console.log(`  ⚔️   Attaque Jeanpip : seuil ${scores.ATTACK_THRESHOLD} jeanpips/semaine`);
   if (JEANPIP_ADMINS.length > 0) {
-    console.log(`  👑  Admins attaque (${JEANPIP_ADMINS.length}) : ${JEANPIP_ADMINS.join(', ')}`);
+    console.log(`  👑  Admins (${JEANPIP_ADMINS.length}) : ${JEANPIP_ADMINS.join(', ')}`);
   }
   if (TARGET_USER_IDS.length > 0) {
     console.log(`  🎪  Cibles auto-react (${TARGET_USER_IDS.length}) :`);
