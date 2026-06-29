@@ -9,6 +9,7 @@ require('dotenv').config();
 
 const { getRandomMedia } = require('./media');
 const { buildMediaBlocks } = require('./blocks');
+const scores = require('./scores');
 
 // ─────────────────────────────────────────────
 // 🔧 Validation de la configuration
@@ -24,18 +25,20 @@ for (const key of REQUIRED_ENV) {
 
 const TARGET_EMOJI = process.env.TARGET_EMOJI;
 
-// Multi-cibles : on parse la liste séparée par des virgules
 const TARGET_USER_IDS = process.env.TARGET_USER_IDS
   ? process.env.TARGET_USER_IDS.split(',').map((id) => id.trim()).filter(Boolean)
+  : [];
+
+const JEANPIP_ADMINS = process.env.JEANPIP_ADMINS
+  ? process.env.JEANPIP_ADMINS.split(',').map((id) => id.trim()).filter(Boolean)
   : [];
 
 // ─────────────────────────────────────────────
 // 🚨 Anti-spam config
 // ─────────────────────────────────────────────
 const SPAM_THRESHOLD_SECONDS = 8;
-const SPAM_PUNISHMENT_INTERVAL_MS = 5000; // 5 secondes
+const SPAM_PUNISHMENT_INTERVAL_MS = 5000;
 
-// Les 10 photos troll envoyées dans l'ordre au spammeur
 const SPAM_TROLL_SEQUENCE = [
   { type: 'image', url: 'https://slack-files.com/T6EFSEHCN-F0BDBMU8CTS-77c6932553', title: '🚨 Spammer c\'est mal.' },
   { type: 'image', url: 'https://slack-files.com/T6EFSEHCN-F0BCE3SGC7P-941026d6a8', title: '🚨 Spammer c\'est mal.' },
@@ -49,52 +52,29 @@ const SPAM_TROLL_SEQUENCE = [
   { type: 'image', url: 'https://slack-files.com/T6EFSEHCN-F0BCM8HH7FE-514efee20f', title: '🚨 Spammer c\'est mal.' },
 ];
 
-// Mémoire des réactions : clé = "userId:channelId:messageTs" → timestamp
 const reactionHistory = new Map();
-
-// Set des spammeurs en cours de punition (pour éviter double punition)
 const spammersBeingPunished = new Set();
 
-/**
- * Vérifie si c'est du spam et retourne true si oui
- * Spam = même personne réagit sur le même message en moins de 8s
- */
 function isSpam(userId, channelId, messageTs) {
   const key = `${userId}:${channelId}:${messageTs}`;
   const now = Date.now();
   const lastReaction = reactionHistory.get(key);
-
-  // Enregistrer cette réaction
   reactionHistory.set(key, now);
-
-  // Nettoyer les vieilles entrées (> 60s) pour ne pas fuir la mémoire
   for (const [k, timestamp] of reactionHistory) {
-    if (now - timestamp > 60000) {
-      reactionHistory.delete(k);
-    }
+    if (now - timestamp > 60000) reactionHistory.delete(k);
   }
-
-  // Si pas de réaction précédente sur ce message → pas spam
   if (!lastReaction) return false;
-
-  // Si moins de 8 secondes → SPAM
   return (now - lastReaction) < (SPAM_THRESHOLD_SECONDS * 1000);
 }
 
-/**
- * Punir le spammeur : 10 DMs avec des photos troll différentes, une toutes les 5s
- */
 async function punishSpammer(client, userId, logger) {
-  // Éviter de double-punir si déjà en cours
   if (spammersBeingPunished.has(userId)) {
     logger.info(`⏳ <@${userId}> est déjà en cours de punition, on skip`);
     return;
   }
-
   spammersBeingPunished.add(userId);
   const total = SPAM_TROLL_SEQUENCE.length;
-  logger.info(`💀 PUNITION ANTI-SPAM lancée pour <@${userId}> : ${total} Jeanpips en ${total * 5}s`);
-
+  logger.info(`💀 PUNITION ANTI-SPAM lancée pour <@${userId}>`);
   for (let i = 0; i < total; i++) {
     try {
       await sendDM(client, userId, {
@@ -104,25 +84,18 @@ async function punishSpammer(client, userId, logger) {
           media: SPAM_TROLL_SEQUENCE[i],
         }),
       });
-
       logger.info(`💀 Punition ${i + 1}/${total} envoyée à <@${userId}>`);
-
-      // Attendre 5 secondes avant le prochain (sauf le dernier)
       if (i < total - 1) {
         await new Promise((resolve) => setTimeout(resolve, SPAM_PUNISHMENT_INTERVAL_MS));
       }
     } catch (error) {
-      logger.error(`❌ Erreur punition ${i + 1} pour <@${userId}>:`, error.message);
+      logger.error(`❌ Erreur punition ${i + 1}:`, error.message);
     }
   }
-
   spammersBeingPunished.delete(userId);
   logger.info(`✅ Punition terminée pour <@${userId}>`);
 }
 
-/**
- * Vérifie si un utilisateur est un bot
- */
 async function isBot(client, userId) {
   try {
     const userInfo = await client.users.info({ user: userId });
@@ -132,10 +105,6 @@ async function isBot(client, userId) {
   }
 }
 
-/**
- * Envoie un DM uniquement si c'est un humain (pas un bot)
- * Retourne true si le DM a été envoyé, false sinon
- */
 async function safeSendDM(client, userId, message, logger) {
   const userIsBot = await isBot(client, userId);
   if (userIsBot) {
@@ -147,7 +116,7 @@ async function safeSendDM(client, userId, message, logger) {
 }
 
 // ─────────────────────────────────────────────
-// 🚀 Initialisation de l'app Slack Bolt
+// 🚀 Initialisation
 // ─────────────────────────────────────────────
 const app = new App({
   token: process.env.SLACK_BOT_TOKEN,
@@ -157,48 +126,31 @@ const app = new App({
   logLevel: LogLevel.INFO,
 });
 
-// ─────────────────────────────────────────────
-// 🤖 Récupérer l'ID du bot au démarrage
-// ─────────────────────────────────────────────
 let botUserId = null;
 let botName = 'Jeanpip Bot';
 
 // ─────────────────────────────────────────────
 // 📡 Listener : message (auto-react sur les cibles)
-//    + déclenche le flow normal (DM à la cible si humain)
 // ─────────────────────────────────────────────
 app.event('message', async ({ event, client, logger }) => {
   try {
-    // Ignorer si pas de cibles configurées
     if (TARGET_USER_IDS.length === 0) return;
-
-    // Ignorer les messages du bot lui-même
     if (event.user === botUserId) return;
-
-    // Ignorer les messages modifiés, supprimés, etc.
-    // (mais PAS les messages de bots — ils peuvent être des cibles)
     if (event.subtype === 'message_changed' || event.subtype === 'message_deleted') return;
     if (!event.user && !event.bot_id) return;
-
-    // Récupérer l'ID de l'auteur (humain ou bot)
     const authorId = event.user;
     if (!authorId) return;
-
-    // Vérifier que c'est une des cibles
     if (!TARGET_USER_IDS.includes(authorId)) return;
 
     logger.info(`🎯 Message de la cible <@${authorId}> détecté dans <#${event.channel}>`);
 
-    // 1️⃣ Réagir avec :jeanpip: sur le message
     await client.reactions.add({
       channel: event.channel,
       name: TARGET_EMOJI,
       timestamp: event.ts,
     });
+    logger.info(`✅ Réaction :${TARGET_EMOJI}: ajoutée`);
 
-    logger.info(`✅ Réaction :${TARGET_EMOJI}: ajoutée au message de <@${authorId}>`);
-
-    // 2️⃣ Envoyer un DM à la cible (seulement si c'est un humain)
     const media = await getRandomMedia();
     const sent = await safeSendDM(client, authorId, {
       text: `Bonjour jeune, ${botName} t'a envoyé un Jeanpip !`,
@@ -207,10 +159,7 @@ app.event('message', async ({ event, client, logger }) => {
         media: media,
       }),
     }, logger);
-
-    if (sent) {
-      logger.info(`📨 DM envoyé à la cible <@${authorId}>`);
-    }
+    if (sent) logger.info(`📨 DM envoyé à la cible <@${authorId}>`);
   } catch (error) {
     logger.error('❌ Erreur dans message listener:', error);
   }
@@ -221,15 +170,8 @@ app.event('message', async ({ event, client, logger }) => {
 // ─────────────────────────────────────────────
 app.event('reaction_added', async ({ event, client, logger }) => {
   try {
-    // 1️⃣ Vérifier que c'est le bon emoji
-    if (event.reaction !== TARGET_EMOJI) {
-      return;
-    }
-
-    // 🛡️ Ignorer les réactions du bot lui-même (anti-boucle)
-    if (event.user === botUserId) {
-      return;
-    }
+    if (event.reaction !== TARGET_EMOJI) return;
+    if (event.user === botUserId) return;
 
     const reactingUserId = event.user;
     const channelId = event.item.channel;
@@ -237,18 +179,35 @@ app.event('reaction_added', async ({ event, client, logger }) => {
 
     logger.info(`🎯 Réaction :${TARGET_EMOJI}: détectée par <@${reactingUserId}>`);
 
-    // 🚨 ANTI-SPAM : vérifier si c'est du spam
+    // 🚨 Anti-spam
     if (isSpam(reactingUserId, channelId, messageTs)) {
-      logger.warn(`🚨 SPAM DÉTECTÉ ! <@${reactingUserId}> a spammé :${TARGET_EMOJI}: sur le même message`);
-
-      // Punir le spammeur (en arrière-plan, pas de await pour ne pas bloquer)
+      logger.warn(`🚨 SPAM DÉTECTÉ ! <@${reactingUserId}>`);
       punishSpammer(client, reactingUserId, logger);
-
-      // La victime ne reçoit rien → on arrête le flow ici
       return;
     }
 
-    // 2️⃣ Récupérer le message original pour trouver son auteur
+    // 📊 Incrémenter le score du réacteur
+    const { justUnlocked, score } = scores.incrementScore(reactingUserId);
+    logger.info(`📊 Score de <@${reactingUserId}> : ${score}`);
+
+    // 🎉 Notification déblocage attaque
+    if (justUnlocked) {
+      await safeSendDM(client, reactingUserId, {
+        text: `🎉 Tu as débloqué l'Attaque Jeanpip !`,
+        blocks: [
+          {
+            type: 'section',
+            text: {
+              type: 'mrkdwn',
+              text: `🎉 *Tu as débloqué l'Attaque Jeanpip !* :${TARGET_EMOJI}:\n\nTu as envoyé *${scores.ATTACK_THRESHOLD} Jeanpips* cette semaine, bravo !\n\n*Comment l'activer :*\nTape la commande \`/jeanpip-attack\` dans n'importe quel channel pour envoyer un Jeanpip aux 7 dernières personnes ayant posté dans le canal dans lequel tu l'actives !\n\n⚠️ _Si tu n'actives pas ton attaque avant dimanche 20h, tu perds tes Jeanpips._`,
+            },
+          },
+        ],
+      }, logger);
+      logger.info(`🎉 Notification déblocage envoyée à <@${reactingUserId}>`);
+    }
+
+    // Récupérer le message original
     let originalAuthorId;
     try {
       const result = await client.conversations.history({
@@ -257,28 +216,22 @@ app.event('reaction_added', async ({ event, client, logger }) => {
         inclusive: true,
         limit: 1,
       });
-
       if (!result.messages || result.messages.length === 0) {
         logger.warn('⚠️  Message original introuvable');
         return;
       }
-
       originalAuthorId = result.messages[0].user || null;
     } catch (historyError) {
-      logger.error(`❌ Impossible de lire le channel ${channelId}:`, historyError.message);
-      logger.info('💡 Assure-toi que le bot est invité dans le channel (/invite @BotName)');
+      logger.error(`❌ Impossible de lire le channel:`, historyError.message);
       return;
     }
 
-    // 3️⃣ Récupérer le nom du réacteur
     const reactorInfo = await client.users.info({ user: reactingUserId });
     const reactorName = reactorInfo.user.real_name || reactorInfo.user.name;
 
-    // 4️⃣ Choisir 2 médias aléatoires
     const mediaForReactor = await getRandomMedia();
     const mediaForAuthor = await getRandomMedia();
 
-    // 5️⃣ DM au réacteur (seulement si c'est un humain)
     const sentToReactor = await safeSendDM(client, reactingUserId, {
       text: `Hey @${reactorName} tu as réagi avec jean pip coucou !`,
       blocks: buildMediaBlocks({
@@ -286,12 +239,8 @@ app.event('reaction_added', async ({ event, client, logger }) => {
         media: mediaForReactor,
       }),
     }, logger);
+    if (sentToReactor) logger.info(`📨 DM envoyé au réacteur <@${reactingUserId}>`);
 
-    if (sentToReactor) {
-      logger.info(`📨 DM envoyé au réacteur <@${reactingUserId}>`);
-    }
-
-    // 6️⃣ DM à l'auteur du message original (seulement si humain et différent du réacteur)
     if (originalAuthorId && originalAuthorId !== reactingUserId) {
       const sentToAuthor = await safeSendDM(client, originalAuthorId, {
         text: `Bonjour jeune, ${reactorName} t'a envoyé un Jeanpip !`,
@@ -300,10 +249,7 @@ app.event('reaction_added', async ({ event, client, logger }) => {
           media: mediaForAuthor,
         }),
       }, logger);
-
-      if (sentToAuthor) {
-        logger.info(`📨 DM envoyé à l'auteur <@${originalAuthorId}>`);
-      }
+      if (sentToAuthor) logger.info(`📨 DM envoyé à l'auteur <@${originalAuthorId}>`);
     }
 
     logger.info('✅ Flow terminé avec succès');
@@ -313,13 +259,148 @@ app.event('reaction_added', async ({ event, client, logger }) => {
 });
 
 // ─────────────────────────────────────────────
-// 💬 Helper : Envoyer un DM
+// ⚔️  Slash command : /jeanpip-attack
+// ─────────────────────────────────────────────
+app.command('/jeanpip-attack', async ({ command, ack, client, logger }) => {
+  await ack();
+
+  const userId = command.user_id;
+  const channelId = command.channel_id;
+
+  try {
+    const isAdmin = JEANPIP_ADMINS.includes(userId);
+    const userHasAttack = scores.hasAttack(userId);
+
+    // Vérifier les droits
+    if (!isAdmin && !userHasAttack) {
+      const currentScore = scores.getScore(userId);
+      await safeSendDM(client, userId, {
+        text: `❌ Tu n'as pas encore débloqué l'Attaque Jeanpip !`,
+        blocks: [
+          {
+            type: 'section',
+            text: {
+              type: 'mrkdwn',
+              text: `❌ *Tu n'as pas encore débloqué l'Attaque Jeanpip !*\n\nTon score cette semaine : *${currentScore}/${scores.ATTACK_THRESHOLD}* :${TARGET_EMOJI}:\n\nEnvoie des Jeanpips pour débloquer la feature !`,
+            },
+          },
+        ],
+      }, logger);
+      logger.info(`⛔ <@${userId}> n'a pas les droits pour /jeanpip-attack (score: ${currentScore})`);
+      return;
+    }
+
+    // Récupérer les 7 derniers auteurs uniques du channel
+    logger.info(`⚔️  Attaque Jeanpip lancée par <@${userId}> dans <#${channelId}>`);
+
+    const result = await client.conversations.history({
+      channel: channelId,
+      limit: 50,
+    });
+
+    const victims = [];
+    const seen = new Set();
+
+    for (const msg of result.messages) {
+      // Ignorer les messages sans user, les bots et l'attaquant
+      if (!msg.user) continue;
+      if (msg.bot_id) continue;
+      if (msg.user === userId) continue;
+      if (msg.user === botUserId) continue;
+      if (seen.has(msg.user)) continue;
+
+      seen.add(msg.user);
+      victims.push(msg.user);
+
+      if (victims.length >= 7) break;
+    }
+
+    if (victims.length === 0) {
+      await safeSendDM(client, userId, {
+        text: `😅 Pas assez de monde à attaquer dans ce channel !`,
+        blocks: [
+          {
+            type: 'section',
+            text: {
+              type: 'mrkdwn',
+              text: `😅 *Pas assez de monde à attaquer dans ce channel !*\nAucune victime trouvée parmi les derniers messages.`,
+            },
+          },
+        ],
+      }, logger);
+      return;
+    }
+
+    // Consommer l'attaque (si pas admin)
+    if (!isAdmin) {
+      scores.consumeAttack(userId);
+    }
+
+    // Récupérer le nom de l'attaquant
+    const attackerInfo = await client.users.info({ user: userId });
+    const attackerName = attackerInfo.user.real_name || attackerInfo.user.name;
+
+    // Envoyer un DM à chaque victime
+    let sent = 0;
+    for (const victimId of victims) {
+      try {
+        const media = await getRandomMedia();
+        const ok = await safeSendDM(client, victimId, {
+          text: `🚨 ALERTE ! ${attackerName} a lancé une Attaque Jeanpip !`,
+          blocks: [
+            {
+              type: 'section',
+              text: {
+                type: 'mrkdwn',
+                text: `🚨 *ALERTE ATTAQUE JEANPIP !*\n*<@${userId}>* t'a ciblé avec une Attaque Jeanpip dans <#${channelId}> ! :${TARGET_EMOJI}:`,
+              },
+            },
+            { type: 'divider' },
+            {
+              type: 'section',
+              text: {
+                type: 'mrkdwn',
+                text: `🖼️ *${media.title}*\n<${media.url}|👉 Clique ici pour voir l'image>`,
+              },
+            },
+            {
+              type: 'context',
+              elements: [{ type: 'mrkdwn', text: '🤖 _Envoyé par Emoji Reactor Bot_' }],
+            },
+          ],
+        }, logger);
+        if (ok) sent++;
+        logger.info(`⚔️  Attaque envoyée à <@${victimId}>`);
+      } catch (error) {
+        logger.error(`❌ Erreur envoi attaque à <@${victimId}>:`, error.message);
+      }
+    }
+
+    // Confirmation à l'attaquant
+    await safeSendDM(client, userId, {
+      text: `⚔️ Attaque Jeanpip lancée sur ${sent} personnes !`,
+      blocks: [
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: `⚔️ *Attaque Jeanpip lancée !*\n\nTu as ciblé *${sent} personne(s)* dans <#${channelId}> :${TARGET_EMOJI}:\n${victims.map(v => `• <@${v}>`).join('\n')}`,
+          },
+        },
+      ],
+    }, logger);
+
+    logger.info(`✅ Attaque Jeanpip terminée : ${sent}/${victims.length} victimes touchées`);
+  } catch (error) {
+    logger.error('❌ Erreur dans /jeanpip-attack:', error);
+  }
+});
+
+// ─────────────────────────────────────────────
+// 💬 Helpers
 // ─────────────────────────────────────────────
 async function sendDM(client, userId, message) {
-  const conversation = await client.conversations.open({
-    users: userId,
-  });
-
+  const conversation = await client.conversations.open({ users: userId });
   await client.chat.postMessage({
     channel: conversation.channel.id,
     text: message.text,
@@ -328,27 +409,34 @@ async function sendDM(client, userId, message) {
 }
 
 // ─────────────────────────────────────────────
-// ▶️  Démarrage du bot
+// ▶️  Démarrage
 // ─────────────────────────────────────────────
 (async () => {
   await app.start();
 
-  // Récupérer l'ID du bot pour l'anti-boucle
   const authResult = await app.client.auth.test();
   botUserId = authResult.user_id;
   botName = authResult.user || 'Jeanpip Bot';
+
+  // Vérifier le reset hebdomadaire au démarrage
+  scores.checkAndReset();
+
+  // Vérifier le reset toutes les heures
+  setInterval(() => scores.checkAndReset(), 60 * 60 * 1000);
 
   console.log('');
   console.log('══════════════════════════════════════════');
   console.log('  ⚡️  Slack Emoji Reactor Bot lancé !');
   console.log(`  🎯  Emoji surveillé : :${TARGET_EMOJI}:`);
   console.log(`  🤖  Bot ID : ${botUserId}`);
-  console.log(`  🚨  Anti-spam : ${SPAM_THRESHOLD_SECONDS}s seuil → ${SPAM_TROLL_SEQUENCE.length}x troll (toutes les 5s)`);
+  console.log(`  🚨  Anti-spam : ${SPAM_THRESHOLD_SECONDS}s seuil → ${SPAM_TROLL_SEQUENCE.length}x troll`);
+  console.log(`  ⚔️   Attaque Jeanpip : seuil ${scores.ATTACK_THRESHOLD} jeanpips/semaine`);
+  if (JEANPIP_ADMINS.length > 0) {
+    console.log(`  👑  Admins attaque (${JEANPIP_ADMINS.length}) : ${JEANPIP_ADMINS.join(', ')}`);
+  }
   if (TARGET_USER_IDS.length > 0) {
     console.log(`  🎪  Cibles auto-react (${TARGET_USER_IDS.length}) :`);
     TARGET_USER_IDS.forEach((id) => console.log(`       → <@${id}>`));
-  } else {
-    console.log('  🎪  Aucune cible auto-react configurée');
   }
   console.log('══════════════════════════════════════════');
   console.log('');
