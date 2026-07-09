@@ -190,6 +190,9 @@ app.event('reaction_added', async ({ event, client, logger }) => {
     const { justUnlocked, score } = scores.incrementScore(reactingUserId);
     logger.info(`📊 Score de <@${reactingUserId}> : ${score}`);
 
+    // 📈 Compteur durable pour le classement JeanPip du dashboard (all-time + semaine)
+    scores.recordHit(reactingUserId);
+
     // 🎉 Notification déblocage attaque
     if (justUnlocked) {
       await safeSendDM(client, reactingUserId, {

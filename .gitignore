@@ -16,3 +16,7 @@ Thumbs.db
 # IDE
 .vscode/
 .idea/
+
+# Données runtime (écrites par le bot, non versionnées)
+data/jeanpip-stats.json
+data/scores.json

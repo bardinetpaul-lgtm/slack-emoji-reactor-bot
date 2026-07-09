@@ -138,11 +138,42 @@ function getScore(userId) {
   return user ? user.score : 0;
 }
 
+// ─────────────────────────────────────────────
+// 📈 Compteur DURABLE pour le classement du dashboard
+//    (indépendant du jeu : pas de reset au "consume", cumul all-time + semaine)
+//    Fichier lu par le dashboard MagicDIMSI (même VM).
+// ─────────────────────────────────────────────
+
+const STATS_PATH = path.join(__dirname, '..', 'data', 'jeanpip-stats.json');
+
+function recordHit(userId) {
+  let data;
+  try {
+    data = JSON.parse(fs.readFileSync(STATS_PATH, 'utf-8'));
+  } catch {
+    data = { week_start: getLastSundayAt20h().toISOString(), allTime: {}, week: {} };
+  }
+  // Reset hebdo de la vue "semaine" uniquement (aligné dimanche 20h, comme le jeu).
+  const lastSunday = getLastSundayAt20h();
+  if (!data.week_start || new Date(data.week_start) < lastSunday) {
+    data.week = {};
+    data.week_start = lastSunday.toISOString();
+  }
+  data.allTime = data.allTime || {};
+  data.week = data.week || {};
+  data.allTime[userId] = (data.allTime[userId] || 0) + 1;
+  data.week[userId] = (data.week[userId] || 0) + 1;
+  data.updated = new Date().toISOString();
+  try { fs.writeFileSync(STATS_PATH, JSON.stringify(data, null, 2), 'utf-8'); }
+  catch (e) { console.error('[jeanpip-stats] écriture:', e.message); }
+}
+
 module.exports = {
   incrementScore,
   hasAttack,
   consumeAttack,
   getScore,
   checkAndReset,
+  recordHit,
   ATTACK_THRESHOLD,
 };
