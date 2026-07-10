@@ -1,7 +1,8 @@
 // ═══════════════════════════════════════════════════════════
 //  🎲 MODULE MEDIA
 //  Gère la sélection aléatoire d'images/vidéos
-//  Supporte : banque locale JSON + Giphy API (optionnel)
+//  Système de deck shufflé : chaque média sort une fois
+//  avant qu'un nouveau cycle commence → plus de répétitions !
 // ═══════════════════════════════════════════════════════════
 
 const path = require('path');
@@ -19,14 +20,67 @@ try {
   console.log(`📦 Banque locale chargée : ${localMediaBank.length} médias`);
 } catch (err) {
   console.warn('⚠️  Banque locale introuvable ou invalide, utilisation du fallback intégré');
-  // Fallback avec quelques GIFs par défaut
   localMediaBank = [
-    { type: 'image', url: 'https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExcDd2OHR0Y2RrMnV3NWx0N2xwMGRqbm1uNnJkY2lhYWdmMHhxbCZlcD12MV9naWZzX3NlYXJjaCZjdD1n/xT5LMHxhOfscxPfIfm/giphy.gif', title: '🎉 Party Time!' },
-    { type: 'image', url: 'https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExaWdsMHF0eGd5NnI1MXdxcnFpN3N6YTBuemRqY2Q2bml1MnFkMmxkNSZlcD12MV9naWZzX3NlYXJjaCZjdD1n/l0MYt5jPR6QX5pnqM/giphy.gif', title: '🔥 High Five!' },
-    { type: 'image', url: 'https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExNm5qbHR3cWdxdW9lbTN1cjRsYWZ2MHBhcHRmZW0ycjRubjNlOSZlcD12MV9naWZzX3NlYXJjaCZjdD1n/artj92V8o75VPL7AeQ/giphy.gif', title: '🥳 Celebrate!' },
-    { type: 'image', url: 'https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExY2FiOWgyMjQ1dTAzOTVydzQ4OGxuc3RxZGE3NTQxcXd6cXBqMmRyZiZlcD12MV9naWZzX3NlYXJjaCZjdD1n/3oz8xAFtqoOUUrsh7W/giphy.gif', title: '👏 Bravo!' },
-    { type: 'image', url: 'https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExbGRzNnZnYmRld2l5NWtidjYxOWptMmJoOTZoZWlwNnhpeXl5a244ZyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/26u4cqiYI30juCOGY/giphy.gif', title: '🚀 Let\'s Go!' },
+    { type: 'image', url: 'https://media.giphy.com/media/xT5LMHxhOfscxPfIfm/giphy.gif', title: '🎉 Party Time!' },
+    { type: 'image', url: 'https://media.giphy.com/media/l0MYt5jPR6QX5pnqM/giphy.gif', title: '🔥 High Five!' },
+    { type: 'image', url: 'https://media.giphy.com/media/artj92V8o75VPL7AeQ/giphy.gif', title: '🥳 Celebrate!' },
+    { type: 'image', url: 'https://media.giphy.com/media/3oz8xAFtqoOUUrsh7W/giphy.gif', title: '👏 Bravo!' },
+    { type: 'image', url: 'https://media.giphy.com/media/26u4cqiYI30juCOGY/giphy.gif', title: '🚀 Let\'s Go!' },
   ];
+}
+
+// ─────────────────────────────────────────────
+// 🎴 Système de deck shufflé
+//
+// Principe : on mélange toute la banque en un ordre aléatoire,
+// puis on distribue les cartes une par une.
+// Quand le deck est vide → on le reshufle et on recommence.
+// Résultat : chaque image sort exactement une fois par cycle,
+// et on ne revoit jamais la même 2 fois de suite !
+// ─────────────────────────────────────────────
+
+let deck = [];
+let deckIndex = 0;
+
+/**
+ * Algorithme de Fisher-Yates : mélange un tableau en place
+ */
+function shuffle(array) {
+  const arr = [...array];
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+/**
+ * Initialise ou reshufle le deck
+ */
+function reshuffleDeck() {
+  deck = shuffle(localMediaBank);
+  deckIndex = 0;
+  console.log(`🎴 Deck reshufflé : ${deck.length} médias dans un nouvel ordre aléatoire`);
+}
+
+/**
+ * Pioche le prochain média dans le deck
+ * Reshufle automatiquement quand le deck est épuisé
+ */
+function drawFromDeck() {
+  // Initialiser le deck au premier appel
+  if (deck.length === 0) {
+    reshuffleDeck();
+  }
+
+  // Reshufler si on a tout distribué
+  if (deckIndex >= deck.length) {
+    reshuffleDeck();
+  }
+
+  const media = deck[deckIndex];
+  deckIndex++;
+  return media;
 }
 
 // ─────────────────────────────────────────────
@@ -41,7 +95,6 @@ async function getGiphyRandom() {
       `https://api.giphy.com/v1/gifs/random?api_key=${GIPHY_API_KEY}&tag=${encodeURIComponent(GIPHY_TAG)}&rating=pg`
     );
     const data = await response.json();
-
     if (data.data && data.data.images) {
       return {
         type: 'image',
@@ -56,27 +109,20 @@ async function getGiphyRandom() {
 }
 
 // ─────────────────────────────────────────────
-// 🎲 Sélection aléatoire
+// 🎲 Export principal
 // ─────────────────────────────────────────────
-function getRandomFromBank() {
-  const index = Math.floor(Math.random() * localMediaBank.length);
-  return localMediaBank[index];
-}
 
 /**
  * Retourne un média aléatoire.
  * Si GIPHY_API_KEY est configuré, tente d'abord Giphy.
- * Sinon, pioche dans la banque locale.
+ * Sinon, pioche dans le deck shufflé.
  */
 async function getRandomMedia() {
-  // Si Giphy est configuré, on l'utilise en priorité
   if (GIPHY_API_KEY) {
     const giphyMedia = await getGiphyRandom();
     if (giphyMedia) return giphyMedia;
   }
-
-  // Fallback : banque locale
-  return getRandomFromBank();
+  return drawFromDeck();
 }
 
 module.exports = { getRandomMedia };
