@@ -1,12 +1,31 @@
 // ═══════════════════════════════════════════════════════════
 //  🎲 MODULE MEDIA
-//  Gère la sélection aléatoire d'images/vidéos
-//  Système de deck shufflé : chaque média sort une fois
-//  avant qu'un nouveau cycle commence → plus de répétitions !
+//  Gère la sélection aléatoire d'images/vidéos avec RARETÉ
+//
+//  4 tiers de rareté avec probabilités :
+//    ⚪ common     70%
+//    🔵 rare       20%
+//    🟣 epic        8%
+//    🟡 legendary   2%
+//
+//  Chaque tier a son propre deck shufflé (Fisher-Yates)
+//  pour éviter les répétitions au sein d'une même rareté.
 // ═══════════════════════════════════════════════════════════
 
 const path = require('path');
 const fs = require('fs');
+
+// ─────────────────────────────────────────────
+// 🎨 Définition des raretés
+// ─────────────────────────────────────────────
+const RARITIES = {
+  common:    { weight: 70, emoji: '⚪', label: 'Commun' },
+  rare:      { weight: 20, emoji: '🔵', label: 'Rare' },
+  epic:      { weight: 8,  emoji: '🟣', label: 'Épique' },
+  legendary: { weight: 2,  emoji: '🟡', label: 'Légendaire' },
+};
+
+const DEFAULT_RARITY = 'common';
 
 // ─────────────────────────────────────────────
 // 📦 Chargement de la banque locale
@@ -21,30 +40,38 @@ try {
 } catch (err) {
   console.warn('⚠️  Banque locale introuvable ou invalide, utilisation du fallback intégré');
   localMediaBank = [
-    { type: 'image', url: 'https://media.giphy.com/media/xT5LMHxhOfscxPfIfm/giphy.gif', title: '🎉 Party Time!' },
-    { type: 'image', url: 'https://media.giphy.com/media/l0MYt5jPR6QX5pnqM/giphy.gif', title: '🔥 High Five!' },
-    { type: 'image', url: 'https://media.giphy.com/media/artj92V8o75VPL7AeQ/giphy.gif', title: '🥳 Celebrate!' },
-    { type: 'image', url: 'https://media.giphy.com/media/3oz8xAFtqoOUUrsh7W/giphy.gif', title: '👏 Bravo!' },
-    { type: 'image', url: 'https://media.giphy.com/media/26u4cqiYI30juCOGY/giphy.gif', title: '🚀 Let\'s Go!' },
+    { type: 'image', url: 'https://media.giphy.com/media/xT5LMHxhOfscxPfIfm/giphy.gif', title: '🎉 Party Time!', rarity: 'common' },
+    { type: 'image', url: 'https://media.giphy.com/media/l0MYt5jPR6QX5pnqM/giphy.gif', title: '🔥 High Five!', rarity: 'common' },
+    { type: 'image', url: 'https://media.giphy.com/media/artj92V8o75VPL7AeQ/giphy.gif', title: '🥳 Celebrate!', rarity: 'rare' },
+    { type: 'image', url: 'https://media.giphy.com/media/3oz8xAFtqoOUUrsh7W/giphy.gif', title: '👏 Bravo!', rarity: 'epic' },
+    { type: 'image', url: 'https://media.giphy.com/media/26u4cqiYI30juCOGY/giphy.gif', title: '🚀 Let\'s Go!', rarity: 'legendary' },
   ];
 }
 
 // ─────────────────────────────────────────────
-// 🎴 Système de deck shufflé
-//
-// Principe : on mélange toute la banque en un ordre aléatoire,
-// puis on distribue les cartes une par une.
-// Quand le deck est vide → on le reshufle et on recommence.
-// Résultat : chaque image sort exactement une fois par cycle,
-// et on ne revoit jamais la même 2 fois de suite !
+// 🗂️  Regroupement des médias par rareté
 // ─────────────────────────────────────────────
+const mediaByRarity = {};
+for (const rarity of Object.keys(RARITIES)) {
+  mediaByRarity[rarity] = [];
+}
 
-let deck = [];
-let deckIndex = 0;
+for (const media of localMediaBank) {
+  const rarity = RARITIES[media.rarity] ? media.rarity : DEFAULT_RARITY;
+  mediaByRarity[rarity].push(media);
+}
 
-/**
- * Algorithme de Fisher-Yates : mélange un tableau en place
- */
+// Log de répartition
+for (const [rarity, list] of Object.entries(mediaByRarity)) {
+  console.log(`   ${RARITIES[rarity].emoji} ${RARITIES[rarity].label} : ${list.length} médias`);
+}
+
+// ─────────────────────────────────────────────
+// 🎴 Un deck shufflé par rareté (Fisher-Yates)
+// ─────────────────────────────────────────────
+const decks = {};
+const deckIndexes = {};
+
 function shuffle(array) {
   const arr = [...array];
   for (let i = arr.length - 1; i > 0; i--) {
@@ -54,33 +81,39 @@ function shuffle(array) {
   return arr;
 }
 
-/**
- * Initialise ou reshufle le deck
- */
-function reshuffleDeck() {
-  deck = shuffle(localMediaBank);
-  deckIndex = 0;
-  console.log(`🎴 Deck reshufflé : ${deck.length} médias dans un nouvel ordre aléatoire`);
+function drawFromRarityDeck(rarity) {
+  const pool = mediaByRarity[rarity];
+  if (!pool || pool.length === 0) return null;
+
+  if (!decks[rarity] || deckIndexes[rarity] >= decks[rarity].length) {
+    decks[rarity] = shuffle(pool);
+    deckIndexes[rarity] = 0;
+  }
+
+  const media = decks[rarity][deckIndexes[rarity]];
+  deckIndexes[rarity]++;
+  return media;
 }
 
-/**
- * Pioche le prochain média dans le deck
- * Reshufle automatiquement quand le deck est épuisé
- */
-function drawFromDeck() {
-  // Initialiser le deck au premier appel
-  if (deck.length === 0) {
-    reshuffleDeck();
+// ─────────────────────────────────────────────
+// 🎯 Tirage pondéré d'une rareté
+// ─────────────────────────────────────────────
+function pickRarity() {
+  // On ne considère que les raretés qui ont au moins 1 média
+  const available = Object.entries(RARITIES).filter(
+    ([rarity]) => mediaByRarity[rarity] && mediaByRarity[rarity].length > 0
+  );
+
+  const totalWeight = available.reduce((sum, [, cfg]) => sum + cfg.weight, 0);
+  let roll = Math.random() * totalWeight;
+
+  for (const [rarity, cfg] of available) {
+    roll -= cfg.weight;
+    if (roll <= 0) return rarity;
   }
 
-  // Reshufler si on a tout distribué
-  if (deckIndex >= deck.length) {
-    reshuffleDeck();
-  }
-
-  const media = deck[deckIndex];
-  deckIndex++;
-  return media;
+  // Fallback (ne devrait jamais arriver)
+  return available[0][0];
 }
 
 // ─────────────────────────────────────────────
@@ -100,6 +133,7 @@ async function getGiphyRandom() {
         type: 'image',
         url: data.data.images.original.url,
         title: data.data.title || '🎲 Random GIF',
+        rarity: 'common',
       };
     }
   } catch (err) {
@@ -113,16 +147,34 @@ async function getGiphyRandom() {
 // ─────────────────────────────────────────────
 
 /**
- * Retourne un média aléatoire.
- * Si GIPHY_API_KEY est configuré, tente d'abord Giphy.
- * Sinon, pioche dans le deck shufflé.
+ * Retourne un média aléatoire pondéré par rareté.
+ * Le média retourné contient toujours un champ `rarity`.
  */
 async function getRandomMedia() {
   if (GIPHY_API_KEY) {
     const giphyMedia = await getGiphyRandom();
     if (giphyMedia) return giphyMedia;
   }
-  return drawFromDeck();
+
+  // 1. Tirer une rareté selon les probabilités
+  const rarity = pickRarity();
+
+  // 2. Piocher un média dans le deck de cette rareté
+  const media = drawFromRarityDeck(rarity);
+
+  // Sécurité : si jamais le deck est vide, on prend n'importe quoi
+  if (!media) {
+    return localMediaBank[Math.floor(Math.random() * localMediaBank.length)];
+  }
+
+  return media;
 }
 
-module.exports = { getRandomMedia };
+/**
+ * Retourne les infos d'affichage d'une rareté (emoji + label)
+ */
+function getRarityInfo(rarity) {
+  return RARITIES[rarity] || RARITIES[DEFAULT_RARITY];
+}
+
+module.exports = { getRandomMedia, getRarityInfo, RARITIES };
