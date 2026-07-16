@@ -3,10 +3,10 @@
 //  Gère la sélection aléatoire d'images/vidéos avec RARETÉ
 //
 //  4 tiers de rareté avec probabilités :
-//    ⚪ common     70%
-//    🔵 rare       20%
-//    🟣 epic        8%
-//    🟡 legendary   2%
+//    ⚪ common     85%
+//    🔵 rare       11%
+//    🟣 epic       3.5%
+//    🟡 legendary  0.5%
 //
 //  Chaque tier a son propre deck shufflé (Fisher-Yates)
 //  pour éviter les répétitions au sein d'une même rareté.
@@ -17,12 +17,14 @@ const fs = require('fs');
 
 // ─────────────────────────────────────────────
 // 🎨 Définition des raretés
+//    weight = poids relatif (les % sont calculés dessus)
+//    85 + 11 + 3.5 + 0.5 = 100
 // ─────────────────────────────────────────────
 const RARITIES = {
-  common:    { weight: 70, emoji: '⚪', label: 'Commun' },
-  rare:      { weight: 20, emoji: '🔵', label: 'Rare' },
-  epic:      { weight: 8,  emoji: '🟣', label: 'Épique' },
-  legendary: { weight: 2,  emoji: '🟡', label: 'Légendaire' },
+  common:    { weight: 85,  emoji: '⚪', label: 'Commun' },
+  rare:      { weight: 11,  emoji: '🔵', label: 'Rare' },
+  epic:      { weight: 3.5, emoji: '🟣', label: 'Épique' },
+  legendary: { weight: 0.5, emoji: '🟡', label: 'Légendaire' },
 };
 
 const DEFAULT_RARITY = 'common';
