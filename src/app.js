@@ -115,6 +115,47 @@ async function safeSendDM(client, userId, message, logger) {
   return true;
 }
 
+/**
+ * Récupère les N derniers auteurs uniques d'un channel.
+ * Pagine dans l'historique jusqu'à trouver assez de personnes,
+ * peu importe si ça s'étale sur des semaines/mois.
+ */
+async function getLastUniqueAuthors(client, channelId, count, excludeIds, logger) {
+  const victims = [];
+  const seen = new Set(excludeIds);
+  let cursor;
+  let pagesFetched = 0;
+  const MAX_PAGES = 20; // sécurité : jusqu'à 20 × 200 = 4000 messages max
+
+  while (victims.length < count && pagesFetched < MAX_PAGES) {
+    const result = await client.conversations.history({
+      channel: channelId,
+      limit: 200,
+      ...(cursor ? { cursor } : {}),
+    });
+
+    pagesFetched++;
+
+    for (const msg of result.messages) {
+      if (!msg.user) continue;      // messages système / bots sans user
+      if (msg.bot_id) continue;     // messages postés par un bot
+      if (seen.has(msg.user)) continue;
+      seen.add(msg.user);
+      victims.push(msg.user);
+      if (victims.length >= count) break;
+    }
+
+    // Plus de pages à lire ?
+    if (!result.has_more || !result.response_metadata || !result.response_metadata.next_cursor) {
+      break;
+    }
+    cursor = result.response_metadata.next_cursor;
+  }
+
+  logger.info(`🔎 ${victims.length} victime(s) trouvée(s) en ${pagesFetched} page(s) d'historique`);
+  return victims;
+}
+
 // ─────────────────────────────────────────────
 // 🚀 Initialisation
 // ─────────────────────────────────────────────
@@ -293,19 +334,18 @@ app.command('/jeanpip-attack', async ({ command, ack, client, logger }) => {
 
     logger.info(`⚔️  Attaque Jeanpip lancée par <@${userId}> dans <#${channelId}>`);
 
-    const result = await client.conversations.history({ channel: channelId, limit: 50 });
-    const victims = [];
-    const seen = new Set();
-
-    for (const msg of result.messages) {
-      if (!msg.user) continue;
-      if (msg.bot_id) continue;
-      if (msg.user === userId) continue;
-      if (msg.user === botUserId) continue;
-      if (seen.has(msg.user)) continue;
-      seen.add(msg.user);
-      victims.push(msg.user);
-      if (victims.length >= 7) break;
+    // 🔎 Récupérer les 7 dernières personnes uniques (avec pagination),
+    // en excluant l'attaquant et le bot lui-même
+    let victims;
+    try {
+      victims = await getLastUniqueAuthors(client, channelId, 7, [userId, botUserId], logger);
+    } catch (histError) {
+      logger.error(`❌ Impossible de lire l'historique du channel:`, histError.message);
+      await safeSendDM(client, userId, {
+        text: `❌ Je n'arrive pas à lire ce channel. Suis-je bien invité dedans ?`,
+        blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `❌ *Je n'arrive pas à lire ce channel.*\nAssure-toi que le bot est invité dans le channel (\`/invite @${botName}\`).` } }],
+      }, logger);
+      return;
     }
 
     if (victims.length === 0) {
