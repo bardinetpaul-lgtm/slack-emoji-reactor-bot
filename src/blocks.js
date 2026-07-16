@@ -33,13 +33,13 @@ function buildRarityLine(media) {
   const rarity = media.rarity || 'common';
 
   if (rarity === 'legendary') {
-    return `${info.emoji} *🎉 JEANPIP LÉGENDAIRE ! 🎉* — _seulement 2% de chance !_`;
+    return `${info.emoji} *🎉 JEANPIP LÉGENDAIRE ! 🎉* — _seulement 0.5% de chance !_`;
   }
   if (rarity === 'epic') {
-    return `${info.emoji} *Jeanpip Épique !* — _8% de chance_`;
+    return `${info.emoji} *Jeanpip Épique !* — _3.5% de chance_`;
   }
   if (rarity === 'rare') {
-    return `${info.emoji} *Jeanpip Rare* — _20% de chance_`;
+    return `${info.emoji} *Jeanpip Rare* — _11% de chance_`;
   }
   return `${info.emoji} *Jeanpip Commun*`;
 }
