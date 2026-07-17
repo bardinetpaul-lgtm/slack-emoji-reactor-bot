@@ -266,7 +266,15 @@ app.event('reaction_added', async ({ event, client, logger }) => {
       return;
     }
 
-    // ✅ Bot bien présent dans la conversation → le Jeanpip compte.
+    // 🔒 Anti-farm : réagir à SON PROPRE message ne compte pas.
+    //    (Sinon on pourrait farmer des crédits en s'auto-réagissant dans un
+    //     channel où le bot est présent.) Aucun crédit, aucun score, aucune image.
+    if (originalAuthorId && originalAuthorId === reactingUserId) {
+      logger.info(`🚫 <@${reactingUserId}> a réagi à son propre message → ignoré (anti-farm)`);
+      return;
+    }
+
+    // ✅ Bot présent + réaction sur le message d'autrui → le Jeanpip compte.
 
     // 📊 Incrémenter le score
     const { justUnlocked, score } = scores.incrementScore(reactingUserId);
