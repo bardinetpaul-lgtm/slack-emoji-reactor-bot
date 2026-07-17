@@ -38,8 +38,10 @@ const JEANPIP_ADMINS = process.env.JEANPIP_ADMINS
 const SPAM_THRESHOLD_SECONDS = 8;
 const SPAM_PUNISHMENT_INTERVAL_MS = 5000;
 // 🔢 Numérotation des photos anti-spam, dans le même style que la banque
-//    (« Surprise #N »), en continuant après les médias existants.
-const SPAM_PHOTO_START = 62;
+//    (« Surprise #N »), en continuant APRÈS toute la collection.
+//    La banque compte 70 entrées (#1→#68 + 2 vidéos) → l'anti-spam démarre à 71
+//    (#71→#80), pour ne réutiliser aucun numéro déjà attribué.
+const SPAM_PHOTO_START = 71;
 
 const SPAM_TROLL_SEQUENCE = [
   { type: 'image', url: 'https://slack-files.com/T6EFSEHCN-F0BDBMU8CTS-77c6932553', title: '🚨 Spammer c\'est mal.' },
