@@ -157,6 +157,20 @@ async function getLastUniqueAuthors(client, channelId, count, excludeIds, logger
   return victims;
 }
 
+/**
+ * Extrait le premier ID utilisateur d'un texte de slash command.
+ * Slack envoie les mentions sous la forme <@U12345|username> ou <@U12345>.
+ * Accepte aussi un ID brut (U12345).
+ */
+function parseUserId(text) {
+  if (!text) return null;
+  const mention = text.match(/<@([A-Z0-9]+)(\|[^>]+)?>/i);
+  if (mention) return mention[1];
+  const raw = text.trim().match(/^([A-Z0-9]{6,})$/i);
+  if (raw) return raw[1];
+  return null;
+}
+
 // ─────────────────────────────────────────────
 // 🚀 Initialisation
 // ─────────────────────────────────────────────
@@ -405,6 +419,82 @@ app.command('/jeanpip-attack', async ({ command, ack, client, logger }) => {
 });
 
 // ─────────────────────────────────────────────
+// 🎁 Slash command : /jeanpip-give @user  (admin uniquement)
+//    Crédite une Attaque Jeanpip à quelqu'un et le notifie
+// ─────────────────────────────────────────────
+app.command('/jeanpip-give', async ({ command, ack, client, logger }) => {
+  await ack();
+
+  const adminId = command.user_id;
+
+  try {
+    // 🔒 Réservé aux admins
+    if (!JEANPIP_ADMINS.includes(adminId)) {
+      await safeSendDM(client, adminId, {
+        text: `⛔ Commande réservée aux admins.`,
+        blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `⛔ *Cette commande est réservée aux admins.*` } }],
+      }, logger);
+      logger.info(`⛔ <@${adminId}> a tenté /jeanpip-give sans être admin`);
+      return;
+    }
+
+    // Parser la cible
+    const targetId = parseUserId(command.text);
+    if (!targetId) {
+      await safeSendDM(client, adminId, {
+        text: `❓ Usage : /jeanpip-give @utilisateur`,
+        blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `❓ *Usage :* \`/jeanpip-give @utilisateur\`\nMentionne la personne à qui tu veux offrir une Attaque Jeanpip.` } }],
+      }, logger);
+      return;
+    }
+
+    // On ne donne pas d'attaque à un bot
+    if (await isBot(client, targetId)) {
+      await safeSendDM(client, adminId, {
+        text: `🤖 Impossible de créditer un bot.`,
+        blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `🤖 *Impossible de créditer un bot.*` } }],
+      }, logger);
+      return;
+    }
+
+    const given = scores.giveAttack(targetId);
+
+    if (!given) {
+      await safeSendDM(client, adminId, {
+        text: `ℹ️ <@${targetId}> a déjà une Attaque Jeanpip disponible.`,
+        blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `ℹ️ *<@${targetId}> a déjà une Attaque Jeanpip disponible.*\nRien à faire.` } }],
+      }, logger);
+      logger.info(`ℹ️ <@${targetId}> avait déjà une attaque, give ignoré`);
+      return;
+    }
+
+    // 🎁 Notifier la personne créditée
+    await safeSendDM(client, targetId, {
+      text: `🎁 On t'a offert une Attaque Jeanpip !`,
+      blocks: [
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: `🎁 *On t'a offert une Attaque Jeanpip !* :${TARGET_EMOJI}:\n\nUn admin vient de te créditer une Attaque Jeanpip 🎉\n\n*Comment l'activer :*\nTape la commande \`/jeanpip-attack\` dans n'importe quel channel pour envoyer un Jeanpip aux 7 dernières personnes ayant posté dans le canal dans lequel tu l'actives !\n\n⚠️ _Si tu ne l'actives pas avant dimanche 20h, tu la perds._`,
+          },
+        },
+      ],
+    }, logger);
+
+    // ✅ Confirmer à l'admin
+    await safeSendDM(client, adminId, {
+      text: `✅ Attaque Jeanpip offerte à <@${targetId}> !`,
+      blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `✅ *Attaque Jeanpip offerte à <@${targetId}> !*\nLa personne a été notifiée.` } }],
+    }, logger);
+
+    logger.info(`🎁 <@${adminId}> a offert une attaque à <@${targetId}>`);
+  } catch (error) {
+    logger.error('❌ Erreur dans /jeanpip-give:', error);
+  }
+});
+
+// ─────────────────────────────────────────────
 // ❓ Slash command : /jeanpip-help
 // ─────────────────────────────────────────────
 app.command('/jeanpip-help', async ({ command, ack, client, logger }) => {
@@ -447,7 +537,7 @@ app.command('/jeanpip-help', async ({ command, ack, client, logger }) => {
           type: 'section',
           text: {
             type: 'mrkdwn',
-            text: `⚔️ *Attaque Jeanpip — \`/jeanpip-attack\`*\nEnvoie un Jeanpip aux *7 dernières personnes* ayant posté dans le channel où tu lances la commande !\n\n*Comment débloquer :*\n• Envoie *${scores.ATTACK_THRESHOLD} Jeanpips* dans la semaine\n• Tu reçois un DM de notification quand c'est débloqué\n• Lance \`/jeanpip-attack\` dans le channel de ton choix\n• Ton compteur repart à 0, tu peux redébloquer ensuite !\n\n⚠️ _Si tu ne l'actives pas avant dimanche 20h → tu perds l'attaque_${isAdmin ? '\n\n👑 *Tu es admin : tu as accès illimité à cette commande !*' : ''}`,
+            text: `⚔️ *Attaque Jeanpip — \`/jeanpip-attack\`*\nEnvoie un Jeanpip aux *7 dernières personnes* ayant posté dans le channel où tu lances la commande !\n\n*Comment débloquer :*\n• Envoie *${scores.ATTACK_THRESHOLD} Jeanpips* dans la semaine\n• Tu reçois un DM de notification quand c'est débloqué\n• Lance \`/jeanpip-attack\` dans le channel de ton choix\n• Ton compteur repart à 0, tu peux redébloquer ensuite !\n\n⚠️ _Si tu ne l'actives pas avant dimanche 20h → tu perds l'attaque_${isAdmin ? '\n\n👑 *Tu es admin : tu as accès illimité à cette commande + `/jeanpip-give @user` !*' : ''}`,
           },
         },
         { type: 'divider' },
@@ -463,7 +553,7 @@ app.command('/jeanpip-help', async ({ command, ack, client, logger }) => {
           type: 'section',
           text: {
             type: 'mrkdwn',
-            text: `📋 *Toutes les commandes*\n\`/jeanpip-help\` → Affiche ce message avec ton score actuel\n\`/jeanpip-attack\` → Lance une Attaque Jeanpip sur le channel`,
+            text: `📋 *Toutes les commandes*\n\`/jeanpip-help\` → Affiche ce message avec ton score actuel\n\`/jeanpip-attack\` → Lance une Attaque Jeanpip sur le channel${isAdmin ? '\n`/jeanpip-give @user` → (admin) Offre une Attaque Jeanpip à quelqu\'un' : ''}`,
           },
         },
         {
