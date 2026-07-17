@@ -7,7 +7,7 @@
 const { App, LogLevel } = require('@slack/bolt');
 require('dotenv').config();
 
-const { getRandomMedia } = require('./media');
+const { getRandomMedia, getRarityInfo, normalizeRarity, addMedia, RARITIES } = require('./media');
 const { buildMediaBlocks } = require('./blocks');
 const scores = require('./scores');
 const targets = require('./targets');
@@ -494,6 +494,140 @@ app.command('/jeanpip-give', async ({ command, ack, client, logger }) => {
 });
 
 // ─────────────────────────────────────────────
+// 💳 Slash command : /jeanpip-give-credits @user <montant>  (admin)
+//    Crédite manuellement le porte-monnaie de quelqu'un
+// ─────────────────────────────────────────────
+app.command('/jeanpip-give-credits', async ({ command, ack, client, logger }) => {
+  await ack();
+
+  const adminId = command.user_id;
+
+  try {
+    if (!JEANPIP_ADMINS.includes(adminId)) {
+      await safeSendDM(client, adminId, {
+        text: `⛔ Commande réservée aux admins.`,
+        blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `⛔ *Cette commande est réservée aux admins.*` } }],
+      }, logger);
+      return;
+    }
+
+    const targetId = parseUserId(command.text);
+    const amountMatch = (command.text || '').match(/(-?\d+)/);
+    const amount = amountMatch ? parseInt(amountMatch[1], 10) : NaN;
+
+    if (!targetId || !Number.isFinite(amount) || amount <= 0) {
+      await safeSendDM(client, adminId, {
+        text: `❓ Usage : /jeanpip-give-credits @utilisateur <montant>`,
+        blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `❓ *Usage :* \`/jeanpip-give-credits @utilisateur <montant>\`\nEx : \`/jeanpip-give-credits @paul 50\` (montant entier positif).` } }],
+      }, logger);
+      return;
+    }
+
+    if (await isBot(client, targetId)) {
+      await safeSendDM(client, adminId, {
+        text: `🤖 Impossible de créditer un bot.`,
+        blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `🤖 *Impossible de créditer un bot.*` } }],
+      }, logger);
+      return;
+    }
+
+    const newBalance = credits.addCredit(targetId, amount);
+
+    await safeSendDM(client, targetId, {
+      text: `🎁 Un admin t'a offert ${amount} crédits JeanPip !`,
+      blocks: [{
+        type: 'section',
+        text: { type: 'mrkdwn', text: `🎁 *Un admin t'a offert ${amount} crédit(s) JeanPip !* 💰\n\nNouveau solde : *${newBalance}* crédit(s)\n\nDépense-les avec \`/jeanpip-booster\` ! 🎁` },
+      }],
+    }, logger);
+
+    await safeSendDM(client, adminId, {
+      text: `✅ ${amount} crédits offerts à <@${targetId}>`,
+      blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `✅ *${amount} crédit(s) offert(s) à <@${targetId}>.*\nNouveau solde de la personne : *${newBalance}*.` } }],
+    }, logger);
+
+    logger.info(`💳 <@${adminId}> a crédité ${amount} à <@${targetId}> (solde ${newBalance})`);
+  } catch (error) {
+    logger.error('❌ Erreur dans /jeanpip-give-credits:', error);
+  }
+});
+
+// ─────────────────────────────────────────────
+// 🖼️ Slash command : /jeanpip-addmedia <url> <rareté> [titre]  (admin)
+//    Ajoute un média à la banque (persistant, sans redémarrage)
+// ─────────────────────────────────────────────
+app.command('/jeanpip-addmedia', async ({ command, ack, client, logger }) => {
+  await ack();
+
+  const adminId = command.user_id;
+
+  try {
+    if (!JEANPIP_ADMINS.includes(adminId)) {
+      await safeSendDM(client, adminId, {
+        text: `⛔ Commande réservée aux admins.`,
+        blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `⛔ *Cette commande est réservée aux admins.*` } }],
+      }, logger);
+      return;
+    }
+
+    const parts = (command.text || '').trim().split(/\s+/).filter(Boolean);
+    const url = parts[0];
+    const rarity = normalizeRarity(parts[1]);
+    const title = parts.slice(2).join(' ');
+
+    const usageBlocks = [{
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: `❓ *Usage :* \`/jeanpip-addmedia <lien> <rareté> [titre optionnel]\`\n\n*Raretés acceptées :* \`commun\` ⚪ · \`rare\` 🔵 · \`epique\` 🟣 · \`legendaire\` 🟡\n\nEx : \`/jeanpip-addmedia https://media.giphy.com/media/xxx/giphy.gif rare Super Jeanpip\``,
+      },
+    }];
+
+    if (!url || !/^https?:\/\//i.test(url)) {
+      await safeSendDM(client, adminId, { text: `❓ Lien manquant ou invalide`, blocks: usageBlocks }, logger);
+      return;
+    }
+    if (!rarity) {
+      await safeSendDM(client, adminId, { text: `❓ Rareté manquante ou invalide`, blocks: usageBlocks }, logger);
+      return;
+    }
+
+    const result = addMedia({ url, rarity, title });
+
+    if (!result.ok) {
+      const reason = {
+        url_invalide: 'Le lien est invalide (il doit commencer par http:// ou https://).',
+        rarete_invalide: 'La rareté est invalide.',
+        ecriture: `Erreur d'écriture du fichier${result.detail ? ` : ${result.detail}` : ''}.`,
+      }[result.error] || 'Erreur inconnue.';
+      await safeSendDM(client, adminId, {
+        text: `❌ ${reason}`,
+        blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `❌ *Impossible d'ajouter le média.*\n${reason}` } }],
+      }, logger);
+      return;
+    }
+
+    const info = getRarityInfo(rarity);
+
+    // Confirmation + aperçu du média ajouté (l'admin vérifie que le lien s'affiche bien)
+    await safeSendDM(client, adminId, {
+      text: `✅ Média ${info.label} ajouté !`,
+      blocks: [
+        {
+          type: 'section',
+          text: { type: 'mrkdwn', text: `✅ *Média ajouté à la banque !*\n${info.emoji} Rareté : *${info.label}* · Type : *${result.media.type}*\n📊 Il y a maintenant *${result.count}* média(s) en ${info.label}.\n\n👇 Aperçu :` },
+        },
+        ...buildMediaBlocks({ headerText: `🖼️ *Nouveau Jeanpip ${info.label}*`, media: result.media }),
+      ],
+    }, logger);
+
+    logger.info(`🖼️ <@${adminId}> a ajouté un média ${rarity} (${result.media.type}) : ${url}`);
+  } catch (error) {
+    logger.error('❌ Erreur dans /jeanpip-addmedia:', error);
+  }
+});
+
+// ─────────────────────────────────────────────
 // 🎪 Slash command : /jeanpip-auto  (admin uniquement)
 //    Gère les cibles auto-react en live
 //    Usage :
@@ -886,7 +1020,7 @@ app.command('/jeanpip-help', async ({ command, ack, client, logger }) => {
           type: 'section',
           text: {
             type: 'mrkdwn',
-            text: `📋 *Toutes les commandes*\n\`/jeanpip-help\` → Affiche ce message avec ton score actuel\n\`/jeanpip-attack\` → Lance une Attaque Jeanpip sur le channel\n\`/jeanpip-credits\` → Affiche ton solde de crédits\n\`/jeanpip-booster\` → Ouvre la boutique de boosters${isAdmin ? '\n`/jeanpip-give @user` → (admin) Offre une Attaque Jeanpip à quelqu\'un\n`/jeanpip-auto add|remove|list` → (admin) Gère les cibles auto-react' : ''}`,
+            text: `📋 *Toutes les commandes*\n\`/jeanpip-help\` → Affiche ce message avec ton score actuel\n\`/jeanpip-attack\` → Lance une Attaque Jeanpip sur le channel\n\`/jeanpip-credits\` → Affiche ton solde de crédits\n\`/jeanpip-booster\` → Ouvre la boutique de boosters${isAdmin ? '\n`/jeanpip-give @user` → (admin) Offre une Attaque Jeanpip à quelqu\'un\n`/jeanpip-give-credits @user <montant>` → (admin) Crédite le porte-monnaie de quelqu\'un\n`/jeanpip-addmedia <lien> <rareté> [titre]` → (admin) Ajoute un média à la banque\n`/jeanpip-auto add|remove|list` → (admin) Gère les cibles auto-react' : ''}`,
           },
         },
         {
