@@ -956,7 +956,7 @@ app.action('open_booster', async ({ ack, body, action, client, logger }) => {
               type: 'section',
               text: {
                 type: 'mrkdwn',
-                text: `${emoji} *Booster ${label} — ouvert !* 🎉\n\n_Les 8 cartes se révèlent dans le fil ci-dessous, une toutes les 5 secondes..._`,
+                text: `${emoji} *Booster ${label} — ouvert !* 🎉\n\n_Les 8 cartes se révèlent ci-dessous, une toutes les 5 secondes..._`,
               },
             },
           ],
@@ -970,13 +970,13 @@ app.action('open_booster', async ({ ack, body, action, client, logger }) => {
     const cards = boosters.openBooster(pending.type);
     logger.info(`🎁 <@${userId}> ouvre le booster ${pending.type} (${cards.length} cartes)`);
 
-    // ⏱️ Révélation progressive : une carte toutes les 5 s, en thread
+    // ⏱️ Révélation progressive : une carte toutes les 5 s, dans la conversation
+    //    classique de Jeanpip (pas en réponse/thread au message d'ouverture).
     for (let i = 0; i < cards.length; i++) {
       const card = cards[i];
       try {
         await client.chat.postMessage({
           channel: channelId,
-          thread_ts: messageTs,
           text: `${card.title} (${i + 1}/${cards.length})`,
           blocks: buildMediaBlocks({
             headerText: `🎴 *${card.title}* — carte ${i + 1}/${cards.length}`,
