@@ -173,10 +173,35 @@ async function getRandomMedia() {
 }
 
 /**
+ * Tire une carte d'une rareté DONNÉE (pas de pondération globale).
+ * Utilisé par les boosters : la rareté est déjà décidée par le slot.
+ *
+ * Repli : si le deck de la rareté demandée est vide, on descend vers
+ * les raretés INFÉRIEURES (epic → rare → common). En dernier recours,
+ * n'importe quel média de la banque.
+ */
+const RARITY_FALLBACK_ORDER = ['legendary', 'epic', 'rare', 'common'];
+
+function drawCardOfRarity(rarity) {
+  const startIdx = RARITY_FALLBACK_ORDER.indexOf(rarity);
+  const order = startIdx === -1
+    ? RARITY_FALLBACK_ORDER
+    : RARITY_FALLBACK_ORDER.slice(startIdx);
+
+  for (const r of order) {
+    const media = drawFromRarityDeck(r);
+    if (media) return media;
+  }
+
+  // Repli ultime : n'importe quoi dans la banque
+  return localMediaBank[Math.floor(Math.random() * localMediaBank.length)];
+}
+
+/**
  * Retourne les infos d'affichage d'une rareté (emoji + label)
  */
 function getRarityInfo(rarity) {
   return RARITIES[rarity] || RARITIES[DEFAULT_RARITY];
 }
 
-module.exports = { getRandomMedia, getRarityInfo, RARITIES };
+module.exports = { getRandomMedia, drawCardOfRarity, getRarityInfo, RARITIES };

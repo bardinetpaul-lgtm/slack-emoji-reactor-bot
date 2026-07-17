@@ -103,12 +103,44 @@ slack-emoji-reactor-bot/
 ├── README.md             ← Doc d'installation
 ├── MEMORY.md             ← CE FICHIER
 ├── data/
-│   └── media-bank.json   ← Banque de 25 médias
+│   ├── media-bank.json   ← Banque de médias (avec rareté)
+│   ├── scores.json       ← Scores hebdo (runtime, gitignored)
+│   ├── credits.json      ← Porte-monnaie booster (runtime, gitignored)
+│   └── boosters.json     ← Boosters achetés non ouverts (runtime, gitignored)
 └── src/
-    ├── app.js            ← Point d'entrée + listener reaction_added
+    ├── app.js            ← Point d'entrée + listeners + slash commands + boutons
     ├── blocks.js         ← Construction des blocs Slack (gère URLs privées)
-    └── media.js          ← Sélection aléatoire (local + Giphy fallback)
+    ├── media.js          ← Sélection aléatoire par rareté (local + Giphy fallback)
+    ├── scores.js         ← Compteur hebdo + attaque Jeanpip
+    ├── targets.js        ← Cibles auto-react persistantes
+    ├── credits.js        ← Porte-monnaie PERMANENT (jamais de reset)
+    └── boosters.js       ← Catalogue de boosters + tirage + persistance
 ```
+
+---
+
+## 🎁 Mode Booster JeanPip
+
+**Gagner des crédits :** +1 crédit permanent à chaque réaction `:jeanpip:` que TU poses
+(spam exclu ; l'attaque et l'auto-react ne créditent pas — anti-farming). Jamais de reset.
+
+**Dépenser :** `/jeanpip-booster` → boutique DM avec 3 boutons :
+⚪ Commun (10) · 🔵 Rare (20) · 🟣 Épique (30). `/jeanpip-credits` affiche le solde.
+
+**Contenu d'un booster :** toujours **8 cartes**. Les 5 premières sont communes ;
+les 3 dernières suivent une distribution **par slot** (tables dans `src/boosters.js`,
+chacune totalise 100 %). Ex. booster épique, slot 8 : 50 % épique / 20 % rare / 30 % légendaire.
+
+**Flux d'ouverture :** achat → débit immédiat → DM « Booster acheté » + bouton
+🎁 *Ouvrir*. Les cartes sont tirées au moment de l'ouverture et révélées une toutes
+les **5 s en thread** (~35 s au total). Le bouton se désactive après ouverture.
+Le booster acheté est persisté dans `data/boosters.json` (survit à un restart).
+
+> ⚠️ Limite connue v1 : si le bot redémarre pendant les 35 s de révélation,
+> l'animation s'arrête (le booster reste marqué ouvert). Acceptable en v1.
+
+**Catalogue extensible :** ajouter une entrée dans `BOOSTERS` (`src/boosters.js`)
+avec un `price` et 8 `slots` suffit à créer un nouveau type de booster.
 
 ---
 

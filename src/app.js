@@ -11,6 +11,8 @@ const { getRandomMedia } = require('./media');
 const { buildMediaBlocks } = require('./blocks');
 const scores = require('./scores');
 const targets = require('./targets');
+const credits = require('./credits');
+const boosters = require('./boosters');
 
 // ─────────────────────────────────────────────
 // 🔧 Validation de la configuration
@@ -245,6 +247,11 @@ app.event('reaction_added', async ({ event, client, logger }) => {
 
     // 📈 Compteur durable pour le classement JeanPip du dashboard (all-time + semaine)
     scores.recordHit(reactingUserId);
+
+    // 💰 +1 crédit permanent (porte-monnaie booster). Spam déjà exclu ci-dessus.
+    //    Seule TA réaction crédite : l'attaque et l'auto-react ne créditent pas.
+    const newBalance = credits.addCredit(reactingUserId);
+    logger.info(`💰 Crédits de <@${reactingUserId}> : ${newBalance}`);
 
     // 🎉 Notification déblocage attaque
     if (justUnlocked) {
@@ -580,6 +587,238 @@ app.command('/jeanpip-auto', async ({ command, ack, client, logger }) => {
 });
 
 // ─────────────────────────────────────────────
+// 💰 Slash command : /jeanpip-credits
+//    Affiche le solde de crédits en DM
+// ─────────────────────────────────────────────
+app.command('/jeanpip-credits', async ({ command, ack, client, logger }) => {
+  await ack();
+
+  const userId = command.user_id;
+
+  try {
+    const balance = credits.getBalance(userId);
+    await safeSendDM(client, userId, {
+      text: `💰 Tu as ${balance} crédits`,
+      blocks: [
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: `💰 *Tu as ${balance} crédit(s) JeanPip !*\n\nTu gagnes *+1 crédit* à chaque fois que tu poses une réaction :${TARGET_EMOJI}: sur un message.\n\n🎁 Dépense-les en boosters avec \`/jeanpip-booster\` !`,
+          },
+        },
+      ],
+    }, logger);
+    logger.info(`💰 /jeanpip-credits : <@${userId}> a ${balance} crédits`);
+  } catch (error) {
+    logger.error('❌ Erreur dans /jeanpip-credits:', error);
+  }
+});
+
+// ─────────────────────────────────────────────
+// 🎁 Slash command : /jeanpip-booster
+//    Ouvre la boutique de boosters en DM (3 boutons d'achat)
+// ─────────────────────────────────────────────
+app.command('/jeanpip-booster', async ({ command, ack, client, logger }) => {
+  await ack();
+
+  const userId = command.user_id;
+
+  try {
+    const balance = credits.getBalance(userId);
+
+    const buttons = boosters.listBoosters().map((b) => ({
+      type: 'button',
+      text: { type: 'plain_text', text: `${b.emoji} ${b.label} (${b.price})` },
+      action_id: `buy_booster_${b.type}`,
+      value: b.type,
+    }));
+
+    await safeSendDM(client, userId, {
+      text: `🎁 Boutique de boosters JeanPip`,
+      blocks: [
+        { type: 'header', text: { type: 'plain_text', text: '🎁 Boosters JeanPip' } },
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: `💰 Ton solde : *${balance}* crédit(s)\n\nChaque booster contient *8 cartes*. Plus le booster est cher, plus tes chances de tomber sur du 🔵 rare, 🟣 épique ou 🟡 légendaire sont élevées !`,
+          },
+        },
+        { type: 'actions', elements: buttons },
+        { type: 'context', elements: [{ type: 'mrkdwn', text: '⚪ Commun · 10 crédits   🔵 Rare · 20   🟣 Épique · 30' }] },
+      ],
+    }, logger);
+    logger.info(`🎁 /jeanpip-booster : boutique envoyée à <@${userId}> (solde ${balance})`);
+  } catch (error) {
+    logger.error('❌ Erreur dans /jeanpip-booster:', error);
+  }
+});
+
+// ─────────────────────────────────────────────
+// 🛒 Action : clic sur un bouton d'achat de booster
+//    action_id = buy_booster_<type> · value = <type>
+// ─────────────────────────────────────────────
+app.action(/^buy_booster_/, async ({ ack, body, action, client, logger }) => {
+  await ack();
+
+  const userId = body.user.id;
+  const type = action.value;
+
+  try {
+    const booster = boosters.getBooster(type);
+    if (!booster) {
+      logger.warn(`⚠️ Type de booster inconnu : ${type}`);
+      return;
+    }
+
+    // 💸 Débit atomique : spend() re-vérifie le solde et renvoie false si insuffisant
+    if (!credits.spend(userId, booster.price)) {
+      const balance = credits.getBalance(userId);
+      const missing = booster.price - balance;
+      await sendDM(client, userId, {
+        text: `❌ Il te manque ${missing} crédits`,
+        blocks: [
+          {
+            type: 'section',
+            text: {
+              type: 'mrkdwn',
+              text: `❌ *Il te manque ${missing} crédit(s)* pour le Booster ${booster.emoji} ${booster.label}.\n\n💰 Ton solde : *${balance}* · Prix : *${booster.price}*\n\nRéagis avec :${TARGET_EMOJI}: pour gagner des crédits ! 💪`,
+            },
+          },
+        ],
+      });
+      logger.info(`💸 Achat refusé (solde insuffisant) : <@${userId}> ${booster.type}`);
+      return;
+    }
+
+    // ✅ Débit OK → on enregistre le booster en attente
+    const id = boosters.createPending(userId, type);
+    const balance = credits.getBalance(userId);
+
+    await sendDM(client, userId, {
+      text: `${booster.emoji} Booster ${booster.label} acheté !`,
+      blocks: [
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: `${booster.emoji} *Booster ${booster.label} acheté !* 🎉\n\n💰 Nouveau solde : *${balance}* crédit(s)\n\nClique pour révéler tes 8 cartes 👇`,
+          },
+        },
+        {
+          type: 'actions',
+          elements: [
+            {
+              type: 'button',
+              style: 'primary',
+              text: { type: 'plain_text', text: '🎁 Ouvrir le booster' },
+              action_id: 'open_booster',
+              value: id,
+            },
+          ],
+        },
+      ],
+    });
+    logger.info(`🛒 <@${userId}> a acheté un booster ${booster.type} (id ${id}, solde ${balance})`);
+  } catch (error) {
+    logger.error('❌ Erreur dans buy_booster:', error);
+  }
+});
+
+// ─────────────────────────────────────────────
+// 🎁 Action : clic sur « Ouvrir le booster »
+//    action_id = open_booster · value = <booster id>
+//    Révèle les 8 cartes, une toutes les 5 s, en thread.
+// ─────────────────────────────────────────────
+app.action('open_booster', async ({ ack, body, action, client, logger }) => {
+  await ack();
+
+  const userId = body.user.id;
+  const id = action.value;
+  const channelId = body.channel && body.channel.id;
+  const messageTs = body.message && body.message.ts;
+
+  try {
+    const pending = boosters.getPending(id);
+
+    if (!pending) {
+      await sendDM(client, userId, {
+        text: `❌ Booster introuvable`,
+        blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `❌ *Ce booster est introuvable.* Il a peut-être déjà été ouvert.` } }],
+      });
+      return;
+    }
+
+    if (pending.owner !== userId) {
+      logger.warn(`⛔ <@${userId}> a tenté d'ouvrir le booster de <@${pending.owner}>`);
+      return;
+    }
+
+    // 🔒 Garde anti-double-clic : markOpened ne réussit qu'une fois
+    if (!boosters.markOpened(id)) {
+      logger.info(`ℹ️ Booster ${id} déjà ouvert, clic ignoré`);
+      return;
+    }
+
+    const booster = boosters.getBooster(pending.type);
+    const emoji = booster ? booster.emoji : '🎁';
+    const label = booster ? booster.label : pending.type;
+
+    // 🔕 Désactiver le bouton en remplaçant le message
+    if (channelId && messageTs) {
+      try {
+        await client.chat.update({
+          channel: channelId,
+          ts: messageTs,
+          text: `${emoji} Booster ${label} ouvert !`,
+          blocks: [
+            {
+              type: 'section',
+              text: {
+                type: 'mrkdwn',
+                text: `${emoji} *Booster ${label} — ouvert !* 🎉\n\n_Les 8 cartes se révèlent dans le fil ci-dessous, une toutes les 5 secondes..._`,
+              },
+            },
+          ],
+        });
+      } catch (updateError) {
+        logger.error(`❌ Impossible de désactiver le bouton :`, updateError.message);
+      }
+    }
+
+    // 🎴 Tirage des 8 cartes (au moment de l'ouverture)
+    const cards = boosters.openBooster(pending.type);
+    logger.info(`🎁 <@${userId}> ouvre le booster ${pending.type} (${cards.length} cartes)`);
+
+    // ⏱️ Révélation progressive : une carte toutes les 5 s, en thread
+    for (let i = 0; i < cards.length; i++) {
+      const card = cards[i];
+      try {
+        await client.chat.postMessage({
+          channel: channelId,
+          thread_ts: messageTs,
+          text: `${card.title} (${i + 1}/${cards.length})`,
+          blocks: buildMediaBlocks({
+            headerText: `🎴 *${card.title}* — carte ${i + 1}/${cards.length}`,
+            media: card,
+          }),
+        });
+      } catch (revealError) {
+        logger.error(`❌ Erreur révélation carte ${i + 1}:`, revealError.message);
+      }
+      if (i < cards.length - 1) {
+        await new Promise((resolve) => setTimeout(resolve, 5000));
+      }
+    }
+
+    logger.info(`✅ Booster ${id} entièrement révélé pour <@${userId}>`);
+  } catch (error) {
+    logger.error('❌ Erreur dans open_booster:', error);
+  }
+});
+
+// ─────────────────────────────────────────────
 // ❓ Slash command : /jeanpip-help
 // ─────────────────────────────────────────────
 app.command('/jeanpip-help', async ({ command, ack, client, logger }) => {
@@ -589,6 +828,7 @@ app.command('/jeanpip-help', async ({ command, ack, client, logger }) => {
   const isAdmin = JEANPIP_ADMINS.includes(userId);
   const currentScore = scores.getScore(userId);
   const userHasAttack = scores.hasAttack(userId);
+  const creditBalance = credits.getBalance(userId);
 
   try {
     await safeSendDM(client, userId, {
@@ -630,6 +870,14 @@ app.command('/jeanpip-help', async ({ command, ack, client, logger }) => {
           type: 'section',
           text: {
             type: 'mrkdwn',
+            text: `🎁 *Boosters JeanPip — \`/jeanpip-booster\`*\nTu as *${creditBalance}* crédit(s) 💰\n\n*Comment gagner des crédits :*\n• *+1 crédit* à chaque réaction :${TARGET_EMOJI}: que TU poses (spam exclu)\n\n*Comment les dépenser :*\n• \`/jeanpip-booster\` → achète un booster (⚪ 10 · 🔵 20 · 🟣 30)\n• Chaque booster = *8 cartes* révélées une par une\n• Plus le booster est cher, plus les cartes rares sont probables !\n\n_Tape \`/jeanpip-credits\` pour voir ton solde à tout moment._`,
+          },
+        },
+        { type: 'divider' },
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
             text: `🚨 *Anti-spam*\nSi tu réagis plusieurs fois avec :${TARGET_EMOJI}: sur le *même message* en moins de *8 secondes* :\n• La victime ne reçoit rien ✅\n• Toi tu reçois *10 images troll* en rafale toutes les 5 secondes 💀\n\n_Spammer c'est mal._`,
           },
         },
@@ -638,7 +886,7 @@ app.command('/jeanpip-help', async ({ command, ack, client, logger }) => {
           type: 'section',
           text: {
             type: 'mrkdwn',
-            text: `📋 *Toutes les commandes*\n\`/jeanpip-help\` → Affiche ce message avec ton score actuel\n\`/jeanpip-attack\` → Lance une Attaque Jeanpip sur le channel${isAdmin ? '\n`/jeanpip-give @user` → (admin) Offre une Attaque Jeanpip à quelqu\'un\n`/jeanpip-auto add|remove|list` → (admin) Gère les cibles auto-react' : ''}`,
+            text: `📋 *Toutes les commandes*\n\`/jeanpip-help\` → Affiche ce message avec ton score actuel\n\`/jeanpip-attack\` → Lance une Attaque Jeanpip sur le channel\n\`/jeanpip-credits\` → Affiche ton solde de crédits\n\`/jeanpip-booster\` → Ouvre la boutique de boosters${isAdmin ? '\n`/jeanpip-give @user` → (admin) Offre une Attaque Jeanpip à quelqu\'un\n`/jeanpip-auto add|remove|list` → (admin) Gère les cibles auto-react' : ''}`,
           },
         },
         {
@@ -688,6 +936,7 @@ async function sendDM(client, userId, message) {
   console.log(`  🤖  Bot ID : ${botUserId}`);
   console.log(`  🚨  Anti-spam : ${SPAM_THRESHOLD_SECONDS}s seuil → ${SPAM_TROLL_SEQUENCE.length}x troll`);
   console.log(`  ⚔️   Attaque Jeanpip : seuil ${scores.ATTACK_THRESHOLD} jeanpips/semaine`);
+  console.log(`  🎁  Boosters : ${boosters.listBoosters().map((b) => `${b.emoji}${b.price}`).join(' ')} (8 cartes)`);
   if (JEANPIP_ADMINS.length > 0) {
     console.log(`  👑  Admins (${JEANPIP_ADMINS.length}) : ${JEANPIP_ADMINS.join(', ')}`);
   }
