@@ -512,13 +512,20 @@ app.command('/jeanpip-give-credits', async ({ command, ack, client, logger }) =>
     }
 
     const targetId = parseUserId(command.text);
-    const amountMatch = (command.text || '').match(/(-?\d+)/);
-    const amount = amountMatch ? parseInt(amountMatch[1], 10) : NaN;
 
-    if (!targetId || !Number.isFinite(amount) || amount <= 0) {
+    // ⚠️ On retire d'abord la mention <@ID|nom> ET un éventuel ID brut du texte :
+    //    sinon les CHIFFRES contenus dans l'ID Slack (ex. U096...) seraient pris
+    //    pour le montant (bug : "give @jonathan 10" créditait 96).
+    const rest = (command.text || '')
+      .replace(/<@[A-Z0-9]+(?:\|[^>]+)?>/ig, ' ')
+      .replace(/\b[UW][A-Z0-9]{6,}\b/ig, ' ');
+    const amountMatch = rest.match(/-?\d+/);
+    const amount = amountMatch ? parseInt(amountMatch[0], 10) : NaN;
+
+    if (!targetId || !Number.isFinite(amount) || amount === 0) {
       await safeSendDM(client, adminId, {
         text: `❓ Usage : /jeanpip-give-credits @utilisateur <montant>`,
-        blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `❓ *Usage :* \`/jeanpip-give-credits @utilisateur <montant>\`\nEx : \`/jeanpip-give-credits @paul 50\` (montant entier positif).` } }],
+        blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `❓ *Usage :* \`/jeanpip-give-credits @utilisateur <montant>\`\nEx : \`/jeanpip-give-credits @paul 50\` pour ajouter, \`/jeanpip-give-credits @paul -20\` pour retirer.\nLe montant doit être un entier non nul.` } }],
       }, logger);
       return;
     }
@@ -531,22 +538,37 @@ app.command('/jeanpip-give-credits', async ({ command, ack, client, logger }) =>
       return;
     }
 
-    const newBalance = credits.addCredit(targetId, amount);
+    if (amount > 0) {
+      // ➕ Cadeau : on ajoute et on notifie la personne
+      const newBalance = credits.addCredit(targetId, amount);
 
-    await safeSendDM(client, targetId, {
-      text: `🎁 Un admin t'a offert ${amount} crédits JeanPip !`,
-      blocks: [{
-        type: 'section',
-        text: { type: 'mrkdwn', text: `🎁 *Un admin t'a offert ${amount} crédit(s) JeanPip !* 💰\n\nNouveau solde : *${newBalance}* crédit(s)\n\nDépense-les avec \`/jeanpip-booster\` ! 🎁` },
-      }],
-    }, logger);
+      await safeSendDM(client, targetId, {
+        text: `🎁 Un admin t'a offert ${amount} crédits JeanPip !`,
+        blocks: [{
+          type: 'section',
+          text: { type: 'mrkdwn', text: `🎁 *Un admin t'a offert ${amount} crédit(s) JeanPip !* 💰\n\nNouveau solde : *${newBalance}* crédit(s)\n\nDépense-les avec \`/jeanpip-booster\` ! 🎁` },
+        }],
+      }, logger);
 
-    await safeSendDM(client, adminId, {
-      text: `✅ ${amount} crédits offerts à <@${targetId}>`,
-      blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `✅ *${amount} crédit(s) offert(s) à <@${targetId}>.*\nNouveau solde de la personne : *${newBalance}*.` } }],
-    }, logger);
+      await safeSendDM(client, adminId, {
+        text: `✅ ${amount} crédits offerts à <@${targetId}>`,
+        blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `✅ *${amount} crédit(s) offert(s) à <@${targetId}>.*\nNouveau solde de la personne : *${newBalance}*.` } }],
+      }, logger);
 
-    logger.info(`💳 <@${adminId}> a crédité ${amount} à <@${targetId}> (solde ${newBalance})`);
+      logger.info(`💳 <@${adminId}> a crédité +${amount} à <@${targetId}> (solde ${newBalance})`);
+    } else {
+      // ➖ Correction : on retire (solde jamais négatif), sans notifier la personne
+      const before = credits.getBalance(targetId);
+      const newBalance = credits.setBalance(targetId, before + amount); // amount négatif
+      const removed = before - newBalance;
+
+      await safeSendDM(client, adminId, {
+        text: `✅ ${removed} crédits retirés à <@${targetId}>`,
+        blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `✅ *Correction appliquée à <@${targetId}>.*\nAncien solde : *${before}* → nouveau solde : *${newBalance}* (retiré : ${removed}).\n\n_La personne n'a pas été notifiée._` } }],
+      }, logger);
+
+      logger.info(`💳 <@${adminId}> a corrigé <@${targetId}> : ${before} → ${newBalance}`);
+    }
   } catch (error) {
     logger.error('❌ Erreur dans /jeanpip-give-credits:', error);
   }
