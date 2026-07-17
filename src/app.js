@@ -119,6 +119,8 @@ async function safeSendDM(client, userId, message, logger) {
  * Récupère les N derniers auteurs uniques d'un channel.
  * Pagine dans l'historique jusqu'à trouver assez de personnes,
  * peu importe si ça s'étale sur des semaines/mois.
+ * Retourne un tableau de { user, ts } où ts = timestamp du DERNIER
+ * message de cette personne (pour pouvoir y réagir).
  */
 async function getLastUniqueAuthors(client, channelId, count, excludeIds, logger) {
   const victims = [];
@@ -141,11 +143,10 @@ async function getLastUniqueAuthors(client, channelId, count, excludeIds, logger
       if (msg.bot_id) continue;     // messages postés par un bot
       if (seen.has(msg.user)) continue;
       seen.add(msg.user);
-      victims.push(msg.user);
+      victims.push({ user: msg.user, ts: msg.ts });
       if (victims.length >= count) break;
     }
 
-    // Plus de pages à lire ?
     if (!result.has_more || !result.response_metadata || !result.response_metadata.next_cursor) {
       break;
     }
@@ -334,8 +335,7 @@ app.command('/jeanpip-attack', async ({ command, ack, client, logger }) => {
 
     logger.info(`⚔️  Attaque Jeanpip lancée par <@${userId}> dans <#${channelId}>`);
 
-    // 🔎 Récupérer les 7 dernières personnes uniques (avec pagination),
-    // en excluant l'attaquant et le bot lui-même
+    // 🔎 Récupérer les 7 dernières personnes uniques (avec leur dernier message)
     let victims;
     try {
       victims = await getLastUniqueAuthors(client, channelId, 7, [userId, botUserId], logger);
@@ -362,17 +362,30 @@ app.command('/jeanpip-attack', async ({ command, ack, client, logger }) => {
     const attackerName = attackerInfo.user.real_name || attackerInfo.user.name;
 
     let sent = 0;
-    for (const victimId of victims) {
+    for (const victim of victims) {
+      const victimId = victim.user;
       try {
+        // 1️⃣ Réagir avec :jeanpip: sur le dernier message de la victime (visible dans le channel)
+        try {
+          await client.reactions.add({
+            channel: channelId,
+            name: TARGET_EMOJI,
+            timestamp: victim.ts,
+          });
+          logger.info(`⚔️  Réaction :${TARGET_EMOJI}: ajoutée sur le msg de <@${victimId}>`);
+        } catch (reactError) {
+          // already_reacted ou message introuvable → on continue quand même
+          logger.info(`ℹ️  Pas pu réagir sur le msg de <@${victimId}>: ${reactError.data ? reactError.data.error : reactError.message}`);
+        }
+
+        // 2️⃣ Envoyer le DM avec média aléatoire pondéré (affiche la rareté)
         const media = await getRandomMedia();
         const ok = await safeSendDM(client, victimId, {
           text: `🚨 ALERTE ! ${attackerName} a lancé une Attaque Jeanpip !`,
-          blocks: [
-            { type: 'section', text: { type: 'mrkdwn', text: `🚨 *ALERTE ATTAQUE JEANPIP !*\n*<@${userId}>* t'a ciblé dans <#${channelId}> ! :${TARGET_EMOJI}:` } },
-            { type: 'divider' },
-            { type: 'section', text: { type: 'mrkdwn', text: `🖼️ *${media.title}*\n<${media.url}|👉 Clique ici pour voir l'image>` } },
-            { type: 'context', elements: [{ type: 'mrkdwn', text: '🤖 _Envoyé par Emoji Reactor Bot_' }] },
-          ],
+          blocks: buildMediaBlocks({
+            headerText: `🚨 *ALERTE ATTAQUE JEANPIP !*\n*<@${userId}>* t'a ciblé dans <#${channelId}> ! :${TARGET_EMOJI}:`,
+            media: media,
+          }),
         }, logger);
         if (ok) sent++;
       } catch (error) {
@@ -382,7 +395,7 @@ app.command('/jeanpip-attack', async ({ command, ack, client, logger }) => {
 
     await safeSendDM(client, userId, {
       text: `⚔️ Attaque Jeanpip lancée sur ${sent} personnes !`,
-      blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `⚔️ *Attaque Jeanpip lancée !*\n\nTu as ciblé *${sent} personne(s)* dans <#${channelId}> :${TARGET_EMOJI}:\n${victims.map(v => `• <@${v}>`).join('\n')}` } }],
+      blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `⚔️ *Attaque Jeanpip lancée !*\n\nTu as ciblé *${sent} personne(s)* dans <#${channelId}> :${TARGET_EMOJI}:\n${victims.map(v => `• <@${v.user}>`).join('\n')}` } }],
     }, logger);
 
     logger.info(`✅ Attaque Jeanpip terminée : ${sent}/${victims.length} victimes`);
@@ -406,14 +419,11 @@ app.command('/jeanpip-help', async ({ command, ack, client, logger }) => {
     await safeSendDM(client, userId, {
       text: `👋 Voici toutes les features du Jeanpip Bot !`,
       blocks: [
-        // Header
         {
           type: 'header',
           text: { type: 'plain_text', text: `🤖 Jeanpip Bot — Guide complet` },
         },
         { type: 'divider' },
-
-        // Feature 1 : Réaction Jeanpip
         {
           type: 'section',
           text: {
@@ -422,8 +432,6 @@ app.command('/jeanpip-help', async ({ command, ack, client, logger }) => {
           },
         },
         { type: 'divider' },
-
-        // Feature 2 : Score
         {
           type: 'section',
           text: {
@@ -435,8 +443,6 @@ app.command('/jeanpip-help', async ({ command, ack, client, logger }) => {
           },
         },
         { type: 'divider' },
-
-        // Feature 3 : Attaque Jeanpip
         {
           type: 'section',
           text: {
@@ -445,8 +451,6 @@ app.command('/jeanpip-help', async ({ command, ack, client, logger }) => {
           },
         },
         { type: 'divider' },
-
-        // Feature 4 : Anti-spam
         {
           type: 'section',
           text: {
@@ -455,8 +459,6 @@ app.command('/jeanpip-help', async ({ command, ack, client, logger }) => {
           },
         },
         { type: 'divider' },
-
-        // Toutes les commandes
         {
           type: 'section',
           text: {
