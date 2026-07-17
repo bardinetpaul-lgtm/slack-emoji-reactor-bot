@@ -51,6 +51,27 @@ try {
 }
 
 // ─────────────────────────────────────────────
+// ➕ Banque CUSTOM (médias ajoutés en live via /jeanpip-addmedia)
+//    Fichier runtime séparé (gitignored) pour ne pas toucher
+//    media-bank.json versionné.
+// ─────────────────────────────────────────────
+const CUSTOM_BANK_PATH = path.join(__dirname, '..', 'data', 'media-bank-custom.json');
+let customMedia = [];
+
+try {
+  if (fs.existsSync(CUSTOM_BANK_PATH)) {
+    const parsed = JSON.parse(fs.readFileSync(CUSTOM_BANK_PATH, 'utf-8'));
+    if (Array.isArray(parsed)) {
+      customMedia = parsed;
+      localMediaBank = localMediaBank.concat(customMedia);
+      console.log(`➕ Banque custom chargée : ${customMedia.length} média(s) ajouté(s)`);
+    }
+  }
+} catch (err) {
+  console.warn('⚠️  Banque custom illisible, ignorée');
+}
+
+// ─────────────────────────────────────────────
 // 🗂️  Regroupement des médias par rareté
 // ─────────────────────────────────────────────
 const mediaByRarity = {};
@@ -204,4 +225,81 @@ function getRarityInfo(rarity) {
   return RARITIES[rarity] || RARITIES[DEFAULT_RARITY];
 }
 
-module.exports = { getRandomMedia, drawCardOfRarity, getRarityInfo, RARITIES };
+// ─────────────────────────────────────────────
+// 🏷️  Normalisation d'une rareté saisie par un admin
+//     Accepte le français, l'anglais, quelques abréviations.
+//     Retourne la clé interne (common/rare/epic/legendary) ou null.
+// ─────────────────────────────────────────────
+const RARITY_ALIASES = {
+  common: 'common', commun: 'common', c: 'common',
+  rare: 'rare', r: 'rare',
+  epic: 'epic', epique: 'epic', 'épique': 'epic', e: 'epic',
+  legendary: 'legendary', legendaire: 'legendary', 'légendaire': 'legendary',
+  legend: 'legendary', leg: 'legendary', l: 'legendary',
+};
+
+function normalizeRarity(input) {
+  if (!input) return null;
+  const key = String(input).toLowerCase().trim().replace(/[:_]/g, '');
+  if (RARITY_ALIASES[key]) return RARITY_ALIASES[key];
+  return RARITIES[key] ? key : null;
+}
+
+// ─────────────────────────────────────────────
+// 🎬 Devine le type (image/video) d'après l'URL
+// ─────────────────────────────────────────────
+function inferType(url) {
+  const u = url.toLowerCase();
+  if (/(?:youtube\.com|youtu\.be|vimeo\.com)/.test(u) || /\.(?:mp4|mov|webm|m4v)(?:$|\?)/.test(u)) {
+    return 'video';
+  }
+  return 'image';
+}
+
+/**
+ * Ajoute un média à la banque (en mémoire + persistance custom).
+ * @param {Object} opts
+ * @param {string} opts.url    - Lien du média (http/https)
+ * @param {string} opts.rarity - Clé de rareté déjà normalisée (common/rare/epic/legendary)
+ * @param {string} [opts.title]- Titre optionnel (auto-généré sinon)
+ * @returns {{ ok: boolean, media?: Object, count?: number, error?: string }}
+ */
+function addMedia({ url, rarity, title }) {
+  if (!url || !/^https?:\/\//i.test(url)) return { ok: false, error: 'url_invalide' };
+  if (!RARITIES[rarity]) return { ok: false, error: 'rarete_invalide' };
+
+  const info = RARITIES[rarity];
+  const media = {
+    type: inferType(url),
+    url: url.trim(),
+    title: title && title.trim() ? title.trim() : `${info.emoji} Jeanpip ${info.label}`,
+    rarity,
+  };
+
+  // 1. En mémoire (banque + regroupement par rareté)
+  localMediaBank.push(media);
+  mediaByRarity[rarity].push(media);
+  customMedia.push(media);
+
+  // 2. Invalider le deck de cette rareté → il sera reshufflé (avec le nouveau média) au prochain tirage
+  delete decks[rarity];
+  delete deckIndexes[rarity];
+
+  // 3. Persistance dans la banque custom (gitignored)
+  try {
+    fs.writeFileSync(CUSTOM_BANK_PATH, JSON.stringify(customMedia, null, 2), 'utf-8');
+  } catch (e) {
+    return { ok: false, error: 'ecriture', detail: e.message };
+  }
+
+  return { ok: true, media, count: mediaByRarity[rarity].length };
+}
+
+module.exports = {
+  getRandomMedia,
+  drawCardOfRarity,
+  getRarityInfo,
+  normalizeRarity,
+  addMedia,
+  RARITIES,
+};

@@ -142,6 +142,14 @@ Le booster acheté est persisté dans `data/boosters.json` (survit à un restart
 **Catalogue extensible :** ajouter une entrée dans `BOOSTERS` (`src/boosters.js`)
 avec un `price` et 8 `slots` suffit à créer un nouveau type de booster.
 
+**Commandes admin liées :**
+- `/jeanpip-give-credits @user <montant>` → crédite le porte-monnaie de quelqu'un
+  (montant entier positif, notifie la personne).
+- `/jeanpip-addmedia <lien> <rareté> [titre]` → ajoute un média à la banque **sans
+  redémarrage**. Rareté acceptée en FR/EN (`commun/rare/epique/legendaire`). Le type
+  (image/vidéo) est déduit de l'URL. Média persisté dans `data/media-bank-custom.json`
+  (gitignored, séparé de `media-bank.json` versionné) et rechargé au démarrage.
+
 ---
 
 ## 📝 Comment ajouter un nouveau média
