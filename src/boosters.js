@@ -110,21 +110,17 @@ function listBoosters() {
 
 // ─────────────────────────────────────────────
 // 🎉 Ouvrir un booster → 8 cartes (tirées à l'ouverture)
-//    Chaque carte est un média (avec sa rareté réelle) dont le
-//    titre est remplacé par « Surprise #NN ».
+//    Chaque carte est un média avec sa rareté réelle ET SON TITRE D'ORIGINE
+//    (ex. « 🎉 Surprise #1 ») : c'est ce numéro qui permet d'identifier la photo.
 // ─────────────────────────────────────────────
 
 function openBooster(type) {
   const booster = getBooster(type);
   if (!booster) return [];
 
-  return booster.slots.map((distribution, i) => {
+  return booster.slots.map((distribution) => {
     const rarity = rollRarity(distribution);
-    const media = drawCardOfRarity(rarity);
-    return {
-      ...media,
-      title: `Surprise #${String(i + 1).padStart(2, '0')}`,
-    };
+    return drawCardOfRarity(rarity);
   });
 }
 
