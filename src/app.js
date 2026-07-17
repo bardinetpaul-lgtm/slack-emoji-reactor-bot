@@ -241,6 +241,33 @@ app.event('reaction_added', async ({ event, client, logger }) => {
       return;
     }
 
+    // 🔒 Anti-exploit : on ne compte le Jeanpip QUE si le bot est présent dans la
+    //    conversation. conversations.history échoue (not_in_channel / channel_not_found)
+    //    quand le bot n'est pas membre du channel → dans ce cas on ignore complètement
+    //    l'événement, AVANT tout crédit/score.
+    //    (Sinon, réagir dans une conversation privée sans le bot permettait de farmer
+    //     des crédits sans qu'aucune image ne soit envoyée.)
+    let originalAuthorId;
+    try {
+      const result = await client.conversations.history({
+        channel: channelId,
+        latest: messageTs,
+        inclusive: true,
+        limit: 1,
+      });
+      if (!result.messages || result.messages.length === 0) {
+        logger.warn('⚠️  Message original introuvable → aucun crédit');
+        return;
+      }
+      originalAuthorId = result.messages[0].user || null;
+    } catch (historyError) {
+      const reason = historyError.data ? historyError.data.error : historyError.message;
+      logger.warn(`🚫 Bot absent de la conversation (${reason}) → aucun crédit pour <@${reactingUserId}>`);
+      return;
+    }
+
+    // ✅ Bot bien présent dans la conversation → le Jeanpip compte.
+
     // 📊 Incrémenter le score
     const { justUnlocked, score } = scores.incrementScore(reactingUserId);
     logger.info(`📊 Score de <@${reactingUserId}> : ${score}`);
@@ -248,7 +275,8 @@ app.event('reaction_added', async ({ event, client, logger }) => {
     // 📈 Compteur durable pour le classement JeanPip du dashboard (all-time + semaine)
     scores.recordHit(reactingUserId);
 
-    // 💰 +1 crédit permanent (porte-monnaie booster). Spam déjà exclu ci-dessus.
+    // 💰 +1 crédit permanent (porte-monnaie booster). Spam déjà exclu ci-dessus,
+    //    et présence du bot dans la conversation vérifiée juste au-dessus.
     //    Seule TA réaction crédite : l'attaque et l'auto-react ne créditent pas.
     const newBalance = credits.addCredit(reactingUserId);
     logger.info(`💰 Crédits de <@${reactingUserId}> : ${newBalance}`);
@@ -268,25 +296,6 @@ app.event('reaction_added', async ({ event, client, logger }) => {
         ],
       }, logger);
       logger.info(`🎉 Notification déblocage envoyée à <@${reactingUserId}>`);
-    }
-
-    // Récupérer le message original
-    let originalAuthorId;
-    try {
-      const result = await client.conversations.history({
-        channel: channelId,
-        latest: messageTs,
-        inclusive: true,
-        limit: 1,
-      });
-      if (!result.messages || result.messages.length === 0) {
-        logger.warn('⚠️  Message original introuvable');
-        return;
-      }
-      originalAuthorId = result.messages[0].user || null;
-    } catch (historyError) {
-      logger.error(`❌ Impossible de lire le channel:`, historyError.message);
-      return;
     }
 
     const reactorInfo = await client.users.info({ user: reactingUserId });
