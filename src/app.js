@@ -37,6 +37,9 @@ const JEANPIP_ADMINS = process.env.JEANPIP_ADMINS
 // ─────────────────────────────────────────────
 const SPAM_THRESHOLD_SECONDS = 8;
 const SPAM_PUNISHMENT_INTERVAL_MS = 5000;
+// 🔢 Numérotation des photos anti-spam, dans le même style que la banque
+//    (« Surprise #N »), en continuant après les médias existants.
+const SPAM_PHOTO_START = 62;
 
 const SPAM_TROLL_SEQUENCE = [
   { type: 'image', url: 'https://slack-files.com/T6EFSEHCN-F0BDBMU8CTS-77c6932553', title: '🚨 Spammer c\'est mal.' },
@@ -76,11 +79,14 @@ async function punishSpammer(client, userId, logger) {
   logger.info(`💀 PUNITION ANTI-SPAM lancée pour <@${userId}>`);
   for (let i = 0; i < total; i++) {
     try {
+      // 🔢 Photo numérotée « Surprise #N » à partir de 61, comme la banque de médias
+      const photoNumber = SPAM_PHOTO_START + i;
+      const photoTitle = `🚨 Surprise #${photoNumber}`;
       await sendDM(client, userId, {
-        text: `🚨 Spammer c'est mal. (${i + 1}/${total})`,
+        text: `${photoTitle} — Spammer c'est mal. (${i + 1}/${total})`,
         blocks: buildMediaBlocks({
-          headerText: `🚨 Spammer c'est mal. (${i + 1}/${total})`,
-          media: SPAM_TROLL_SEQUENCE[i],
+          headerText: `🚨 *Spammer c'est mal.* — ${photoTitle} (${i + 1}/${total})`,
+          media: { ...SPAM_TROLL_SEQUENCE[i], title: photoTitle },
         }),
       });
       logger.info(`💀 Punition ${i + 1}/${total} envoyée à <@${userId}>`);
@@ -241,6 +247,41 @@ app.event('reaction_added', async ({ event, client, logger }) => {
       return;
     }
 
+    // 🔒 Anti-exploit : on ne compte le Jeanpip QUE si le bot est présent dans la
+    //    conversation. conversations.history échoue (not_in_channel / channel_not_found)
+    //    quand le bot n'est pas membre du channel → dans ce cas on ignore complètement
+    //    l'événement, AVANT tout crédit/score.
+    //    (Sinon, réagir dans une conversation privée sans le bot permettait de farmer
+    //     des crédits sans qu'aucune image ne soit envoyée.)
+    let originalAuthorId;
+    try {
+      const result = await client.conversations.history({
+        channel: channelId,
+        latest: messageTs,
+        inclusive: true,
+        limit: 1,
+      });
+      if (!result.messages || result.messages.length === 0) {
+        logger.warn('⚠️  Message original introuvable → aucun crédit');
+        return;
+      }
+      originalAuthorId = result.messages[0].user || null;
+    } catch (historyError) {
+      const reason = historyError.data ? historyError.data.error : historyError.message;
+      logger.warn(`🚫 Bot absent de la conversation (${reason}) → aucun crédit pour <@${reactingUserId}>`);
+      return;
+    }
+
+    // 🔒 Anti-farm : réagir à SON PROPRE message ne compte pas.
+    //    (Sinon on pourrait farmer des crédits en s'auto-réagissant dans un
+    //     channel où le bot est présent.) Aucun crédit, aucun score, aucune image.
+    if (originalAuthorId && originalAuthorId === reactingUserId) {
+      logger.info(`🚫 <@${reactingUserId}> a réagi à son propre message → ignoré (anti-farm)`);
+      return;
+    }
+
+    // ✅ Bot présent + réaction sur le message d'autrui → le Jeanpip compte.
+
     // 📊 Incrémenter le score
     const { justUnlocked, score } = scores.incrementScore(reactingUserId);
     logger.info(`📊 Score de <@${reactingUserId}> : ${score}`);
@@ -248,7 +289,8 @@ app.event('reaction_added', async ({ event, client, logger }) => {
     // 📈 Compteur durable pour le classement JeanPip du dashboard (all-time + semaine)
     scores.recordHit(reactingUserId);
 
-    // 💰 +1 crédit permanent (porte-monnaie booster). Spam déjà exclu ci-dessus.
+    // 💰 +1 crédit permanent (porte-monnaie booster). Spam déjà exclu ci-dessus,
+    //    et présence du bot dans la conversation vérifiée juste au-dessus.
     //    Seule TA réaction crédite : l'attaque et l'auto-react ne créditent pas.
     const newBalance = credits.addCredit(reactingUserId);
     logger.info(`💰 Crédits de <@${reactingUserId}> : ${newBalance}`);
@@ -268,25 +310,6 @@ app.event('reaction_added', async ({ event, client, logger }) => {
         ],
       }, logger);
       logger.info(`🎉 Notification déblocage envoyée à <@${reactingUserId}>`);
-    }
-
-    // Récupérer le message original
-    let originalAuthorId;
-    try {
-      const result = await client.conversations.history({
-        channel: channelId,
-        latest: messageTs,
-        inclusive: true,
-        limit: 1,
-      });
-      if (!result.messages || result.messages.length === 0) {
-        logger.warn('⚠️  Message original introuvable');
-        return;
-      }
-      originalAuthorId = result.messages[0].user || null;
-    } catch (historyError) {
-      logger.error(`❌ Impossible de lire le channel:`, historyError.message);
-      return;
     }
 
     const reactorInfo = await client.users.info({ user: reactingUserId });
