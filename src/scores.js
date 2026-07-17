@@ -129,6 +129,30 @@ function consumeAttack(userId) {
 }
 
 // ─────────────────────────────────────────────
+// 🎁 Créditer manuellement une attaque à un user (commande admin)
+// Retourne true si l'attaque a été donnée, false si l'user l'avait déjà
+// ─────────────────────────────────────────────
+
+function giveAttack(userId) {
+  const data = checkAndReset();
+
+  if (!data.users[userId]) {
+    data.users[userId] = { score: 0, hasAttack: false, notified: false };
+  }
+
+  const user = data.users[userId];
+
+  // Si l'user a déjà une attaque dispo, on ne fait rien
+  if (user.hasAttack) return false;
+
+  user.hasAttack = true;
+  user.notified = true; // évite une double notif par le flux normal
+
+  saveScores(data);
+  return true;
+}
+
+// ─────────────────────────────────────────────
 // 📊 Récupérer le score d'un user
 // ─────────────────────────────────────────────
 
@@ -172,6 +196,7 @@ module.exports = {
   incrementScore,
   hasAttack,
   consumeAttack,
+  giveAttack,
   getScore,
   checkAndReset,
   recordHit,
