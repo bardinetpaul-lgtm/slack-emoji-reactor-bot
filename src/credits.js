@@ -55,6 +55,18 @@ function getBalance(userId) {
 }
 
 // ─────────────────────────────────────────────
+// 🔧 Fixer le solde exact d'un user (jamais négatif).
+//    Utilisé pour les corrections admin. Retourne le nouveau solde.
+// ─────────────────────────────────────────────
+
+function setBalance(userId, value) {
+  const data = load();
+  data.users[userId] = Math.max(0, Math.floor(value));
+  save(data);
+  return data.users[userId];
+}
+
+// ─────────────────────────────────────────────
 // 💸 Dépenser `amount` crédits.
 //    Retourne true si le solde suffisait (débit effectué),
 //    false sinon (rien débité).
@@ -72,5 +84,6 @@ function spend(userId, amount) {
 module.exports = {
   addCredit,
   getBalance,
+  setBalance,
   spend,
 };
