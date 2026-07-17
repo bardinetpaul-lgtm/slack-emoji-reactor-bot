@@ -20,3 +20,5 @@ Thumbs.db
 # Données runtime (écrites par le bot, non versionnées)
 data/jeanpip-stats.json
 data/scores.json
+data/credits.json
+data/boosters.json
