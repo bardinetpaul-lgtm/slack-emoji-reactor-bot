@@ -37,6 +37,9 @@ const JEANPIP_ADMINS = process.env.JEANPIP_ADMINS
 // ─────────────────────────────────────────────
 const SPAM_THRESHOLD_SECONDS = 8;
 const SPAM_PUNISHMENT_INTERVAL_MS = 5000;
+// 🔢 Numérotation des photos anti-spam, dans le même style que la banque
+//    (« Surprise #N »), en continuant après les médias existants.
+const SPAM_PHOTO_START = 61;
 
 const SPAM_TROLL_SEQUENCE = [
   { type: 'image', url: 'https://slack-files.com/T6EFSEHCN-F0BDBMU8CTS-77c6932553', title: '🚨 Spammer c\'est mal.' },
@@ -76,11 +79,14 @@ async function punishSpammer(client, userId, logger) {
   logger.info(`💀 PUNITION ANTI-SPAM lancée pour <@${userId}>`);
   for (let i = 0; i < total; i++) {
     try {
+      // 🔢 Photo numérotée « Surprise #N » à partir de 61, comme la banque de médias
+      const photoNumber = SPAM_PHOTO_START + i;
+      const photoTitle = `🚨 Surprise #${photoNumber}`;
       await sendDM(client, userId, {
-        text: `🚨 Spammer c'est mal. (${i + 1}/${total})`,
+        text: `${photoTitle} — Spammer c'est mal. (${i + 1}/${total})`,
         blocks: buildMediaBlocks({
-          headerText: `🚨 Spammer c'est mal. (${i + 1}/${total})`,
-          media: SPAM_TROLL_SEQUENCE[i],
+          headerText: `🚨 *Spammer c'est mal.* — ${photoTitle} (${i + 1}/${total})`,
+          media: { ...SPAM_TROLL_SEQUENCE[i], title: photoTitle },
         }),
       });
       logger.info(`💀 Punition ${i + 1}/${total} envoyée à <@${userId}>`);
