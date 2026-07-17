@@ -10,6 +10,7 @@ require('dotenv').config();
 const { getRandomMedia } = require('./media');
 const { buildMediaBlocks } = require('./blocks');
 const scores = require('./scores');
+const targets = require('./targets');
 
 // ─────────────────────────────────────────────
 // 🔧 Validation de la configuration
@@ -24,10 +25,6 @@ for (const key of REQUIRED_ENV) {
 }
 
 const TARGET_EMOJI = process.env.TARGET_EMOJI;
-
-const TARGET_USER_IDS = process.env.TARGET_USER_IDS
-  ? process.env.TARGET_USER_IDS.split(',').map((id) => id.trim()).filter(Boolean)
-  : [];
 
 const JEANPIP_ADMINS = process.env.JEANPIP_ADMINS
   ? process.env.JEANPIP_ADMINS.split(',').map((id) => id.trim()).filter(Boolean)
@@ -190,13 +187,13 @@ let botName = 'Jeanpip Bot';
 // ─────────────────────────────────────────────
 app.event('message', async ({ event, client, logger }) => {
   try {
-    if (TARGET_USER_IDS.length === 0) return;
     if (event.user === botUserId) return;
     if (event.subtype === 'message_changed' || event.subtype === 'message_deleted') return;
     if (!event.user && !event.bot_id) return;
     const authorId = event.user;
     if (!authorId) return;
-    if (!TARGET_USER_IDS.includes(authorId)) return;
+    // Cibles = env + dynamiques (via /jeanpip-auto)
+    if (!targets.isTarget(authorId)) return;
 
     logger.info(`🎯 Message de la cible <@${authorId}> détecté dans <#${event.channel}>`);
 
@@ -428,7 +425,6 @@ app.command('/jeanpip-give', async ({ command, ack, client, logger }) => {
   const adminId = command.user_id;
 
   try {
-    // 🔒 Réservé aux admins
     if (!JEANPIP_ADMINS.includes(adminId)) {
       await safeSendDM(client, adminId, {
         text: `⛔ Commande réservée aux admins.`,
@@ -438,7 +434,6 @@ app.command('/jeanpip-give', async ({ command, ack, client, logger }) => {
       return;
     }
 
-    // Parser la cible
     const targetId = parseUserId(command.text);
     if (!targetId) {
       await safeSendDM(client, adminId, {
@@ -448,7 +443,6 @@ app.command('/jeanpip-give', async ({ command, ack, client, logger }) => {
       return;
     }
 
-    // On ne donne pas d'attaque à un bot
     if (await isBot(client, targetId)) {
       await safeSendDM(client, adminId, {
         text: `🤖 Impossible de créditer un bot.`,
@@ -468,7 +462,6 @@ app.command('/jeanpip-give', async ({ command, ack, client, logger }) => {
       return;
     }
 
-    // 🎁 Notifier la personne créditée
     await safeSendDM(client, targetId, {
       text: `🎁 On t'a offert une Attaque Jeanpip !`,
       blocks: [
@@ -482,7 +475,6 @@ app.command('/jeanpip-give', async ({ command, ack, client, logger }) => {
       ],
     }, logger);
 
-    // ✅ Confirmer à l'admin
     await safeSendDM(client, adminId, {
       text: `✅ Attaque Jeanpip offerte à <@${targetId}> !`,
       blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `✅ *Attaque Jeanpip offerte à <@${targetId}> !*\nLa personne a été notifiée.` } }],
@@ -491,6 +483,99 @@ app.command('/jeanpip-give', async ({ command, ack, client, logger }) => {
     logger.info(`🎁 <@${adminId}> a offert une attaque à <@${targetId}>`);
   } catch (error) {
     logger.error('❌ Erreur dans /jeanpip-give:', error);
+  }
+});
+
+// ─────────────────────────────────────────────
+// 🎪 Slash command : /jeanpip-auto  (admin uniquement)
+//    Gère les cibles auto-react en live
+//    Usage :
+//      /jeanpip-auto add @user     → ajoute une cible
+//      /jeanpip-auto remove @user  → retire une cible
+//      /jeanpip-auto list          → liste les cibles
+// ─────────────────────────────────────────────
+app.command('/jeanpip-auto', async ({ command, ack, client, logger }) => {
+  await ack();
+
+  const adminId = command.user_id;
+
+  try {
+    // 🔒 Réservé aux admins
+    if (!JEANPIP_ADMINS.includes(adminId)) {
+      await safeSendDM(client, adminId, {
+        text: `⛔ Commande réservée aux admins.`,
+        blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `⛔ *Cette commande est réservée aux admins.*` } }],
+      }, logger);
+      return;
+    }
+
+    const text = (command.text || '').trim();
+    const parts = text.split(/\s+/);
+    const action = (parts[0] || '').toLowerCase();
+
+    // 📋 LIST
+    if (action === 'list' || action === '') {
+      const list = targets.getTargets();
+      const envSet = new Set(targets.ENV_TARGETS);
+      const lines = list.length
+        ? list.map((id) => `• <@${id}>${envSet.has(id) ? ' _(fixe .env)_' : ''}`).join('\n')
+        : '_Aucune cible auto-react configurée._';
+      await safeSendDM(client, adminId, {
+        text: `🎪 Cibles auto-react (${list.length})`,
+        blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `🎪 *Cibles auto-react (${list.length})*\n${lines}\n\n_Usage :_ \`/jeanpip-auto add @user\` · \`/jeanpip-auto remove @user\` · \`/jeanpip-auto list\`` } }],
+      }, logger);
+      return;
+    }
+
+    // Actions add / remove → besoin d'une mention
+    const targetId = parseUserId(parts.slice(1).join(' '));
+    if ((action === 'add' || action === 'remove') && !targetId) {
+      await safeSendDM(client, adminId, {
+        text: `❓ Usage : /jeanpip-auto ${action} @utilisateur`,
+        blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `❓ *Usage :* \`/jeanpip-auto ${action} @utilisateur\`` } }],
+      }, logger);
+      return;
+    }
+
+    // ➕ ADD
+    if (action === 'add') {
+      const res = targets.addTarget(targetId);
+      const msg = {
+        added: `✅ <@${targetId}> est maintenant une cible auto-react ! :${TARGET_EMOJI}:`,
+        already: `ℹ️ <@${targetId}> est déjà une cible auto-react.`,
+        env: `ℹ️ <@${targetId}> est déjà défini comme cible fixe dans le .env.`,
+      }[res];
+      await safeSendDM(client, adminId, {
+        text: msg,
+        blocks: [{ type: 'section', text: { type: 'mrkdwn', text: msg } }],
+      }, logger);
+      logger.info(`🎪 add <@${targetId}> par <@${adminId}> → ${res}`);
+      return;
+    }
+
+    // ➖ REMOVE
+    if (action === 'remove') {
+      const res = targets.removeTarget(targetId);
+      const msg = {
+        removed: `✅ <@${targetId}> n'est plus une cible auto-react.`,
+        not_found: `ℹ️ <@${targetId}> n'était pas une cible auto-react.`,
+        env: `⚠️ <@${targetId}> est une cible fixe du .env, impossible de la retirer en live. Modifie le .env et redémarre le bot.`,
+      }[res];
+      await safeSendDM(client, adminId, {
+        text: msg,
+        blocks: [{ type: 'section', text: { type: 'mrkdwn', text: msg } }],
+      }, logger);
+      logger.info(`🎪 remove <@${targetId}> par <@${adminId}> → ${res}`);
+      return;
+    }
+
+    // ❓ Action inconnue
+    await safeSendDM(client, adminId, {
+      text: `❓ Usage de /jeanpip-auto`,
+      blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `❓ *Usage de \`/jeanpip-auto\` :*\n\`/jeanpip-auto add @user\` → ajoute une cible\n\`/jeanpip-auto remove @user\` → retire une cible\n\`/jeanpip-auto list\` → liste les cibles` } }],
+    }, logger);
+  } catch (error) {
+    logger.error('❌ Erreur dans /jeanpip-auto:', error);
   }
 });
 
@@ -537,7 +622,7 @@ app.command('/jeanpip-help', async ({ command, ack, client, logger }) => {
           type: 'section',
           text: {
             type: 'mrkdwn',
-            text: `⚔️ *Attaque Jeanpip — \`/jeanpip-attack\`*\nEnvoie un Jeanpip aux *7 dernières personnes* ayant posté dans le channel où tu lances la commande !\n\n*Comment débloquer :*\n• Envoie *${scores.ATTACK_THRESHOLD} Jeanpips* dans la semaine\n• Tu reçois un DM de notification quand c'est débloqué\n• Lance \`/jeanpip-attack\` dans le channel de ton choix\n• Ton compteur repart à 0, tu peux redébloquer ensuite !\n\n⚠️ _Si tu ne l'actives pas avant dimanche 20h → tu perds l'attaque_${isAdmin ? '\n\n👑 *Tu es admin : tu as accès illimité à cette commande + `/jeanpip-give @user` !*' : ''}`,
+            text: `⚔️ *Attaque Jeanpip — \`/jeanpip-attack\`*\nEnvoie un Jeanpip aux *7 dernières personnes* ayant posté dans le channel où tu lances la commande !\n\n*Comment débloquer :*\n• Envoie *${scores.ATTACK_THRESHOLD} Jeanpips* dans la semaine\n• Tu reçois un DM de notification quand c'est débloqué\n• Lance \`/jeanpip-attack\` dans le channel de ton choix\n• Ton compteur repart à 0, tu peux redébloquer ensuite !\n\n⚠️ _Si tu ne l'actives pas avant dimanche 20h → tu perds l'attaque_${isAdmin ? '\n\n👑 *Tu es admin : accès illimité + `/jeanpip-give @user` + `/jeanpip-auto` !*' : ''}`,
           },
         },
         { type: 'divider' },
@@ -553,7 +638,7 @@ app.command('/jeanpip-help', async ({ command, ack, client, logger }) => {
           type: 'section',
           text: {
             type: 'mrkdwn',
-            text: `📋 *Toutes les commandes*\n\`/jeanpip-help\` → Affiche ce message avec ton score actuel\n\`/jeanpip-attack\` → Lance une Attaque Jeanpip sur le channel${isAdmin ? '\n`/jeanpip-give @user` → (admin) Offre une Attaque Jeanpip à quelqu\'un' : ''}`,
+            text: `📋 *Toutes les commandes*\n\`/jeanpip-help\` → Affiche ce message avec ton score actuel\n\`/jeanpip-attack\` → Lance une Attaque Jeanpip sur le channel${isAdmin ? '\n`/jeanpip-give @user` → (admin) Offre une Attaque Jeanpip à quelqu\'un\n`/jeanpip-auto add|remove|list` → (admin) Gère les cibles auto-react' : ''}`,
           },
         },
         {
@@ -594,6 +679,8 @@ async function sendDM(client, userId, message) {
   scores.checkAndReset();
   setInterval(() => scores.checkAndReset(), 60 * 60 * 1000);
 
+  const currentTargets = targets.getTargets();
+
   console.log('');
   console.log('══════════════════════════════════════════');
   console.log('  ⚡️  Slack Emoji Reactor Bot lancé !');
@@ -604,9 +691,9 @@ async function sendDM(client, userId, message) {
   if (JEANPIP_ADMINS.length > 0) {
     console.log(`  👑  Admins (${JEANPIP_ADMINS.length}) : ${JEANPIP_ADMINS.join(', ')}`);
   }
-  if (TARGET_USER_IDS.length > 0) {
-    console.log(`  🎪  Cibles auto-react (${TARGET_USER_IDS.length}) :`);
-    TARGET_USER_IDS.forEach((id) => console.log(`       → <@${id}>`));
+  if (currentTargets.length > 0) {
+    console.log(`  🎪  Cibles auto-react (${currentTargets.length}) :`);
+    currentTargets.forEach((id) => console.log(`       → <@${id}>`));
   }
   console.log('══════════════════════════════════════════');
   console.log('');
