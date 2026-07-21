@@ -101,6 +101,62 @@ async function punishSpammer(client, userId, logger) {
   logger.info(`✅ Punition terminée pour <@${userId}>`);
 }
 
+// ─────────────────────────────────────────────
+// 🚜 Anti-farm config
+//    Plus de FARM_MAX_PER_HOUR Jeanpips en 1 h → pénalité de 1 h.
+//    Pendant la pénalité :
+//      ❌ ses Jeanpips n'envoient plus rien aux autres
+//      ❌ il n'accumule plus de crédits (ni score)
+//      ✅ il continue de RECEVOIR des Jeanpips
+//      ✅ il peut toujours ouvrir ses boosters
+// ─────────────────────────────────────────────
+const FARM_WINDOW_MS = 60 * 60 * 1000;   // fenêtre glissante : 1 heure
+const FARM_MAX_PER_HOUR = 10;            // au-delà de 10 → pénalité
+const FARM_PENALTY_MS = 60 * 60 * 1000;  // durée de la pénalité : 1 heure
+
+const farmHistory = new Map();   // userId → [timestamps des jeanpips]
+const farmPenalties = new Map(); // userId → timestamp de fin de pénalité
+
+/**
+ * Temps de pénalité restant pour un user (0 s'il n'est pas pénalisé).
+ * Nettoie automatiquement les pénalités expirées.
+ */
+function getFarmPenaltyRemaining(userId) {
+  const until = farmPenalties.get(userId);
+  if (!until) return 0;
+  const remaining = until - Date.now();
+  if (remaining <= 0) {
+    farmPenalties.delete(userId);
+    farmHistory.delete(userId); // on repart à zéro après la pénalité
+    return 0;
+  }
+  return remaining;
+}
+
+/**
+ * Enregistre un Jeanpip dans la fenêtre glissante.
+ * Retourne true si l'utilisateur vient de dépasser le seuil (→ pénalité).
+ */
+function recordJeanpipForFarm(userId) {
+  const now = Date.now();
+  const recent = (farmHistory.get(userId) || []).filter((t) => now - t < FARM_WINDOW_MS);
+  recent.push(now);
+  farmHistory.set(userId, recent);
+
+  if (recent.length > FARM_MAX_PER_HOUR) {
+    farmPenalties.set(userId, now + FARM_PENALTY_MS);
+    farmHistory.delete(userId);
+    return true;
+  }
+  return false;
+}
+
+/** Formate un temps restant en texte lisible (« 42 min »). */
+function formatRemaining(ms) {
+  const minutes = Math.max(1, Math.ceil(ms / 60000));
+  return minutes >= 60 ? '1 h' : `${minutes} min`;
+}
+
 async function isBot(client, userId) {
   try {
     const userInfo = await client.users.info({ user: userId });
@@ -282,18 +338,48 @@ app.event('reaction_added', async ({ event, client, logger }) => {
 
     // ✅ Bot présent + réaction sur le message d'autrui → le Jeanpip compte.
 
-    // 📊 Incrémenter le score
-    const { justUnlocked, score } = scores.incrementScore(reactingUserId);
-    logger.info(`📊 Score de <@${reactingUserId}> : ${score}`);
+    // 🚜 Anti-farm : plus de 10 Jeanpips en 1 h → pénalité de 1 h.
+    //    On ne compte que les vrais Jeanpips (bot présent, message d'autrui).
+    let farmBlocked = getFarmPenaltyRemaining(reactingUserId) > 0;
 
-    // 📈 Compteur durable pour le classement JeanPip du dashboard (all-time + semaine)
-    scores.recordHit(reactingUserId);
+    if (!farmBlocked && recordJeanpipForFarm(reactingUserId)) {
+      farmBlocked = true;
+      logger.warn(`🚜 ANTI-FARM : <@${reactingUserId}> dépasse ${FARM_MAX_PER_HOUR} Jeanpips/h → pénalité 1 h`);
+      await safeSendDM(client, reactingUserId, {
+        text: `🚜 Alerte anti-farm : tu es bridé pendant 1 heure.`,
+        blocks: [
+          {
+            type: 'section',
+            text: {
+              type: 'mrkdwn',
+              text: `🚜 *ALERTE ANTI-FARM !* :${TARGET_EMOJI}:\n\nTu as posé *plus de ${FARM_MAX_PER_HOUR} Jeanpips en moins d'une heure*.\n\n*Pendant 1 heure :*\n• ❌ Tes Jeanpips n'envoient plus rien aux autres\n• ❌ Tu n'accumules plus de crédits\n• ✅ Tu continues à *recevoir* des Jeanpips\n• ✅ Tu peux toujours *ouvrir tes boosters*\n\n_Lève le pied, ça revient tout seul dans 1 h._ 😉`,
+            },
+          },
+        ],
+      }, logger);
+    }
 
-    // 💰 +1 crédit permanent (porte-monnaie booster). Spam déjà exclu ci-dessus,
-    //    et présence du bot dans la conversation vérifiée juste au-dessus.
-    //    Seule TA réaction crédite : l'attaque et l'auto-react ne créditent pas.
-    const newBalance = credits.addCredit(reactingUserId);
-    logger.info(`💰 Crédits de <@${reactingUserId}> : ${newBalance}`);
+    if (farmBlocked) {
+      const remaining = getFarmPenaltyRemaining(reactingUserId);
+      logger.info(`🚜 <@${reactingUserId}> sous pénalité anti-farm (${formatRemaining(remaining)} restantes) → ni crédit ni envoi aux autres`);
+    }
+
+    // 📊 Score / crédits : bloqués pendant la pénalité anti-farm
+    let justUnlocked = false;
+    if (!farmBlocked) {
+      const result = scores.incrementScore(reactingUserId);
+      justUnlocked = result.justUnlocked;
+      logger.info(`📊 Score de <@${reactingUserId}> : ${result.score}`);
+
+      // 📈 Compteur durable pour le classement JeanPip du dashboard (all-time + semaine)
+      scores.recordHit(reactingUserId);
+
+      // 💰 +1 crédit permanent (porte-monnaie booster). Spam déjà exclu ci-dessus,
+      //    et présence du bot dans la conversation vérifiée juste au-dessus.
+      //    Seule TA réaction crédite : l'attaque et l'auto-react ne créditent pas.
+      const newBalance = credits.addCredit(reactingUserId);
+      logger.info(`💰 Crédits de <@${reactingUserId}> : ${newBalance}`);
+    }
 
     // 🎉 Notification déblocage attaque
     if (justUnlocked) {
@@ -327,7 +413,11 @@ app.event('reaction_added', async ({ event, client, logger }) => {
     }, logger);
     if (sentToReactor) logger.info(`📨 DM envoyé au réacteur <@${reactingUserId}>`);
 
-    if (originalAuthorId && originalAuthorId !== reactingUserId) {
+    // 🚜 Sous pénalité anti-farm : il ne peut plus rien envoyer aux autres.
+    //    (Il a quand même reçu SON image juste au-dessus.)
+    if (farmBlocked) {
+      logger.info(`🚜 Envoi à l'auteur bloqué (anti-farm) pour <@${reactingUserId}>`);
+    } else if (originalAuthorId && originalAuthorId !== reactingUserId) {
       const sentToAuthor = await safeSendDM(client, originalAuthorId, {
         text: `Bonjour jeune, ${reactorName} t'a envoyé un Jeanpip !`,
         blocks: buildMediaBlocks({
@@ -356,6 +446,23 @@ app.command('/jeanpip-attack', async ({ command, ack, client, logger }) => {
   try {
     const isAdmin = JEANPIP_ADMINS.includes(userId);
     const userHasAttack = scores.hasAttack(userId);
+
+    // 🚜 Sous pénalité anti-farm : impossible d'envoyer aux autres
+    const farmRemaining = getFarmPenaltyRemaining(userId);
+    if (farmRemaining > 0) {
+      await safeSendDM(client, userId, {
+        text: `🚜 Anti-farm : tu ne peux pas lancer d'attaque pour le moment.`,
+        blocks: [{
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: `🚜 *Tu es sous pénalité anti-farm.*\n\nTu ne peux rien envoyer aux autres pendant encore *${formatRemaining(farmRemaining)}*.\n\n_Ton attaque n'a pas été consommée, tu pourras la lancer après._`,
+          },
+        }],
+      }, logger);
+      logger.info(`🚜 /jeanpip-attack bloquée (anti-farm) pour <@${userId}>`);
+      return;
+    }
 
     if (!isAdmin && !userHasAttack) {
       const currentScore = scores.getScore(userId);
@@ -1058,6 +1165,14 @@ app.command('/jeanpip-help', async ({ command, ack, client, logger }) => {
           text: {
             type: 'mrkdwn',
             text: `🚨 *Anti-spam*\nSi tu réagis plusieurs fois avec :${TARGET_EMOJI}: sur le *même message* en moins de *8 secondes* :\n• La victime ne reçoit rien ✅\n• Toi tu reçois *10 images troll* en rafale toutes les 5 secondes 💀\n\n_Spammer c'est mal._`,
+          },
+        },
+        { type: 'divider' },
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: `🚜 *Anti-farm*\nSi tu poses *plus de ${FARM_MAX_PER_HOUR} Jeanpips en 1 heure*, tu prends une alerte et pendant *1 heure* :\n• ❌ Tes Jeanpips n'envoient plus rien aux autres\n• ❌ Tu n'accumules plus de crédits\n• ✅ Tu continues à *recevoir* des Jeanpips\n• ✅ Tu peux toujours *ouvrir tes boosters*\n\n_Le Jeanpip se déguste, il ne se farme pas._`,
           },
         },
         { type: 'divider' },
