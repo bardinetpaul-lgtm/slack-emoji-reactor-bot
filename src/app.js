@@ -114,8 +114,9 @@ const FARM_WINDOW_MS = 60 * 60 * 1000;   // fenêtre glissante : 1 heure
 const FARM_MAX_PER_HOUR = 10;            // au-delà de 10 → pénalité
 const FARM_PENALTY_MS = 60 * 60 * 1000;  // durée de la pénalité : 1 heure
 
-const farmHistory = new Map();   // userId → [timestamps des jeanpips]
-const farmPenalties = new Map(); // userId → timestamp de fin de pénalité
+const farmHistory = new Map();      // userId → [timestamps des jeanpips]
+const farmPenalties = new Map();    // userId → timestamp de fin de pénalité
+const farmReleaseTimers = new Map(); // userId → timer de fin de pénalité
 
 /**
  * Temps de pénalité restant pour un user (0 s'il n'est pas pénalisé).
@@ -155,6 +156,39 @@ function recordJeanpipForFarm(userId) {
 function formatRemaining(ms) {
   const minutes = Math.max(1, Math.ceil(ms / 60000));
   return minutes >= 60 ? '1 h' : `${minutes} min`;
+}
+
+/**
+ * Programme la fin de pénalité : nettoie l'état et prévient la personne
+ * que son accès au Jeanpip est rétabli.
+ */
+function scheduleFarmRelease(client, userId, logger) {
+  const timer = setTimeout(async () => {
+    farmPenalties.delete(userId);
+    farmHistory.delete(userId);
+    farmReleaseTimers.delete(userId);
+    try {
+      await safeSendDM(client, userId, {
+        text: `✅ Ton accès au Jeanpip est rétabli !`,
+        blocks: [
+          {
+            type: 'section',
+            text: {
+              type: 'mrkdwn',
+              text: `✅ *Ton accès au Jeanpip est rétabli !* :${TARGET_EMOJI}:\n\nTa pénalité anti-farm est terminée. Tu peux de nouveau :\n• 📤 Envoyer des Jeanpips aux autres\n• 💰 Gagner des crédits\n\n_Reste sous ${FARM_MAX_PER_HOUR} Jeanpips par heure pour éviter un nouveau bridage._ 😉`,
+            },
+          },
+        ],
+      }, logger);
+      logger.info(`✅ Fin de pénalité anti-farm notifiée à <@${userId}>`);
+    } catch (error) {
+      logger.error(`❌ Erreur notif fin de pénalité anti-farm :`, error.message);
+    }
+  }, FARM_PENALTY_MS);
+
+  // Ne pas retenir le process Node à cause de ce timer
+  if (typeof timer.unref === 'function') timer.unref();
+  farmReleaseTimers.set(userId, timer);
 }
 
 async function isBot(client, userId) {
@@ -357,6 +391,9 @@ app.event('reaction_added', async ({ event, client, logger }) => {
           },
         ],
       }, logger);
+
+      // ⏰ Prévenir la personne dès que son accès est rétabli (dans 1 h)
+      scheduleFarmRelease(client, reactingUserId, logger);
     }
 
     if (farmBlocked) {
