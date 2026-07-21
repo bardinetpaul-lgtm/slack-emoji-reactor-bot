@@ -38,7 +38,7 @@ const JEANPIP_ADMINS = process.env.JEANPIP_ADMINS
 const SPAM_THRESHOLD_SECONDS = 8;
 const SPAM_PUNISHMENT_INTERVAL_MS = 5000;
 // 🔢 Numérotation des photos anti-spam, dans le même style que la banque
-//    (« Surprise #N »), en continuant après les médias existants.
+//    (« Surprise #N »). Numéros FIXES #62→#71 : ne jamais les modifier.
 const SPAM_PHOTO_START = 62;
 
 const SPAM_TROLL_SEQUENCE = [
