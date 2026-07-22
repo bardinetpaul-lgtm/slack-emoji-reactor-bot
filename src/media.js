@@ -327,6 +327,38 @@ function addMedia({ url, rarity, title }) {
   return { ok: true, media, number, count: mediaByRarity[rarity].length };
 }
 
+// ─────────────────────────────────────────────
+// 🔧 Migration (une seule fois) : les médias ajoutés via /jeanpip-addmedia
+//    AVANT la numérotation auto ont un titre générique sans numéro
+//    (« 🔵 Jeanpip Rare »). On leur attribue rétroactivement un numéro,
+//    dans leur ordre d'ajout, puis on réécrit la banque custom.
+//    Les objets étant partagés avec mediaByRarity, la correction se propage.
+// ─────────────────────────────────────────────
+function migrateCustomNumbers() {
+  const sansNumero = customMedia.filter((m) => !/Surprise #\d+/.test(m.title || ''));
+  if (sansNumero.length === 0) return;
+
+  let next = getNextMediaNumber();
+
+  for (const media of sansNumero) {
+    const info = RARITIES[media.rarity] || RARITIES[DEFAULT_RARITY];
+    // Ancien titre auto-généré → on le remplace ; titre choisi par l'admin → on le garde en suffixe
+    const ancienTitreAuto = `${info.emoji} Jeanpip ${info.label}`;
+    const suffixe = (media.title && media.title !== ancienTitreAuto) ? ` — ${media.title}` : '';
+    media.title = `${info.emoji} Surprise #${next}${suffixe}`;
+    next++;
+  }
+
+  try {
+    fs.writeFileSync(CUSTOM_BANK_PATH, JSON.stringify(customMedia, null, 2), 'utf-8');
+    console.log(`🔢 ${sansNumero.length} média(s) custom numéroté(s) rétroactivement (jusqu'à #${next - 1})`);
+  } catch (e) {
+    console.error('[media] migration numéros:', e.message);
+  }
+}
+
+migrateCustomNumbers();
+
 module.exports = {
   getRandomMedia,
   drawCardOfRarity,
