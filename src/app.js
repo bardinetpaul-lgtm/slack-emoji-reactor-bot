@@ -826,7 +826,7 @@ app.command('/jeanpip-addmedia', async ({ command, ack, client, logger }) => {
       blocks: [
         {
           type: 'section',
-          text: { type: 'mrkdwn', text: `✅ *Média ajouté à la banque !*\n${info.emoji} Rareté : *${info.label}* · Type : *${result.media.type}*\n📊 Il y a maintenant *${result.count}* média(s) en ${info.label}.\n\n👇 Aperçu :` },
+          text: { type: 'mrkdwn', text: `✅ *Média ajouté à la banque !*\n\n🔢 Numéro attribué : *Surprise #${result.number}*\n${info.emoji} Rareté : *${info.label}* · Type : *${result.media.type}*\n📊 Il y a maintenant *${result.count}* média(s) en ${info.label}.\n\n👇 Aperçu :` },
         },
         ...buildMediaBlocks({ headerText: `🖼️ *Nouveau Jeanpip ${info.label}*`, media: result.media }),
       ],
