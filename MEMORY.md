@@ -114,8 +114,26 @@ slack-emoji-reactor-bot/
     ├── scores.js         ← Compteur hebdo + attaque Jeanpip
     ├── targets.js        ← Cibles auto-react persistantes
     ├── credits.js        ← Porte-monnaie PERMANENT (jamais de reset)
-    └── boosters.js       ← Catalogue de boosters + tirage + persistance
+    ├── boosters.js       ← Catalogue de boosters + tirage + persistance
+    └── broadcast.js      ← Liste de diffusion opt-in (qui accepte de recevoir)
 ```
+
+---
+
+## 📮 Liste de diffusion (opt-in)
+
+**Par défaut, PERSONNE n'est inscrit** → personne ne reçoit de Jeanpip venant des autres.
+Inscription via la commande `/jeanpip` (DM avec un bouton entrer/sortir).
+Stockage : `data/subscribers.json` (runtime, gitignored).
+
+| Situation | Comportement |
+|---|---|
+| Tu réagis au message d'un **inscrit** | Il reçoit son Jeanpip ✅ · tu reçois le tien ✅ · tu gagnes 1 crédit ✅ |
+| Tu réagis au message d'un **non-inscrit** | Il ne reçoit **rien** ❌ · tu reçois quand même le tien ✅ · **aucun crédit** ❌ |
+
+La liste est respectée **partout** : réactions, `/jeanpip-attack` (ne cible que les
+inscrits) et auto-react (`/jeanpip-auto`). Non concernés : ton propre Jeanpip quand
+tu réagis, tes boosters, et les punitions anti-spam.
 
 ---
 

@@ -13,6 +13,7 @@ const scores = require('./scores');
 const targets = require('./targets');
 const credits = require('./credits');
 const boosters = require('./boosters');
+const broadcast = require('./broadcast');
 
 // ─────────────────────────────────────────────
 // 🔧 Validation de la configuration
@@ -238,6 +239,8 @@ async function getLastUniqueAuthors(client, channelId, count, excludeIds, logger
       if (msg.bot_id) continue;     // messages postés par un bot
       if (seen.has(msg.user)) continue;
       seen.add(msg.user);
+      // 📮 Liste de diffusion : on ne cible que les personnes inscrites
+      if (!broadcast.isSubscribed(msg.user)) continue;
       victims.push({ user: msg.user, ts: msg.ts });
       if (victims.length >= count) break;
     }
@@ -292,6 +295,12 @@ app.event('message', async ({ event, client, logger }) => {
     if (!authorId) return;
     // Cibles = env + dynamiques (via /jeanpip-auto)
     if (!targets.isTarget(authorId)) return;
+
+    // 📮 Liste de diffusion : on ne cible que les personnes inscrites
+    if (!broadcast.isSubscribed(authorId)) {
+      logger.info(`📮 Cible <@${authorId}> pas dans la liste de diffusion → auto-react ignoré`);
+      return;
+    }
 
     logger.info(`🎯 Message de la cible <@${authorId}> détecté dans <#${event.channel}>`);
 
@@ -370,13 +379,22 @@ app.event('reaction_added', async ({ event, client, logger }) => {
       return;
     }
 
-    // ✅ Bot présent + réaction sur le message d'autrui → le Jeanpip compte.
+    // 📮 Liste de diffusion (OPT-IN) : l'auteur ne reçoit un Jeanpip que s'il
+    //    s'est inscrit via /jeanpip. Sinon le Jeanpip n'atteint personne → il ne
+    //    compte pas (ni crédit, ni score, ni compteur anti-farm).
+    //    Le réacteur reçoit quand même SON image.
+    const delivers = broadcast.isSubscribed(originalAuthorId);
+    if (!delivers) {
+      logger.info(`📮 <@${originalAuthorId}> n'est pas dans la liste de diffusion → rien ne lui est envoyé, aucun crédit pour <@${reactingUserId}>`);
+    }
+
+    // ✅ Bot présent + message d'autrui + destinataire inscrit → le Jeanpip compte.
 
     // 🚜 Anti-farm : plus de 10 Jeanpips en 1 h → pénalité de 1 h.
-    //    On ne compte que les vrais Jeanpips (bot présent, message d'autrui).
-    let farmBlocked = getFarmPenaltyRemaining(reactingUserId) > 0;
+    //    On ne compte que les Jeanpips réellement délivrés.
+    let farmBlocked = delivers && getFarmPenaltyRemaining(reactingUserId) > 0;
 
-    if (!farmBlocked && recordJeanpipForFarm(reactingUserId)) {
+    if (delivers && !farmBlocked && recordJeanpipForFarm(reactingUserId)) {
       farmBlocked = true;
       logger.warn(`🚜 ANTI-FARM : <@${reactingUserId}> dépasse ${FARM_MAX_PER_HOUR} Jeanpips/h → pénalité 1 h`);
       await safeSendDM(client, reactingUserId, {
@@ -401,9 +419,10 @@ app.event('reaction_added', async ({ event, client, logger }) => {
       logger.info(`🚜 <@${reactingUserId}> sous pénalité anti-farm (${formatRemaining(remaining)} restantes) → ni crédit ni envoi aux autres`);
     }
 
-    // 📊 Score / crédits : bloqués pendant la pénalité anti-farm
+    // 📊 Score / crédits : uniquement si le Jeanpip est réellement délivré
+    //    (destinataire inscrit) et hors pénalité anti-farm.
     let justUnlocked = false;
-    if (!farmBlocked) {
+    if (delivers && !farmBlocked) {
       const result = scores.incrementScore(reactingUserId);
       justUnlocked = result.justUnlocked;
       logger.info(`📊 Score de <@${reactingUserId}> : ${result.score}`);
@@ -439,7 +458,6 @@ app.event('reaction_added', async ({ event, client, logger }) => {
     const reactorName = reactorInfo.user.real_name || reactorInfo.user.name;
 
     const mediaForReactor = await getRandomMedia();
-    const mediaForAuthor = await getRandomMedia();
 
     const sentToReactor = await safeSendDM(client, reactingUserId, {
       text: `Hey @${reactorName} tu as réagi avec jean pip coucou !`,
@@ -450,11 +468,15 @@ app.event('reaction_added', async ({ event, client, logger }) => {
     }, logger);
     if (sentToReactor) logger.info(`📨 DM envoyé au réacteur <@${reactingUserId}>`);
 
-    // 🚜 Sous pénalité anti-farm : il ne peut plus rien envoyer aux autres.
-    //    (Il a quand même reçu SON image juste au-dessus.)
-    if (farmBlocked) {
+    // 📮 Envoi à l'auteur : seulement s'il est inscrit à la liste de diffusion,
+    //    et si le réacteur n'est pas sous pénalité anti-farm.
+    //    (Le réacteur a quand même reçu SON image juste au-dessus.)
+    if (!delivers) {
+      logger.info(`📮 Aucun envoi à <@${originalAuthorId}> : pas dans la liste de diffusion`);
+    } else if (farmBlocked) {
       logger.info(`🚜 Envoi à l'auteur bloqué (anti-farm) pour <@${reactingUserId}>`);
     } else if (originalAuthorId && originalAuthorId !== reactingUserId) {
+      const mediaForAuthor = await getRandomMedia();
       const sentToAuthor = await safeSendDM(client, originalAuthorId, {
         text: `Bonjour jeune, ${reactorName} t'a envoyé un Jeanpip !`,
         blocks: buildMediaBlocks({
@@ -535,8 +557,8 @@ app.command('/jeanpip-attack', async ({ command, ack, client, logger }) => {
 
     if (victims.length === 0) {
       await safeSendDM(client, userId, {
-        text: `😅 Pas assez de monde à attaquer dans ce channel !`,
-        blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `😅 *Pas assez de monde à attaquer dans ce channel !*` } }],
+        text: `😅 Personne à attaquer dans ce channel !`,
+        blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `😅 *Personne à attaquer dans ce channel !*\n\nPersonne n'y a posté récemment… ou personne n'est inscrit à la liste de diffusion Jeanpip 📮\n\n_Ton attaque n'a pas été consommée._` } }],
       }, logger);
       return;
     }
@@ -1142,6 +1164,107 @@ app.action('open_booster', async ({ ack, body, action, client, logger }) => {
 });
 
 // ─────────────────────────────────────────────
+// 📮 Slash command : /jeanpip
+//    Gère son inscription à la liste de diffusion (opt-in)
+// ─────────────────────────────────────────────
+
+/** Construit le message d'état + le bouton adapté (rejoindre / quitter). */
+function buildBroadcastBlocks(userId) {
+  const subscribed = broadcast.isSubscribed(userId);
+
+  const statusText = subscribed
+    ? `📮 *Tu es inscrit à la liste de diffusion Jeanpip !* :${TARGET_EMOJI}:\n\n✅ Tu *reçois* les Jeanpips que les autres t'envoient.\n\nTu peux en sortir à tout moment 👇`
+    : `📮 *Tu n'es PAS dans la liste de diffusion Jeanpip.*\n\n🔕 Personne ne peut t'envoyer de Jeanpip : quand quelqu'un réagit à ton message, tu ne reçois rien.\n\n_Tu reçois quand même TON image quand c'est toi qui réagis, et tes boosters fonctionnent normalement._\n\nEnvie de participer ? 👇`;
+
+  return [
+    { type: 'header', text: { type: 'plain_text', text: '📮 Liste de diffusion Jeanpip' } },
+    { type: 'section', text: { type: 'mrkdwn', text: statusText } },
+    {
+      type: 'actions',
+      elements: [
+        subscribed
+          ? {
+              type: 'button',
+              style: 'danger',
+              text: { type: 'plain_text', text: '🚪 Sortir de la liste' },
+              action_id: 'broadcast_leave',
+              value: 'leave',
+            }
+          : {
+              type: 'button',
+              style: 'primary',
+              text: { type: 'plain_text', text: '✅ Rejoindre la liste' },
+              action_id: 'broadcast_join',
+              value: 'join',
+            },
+      ],
+    },
+  ];
+}
+
+app.command('/jeanpip', async ({ command, ack, client, logger }) => {
+  await ack();
+
+  const userId = command.user_id;
+
+  try {
+    await safeSendDM(client, userId, {
+      text: `📮 Liste de diffusion Jeanpip`,
+      blocks: buildBroadcastBlocks(userId),
+    }, logger);
+    logger.info(`📮 /jeanpip : état envoyé à <@${userId}> (inscrit=${broadcast.isSubscribed(userId)})`);
+  } catch (error) {
+    logger.error('❌ Erreur dans /jeanpip:', error);
+  }
+});
+
+// ─────────────────────────────────────────────
+// 📮 Actions : rejoindre / quitter la liste de diffusion
+// ─────────────────────────────────────────────
+app.action(/^broadcast_(join|leave)$/, async ({ ack, body, action, client, logger }) => {
+  await ack();
+
+  const userId = body.user.id;
+  const channelId = body.channel && body.channel.id;
+  const messageTs = body.message && body.message.ts;
+
+  try {
+    const joining = action.action_id === 'broadcast_join';
+
+    if (joining) {
+      broadcast.subscribe(userId);
+      logger.info(`📮 <@${userId}> a REJOINT la liste de diffusion`);
+    } else {
+      broadcast.unsubscribe(userId);
+      logger.info(`📮 <@${userId}> est SORTI de la liste de diffusion`);
+    }
+
+    const confirmation = joining
+      ? `✅ *C'est fait, tu es dans la liste de diffusion !* :${TARGET_EMOJI}:\n\nTu vas maintenant recevoir les Jeanpips que les autres t'envoient. 🎉`
+      : `🚪 *Tu es sorti de la liste de diffusion.*\n\nPersonne ne peut plus t'envoyer de Jeanpip. Tu peux revenir quand tu veux avec \`/jeanpip\`.`;
+
+    // Met à jour le message d'origine avec le nouvel état + le bouton inverse
+    if (channelId && messageTs) {
+      try {
+        await client.chat.update({
+          channel: channelId,
+          ts: messageTs,
+          text: joining ? `✅ Tu es dans la liste de diffusion` : `🚪 Tu es sorti de la liste de diffusion`,
+          blocks: [
+            { type: 'section', text: { type: 'mrkdwn', text: confirmation } },
+            ...buildBroadcastBlocks(userId).slice(1), // état à jour + bouton inverse
+          ],
+        });
+      } catch (updateError) {
+        logger.error(`❌ Impossible de mettre à jour le message :`, updateError.message);
+      }
+    }
+  } catch (error) {
+    logger.error('❌ Erreur dans broadcast_join/leave:', error);
+  }
+});
+
+// ─────────────────────────────────────────────
 // ❓ Slash command : /jeanpip-help
 // ─────────────────────────────────────────────
 app.command('/jeanpip-help', async ({ command, ack, client, logger }) => {
@@ -1152,6 +1275,7 @@ app.command('/jeanpip-help', async ({ command, ack, client, logger }) => {
   const currentScore = scores.getScore(userId);
   const userHasAttack = scores.hasAttack(userId);
   const creditBalance = credits.getBalance(userId);
+  const isSubscribed = broadcast.isSubscribed(userId);
 
   try {
     await safeSendDM(client, userId, {
@@ -1193,6 +1317,17 @@ app.command('/jeanpip-help', async ({ command, ack, client, logger }) => {
           type: 'section',
           text: {
             type: 'mrkdwn',
+            text: `📮 *Liste de diffusion — \`/jeanpip\`*\n${isSubscribed
+              ? '✅ *Tu es inscrit* : tu reçois les Jeanpips que les autres t\'envoient.'
+              : '🔕 *Tu n\'es pas inscrit* : personne ne peut t\'envoyer de Jeanpip.'
+            }\n\nPar défaut *personne* n'est inscrit. Tant que tu n'es pas dans la liste :\n• Quand quelqu'un réagit à ton message, tu ne reçois rien\n• Tu reçois quand même *ton* image quand c'est *toi* qui réagis\n• Tes boosters fonctionnent normalement\n\n⚠️ _Envoyer un Jeanpip à quelqu'un qui n'est pas inscrit ne rapporte aucun crédit._\n\nTape \`/jeanpip\` pour entrer ou sortir de la liste.`,
+          },
+        },
+        { type: 'divider' },
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
             text: `🎁 *Boosters JeanPip — \`/jeanpip-booster\`*\nTu as *${creditBalance}* crédit(s) 💰\n\n*Comment gagner des crédits :*\n• *+1 crédit* à chaque réaction :${TARGET_EMOJI}: que TU poses (spam exclu)\n\n*Comment les dépenser :*\n• \`/jeanpip-booster\` → achète un booster (⚪ 10 · 🔵 20 · 🟣 30)\n• Chaque booster = *8 cartes* révélées une par une\n• Plus le booster est cher, plus les cartes rares sont probables !\n\n_Tape \`/jeanpip-credits\` pour voir ton solde à tout moment._`,
           },
         },
@@ -1217,7 +1352,7 @@ app.command('/jeanpip-help', async ({ command, ack, client, logger }) => {
           type: 'section',
           text: {
             type: 'mrkdwn',
-            text: `📋 *Toutes les commandes*\n\`/jeanpip-help\` → Affiche ce message avec ton score actuel\n\`/jeanpip-attack\` → Lance une Attaque Jeanpip sur le channel\n\`/jeanpip-credits\` → Affiche ton solde de crédits\n\`/jeanpip-booster\` → Ouvre la boutique de boosters${isAdmin ? '\n`/jeanpip-give @user` → (admin) Offre une Attaque Jeanpip à quelqu\'un\n`/jeanpip-give-credits @user <montant>` → (admin) Crédite le porte-monnaie de quelqu\'un\n`/jeanpip-addmedia <lien> <rareté> [titre]` → (admin) Ajoute un média à la banque\n`/jeanpip-auto add|remove|list` → (admin) Gère les cibles auto-react' : ''}`,
+            text: `📋 *Toutes les commandes*\n\`/jeanpip\` → Entrer ou sortir de la liste de diffusion\n\`/jeanpip-help\` → Affiche ce message avec ton score actuel\n\`/jeanpip-attack\` → Lance une Attaque Jeanpip sur le channel\n\`/jeanpip-credits\` → Affiche ton solde de crédits\n\`/jeanpip-booster\` → Ouvre la boutique de boosters${isAdmin ? '\n`/jeanpip-give @user` → (admin) Offre une Attaque Jeanpip à quelqu\'un\n`/jeanpip-give-credits @user <montant>` → (admin) Crédite le porte-monnaie de quelqu\'un\n`/jeanpip-addmedia <lien> <rareté> [titre]` → (admin) Ajoute un média à la banque\n`/jeanpip-auto add|remove|list` → (admin) Gère les cibles auto-react' : ''}`,
           },
         },
         {
