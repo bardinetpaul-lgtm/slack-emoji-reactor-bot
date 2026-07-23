@@ -256,23 +256,55 @@ function inferType(url) {
   return 'image';
 }
 
+// ─────────────────────────────────────────────
+// 🔢 Numérotation automatique « Surprise #N »
+//    Le numéro est l'IDENTIFIANT d'une photo : il ne doit JAMAIS être
+//    réattribué ni modifié.
+//    ⚠️ Les numéros #62 → #71 sont utilisés par les photos anti-spam
+//    (SPAM_PHOTO_START dans src/app.js). Elles ne sont pas dans la banque,
+//    donc on plancher le calcul à 71 pour ne jamais les réutiliser.
+// ─────────────────────────────────────────────
+const RESERVED_NUMBER_MAX = 71;
+
+/**
+ * Retourne le prochain numéro « Surprise #N » libre.
+ * = max(plus grand numéro de la banque, plage réservée anti-spam) + 1
+ */
+function getNextMediaNumber() {
+  let max = RESERVED_NUMBER_MAX;
+  for (const media of localMediaBank) {
+    const match = (media.title || '').match(/Surprise #(\d+)/);
+    if (match) {
+      const n = parseInt(match[1], 10);
+      if (n > max) max = n;
+    }
+  }
+  return max + 1;
+}
+
 /**
  * Ajoute un média à la banque (en mémoire + persistance custom).
  * @param {Object} opts
  * @param {string} opts.url    - Lien du média (http/https)
  * @param {string} opts.rarity - Clé de rareté déjà normalisée (common/rare/epic/legendary)
- * @param {string} [opts.title]- Titre optionnel (auto-généré sinon)
- * @returns {{ ok: boolean, media?: Object, count?: number, error?: string }}
+ * @param {string} [opts.title]- Complément de titre optionnel (le numéro est TOUJOURS attribué)
+ * @returns {{ ok, media?, number?, count?, error? }}
  */
 function addMedia({ url, rarity, title }) {
   if (!url || !/^https?:\/\//i.test(url)) return { ok: false, error: 'url_invalide' };
   if (!RARITIES[rarity]) return { ok: false, error: 'rarete_invalide' };
 
   const info = RARITIES[rarity];
+
+  // 🔢 Numéro auto : identifiant de la photo, dans le même style que la banque.
+  //    Toujours présent, même si un titre libre est fourni.
+  const number = getNextMediaNumber();
+  const extra = title && title.trim() ? ` — ${title.trim()}` : '';
+
   const media = {
     type: inferType(url),
     url: url.trim(),
-    title: title && title.trim() ? title.trim() : `${info.emoji} Jeanpip ${info.label}`,
+    title: `${info.emoji} Surprise #${number}${extra}`,
     rarity,
   };
 
@@ -292,8 +324,40 @@ function addMedia({ url, rarity, title }) {
     return { ok: false, error: 'ecriture', detail: e.message };
   }
 
-  return { ok: true, media, count: mediaByRarity[rarity].length };
+  return { ok: true, media, number, count: mediaByRarity[rarity].length };
 }
+
+// ─────────────────────────────────────────────
+// 🔧 Migration (une seule fois) : les médias ajoutés via /jeanpip-addmedia
+//    AVANT la numérotation auto ont un titre générique sans numéro
+//    (« 🔵 Jeanpip Rare »). On leur attribue rétroactivement un numéro,
+//    dans leur ordre d'ajout, puis on réécrit la banque custom.
+//    Les objets étant partagés avec mediaByRarity, la correction se propage.
+// ─────────────────────────────────────────────
+function migrateCustomNumbers() {
+  const sansNumero = customMedia.filter((m) => !/Surprise #\d+/.test(m.title || ''));
+  if (sansNumero.length === 0) return;
+
+  let next = getNextMediaNumber();
+
+  for (const media of sansNumero) {
+    const info = RARITIES[media.rarity] || RARITIES[DEFAULT_RARITY];
+    // Ancien titre auto-généré → on le remplace ; titre choisi par l'admin → on le garde en suffixe
+    const ancienTitreAuto = `${info.emoji} Jeanpip ${info.label}`;
+    const suffixe = (media.title && media.title !== ancienTitreAuto) ? ` — ${media.title}` : '';
+    media.title = `${info.emoji} Surprise #${next}${suffixe}`;
+    next++;
+  }
+
+  try {
+    fs.writeFileSync(CUSTOM_BANK_PATH, JSON.stringify(customMedia, null, 2), 'utf-8');
+    console.log(`🔢 ${sansNumero.length} média(s) custom numéroté(s) rétroactivement (jusqu'à #${next - 1})`);
+  } catch (e) {
+    console.error('[media] migration numéros:', e.message);
+  }
+}
+
+migrateCustomNumbers();
 
 module.exports = {
   getRandomMedia,
