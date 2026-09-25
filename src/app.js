@@ -20,6 +20,7 @@ const web = require('./web');
 const home = require('./home');
 const { createAdminActions, formatCredits, AUTHOR_REWARDS } = require('./admin');
 const settings = require('./settings');
+const farm = require('./farm');
 const weeklyGift = require('./weeklyGift');
 
 // ─────────────────────────────────────────────
@@ -126,61 +127,24 @@ async function punishSpammer(client, userId, logger) {
 //      ✅ il continue de RECEVOIR des Jeanpips
 //      ✅ il peut toujours ouvrir ses boosters
 // ─────────────────────────────────────────────
-const FARM_WINDOW_MS = 60 * 60 * 1000;   // fenêtre glissante : 1 heure
-const FARM_PENALTY_MS = 60 * 60 * 1000;  // durée de la pénalité : 1 heure
-
-const farmHistory = new Map();      // userId → [timestamps des jeanpips]
-const farmPenalties = new Map();    // userId → timestamp de fin de pénalité
+//    L'historique et les pénalités sont persistés (src/farm.js → data/farm.json)
+//    pour survivre aux redémarrages du bot.
 const farmReleaseTimers = new Map(); // userId → timer de fin de pénalité
 
 /** Limite anti-farm en cours (Jeanpips max par heure glissante). */
 const farmMaxPerHour = () => settings.getFarmMaxPerHour();
 
-/**
- * Temps de pénalité restant pour un user (0 s'il n'est pas pénalisé).
- * Nettoie automatiquement les pénalités expirées.
- */
-function getFarmPenaltyRemaining(userId) {
-  const until = farmPenalties.get(userId);
-  if (!until) return 0;
-  const remaining = until - Date.now();
-  if (remaining <= 0) {
-    farmPenalties.delete(userId);
-    farmHistory.delete(userId); // on repart à zéro après la pénalité
-    return 0;
-  }
-  return remaining;
-}
+/** Temps de pénalité restant pour un user (0 s'il n'est pas pénalisé). */
+const getFarmPenaltyRemaining = (userId) => farm.getPenaltyRemaining(userId);
 
 /**
  * Enregistre un Jeanpip dans la fenêtre glissante.
  * Retourne true si l'utilisateur vient de dépasser le seuil (→ pénalité).
  */
-function recordJeanpipForFarm(userId) {
-  const now = Date.now();
-  const recent = (farmHistory.get(userId) || []).filter((t) => now - t < FARM_WINDOW_MS);
-  recent.push(now);
-  farmHistory.set(userId, recent);
+const recordJeanpipForFarm = (userId) => farm.record(userId, farmMaxPerHour());
 
-  if (recent.length > farmMaxPerHour()) {
-    farmPenalties.set(userId, now + FARM_PENALTY_MS);
-    farmHistory.delete(userId);
-    return true;
-  }
-  return false;
-}
-
-/**
- * Où en est un user de son quota anti-farm (pour l'onglet Accueil).
- * Retourne { used, max, nextFreeMs } : nextFreeMs = délai avant que le plus
- * ancien Jeanpip de la fenêtre n'en sorte (0 si la fenêtre est vide).
- */
-function getFarmQuota(userId) {
-  const now = Date.now();
-  const recent = (farmHistory.get(userId) || []).filter((t) => now - t < FARM_WINDOW_MS);
-  const nextFreeMs = recent.length ? Math.max(0, recent[0] + FARM_WINDOW_MS - now) : 0;
-  return { used: recent.length, max: farmMaxPerHour(), nextFreeMs };
-}
+/** Quota anti-farm d'un user (onglet Accueil) : { used, max, nextFreeMs }. */
+const getFarmQuota = (userId) => farm.getQuota(userId, farmMaxPerHour());
 
 /** Formate un temps restant en texte lisible (« 42 min »). */
 function formatRemaining(ms) {
@@ -192,10 +156,10 @@ function formatRemaining(ms) {
  * Programme la fin de pénalité : nettoie l'état et prévient la personne
  * que son accès au Jeanpip est rétabli.
  */
-function scheduleFarmRelease(client, userId, logger) {
+function scheduleFarmRelease(client, userId, logger, delayMs = farm.FARM_PENALTY_MS) {
+  clearTimeout(farmReleaseTimers.get(userId));
   const timer = setTimeout(async () => {
-    farmPenalties.delete(userId);
-    farmHistory.delete(userId);
+    farm.clear(userId);
     farmReleaseTimers.delete(userId);
     refreshHomeIfSeen(client, userId, logger); // pénalité terminée → quota à 0
     try {
@@ -215,7 +179,7 @@ function scheduleFarmRelease(client, userId, logger) {
     } catch (error) {
       logger.error(`❌ Erreur notif fin de pénalité anti-farm :`, error.message);
     }
-  }, FARM_PENALTY_MS);
+  }, delayMs);
 
   // Ne pas retenir le process Node à cause de ce timer
   if (typeof timer.unref === 'function') timer.unref();
@@ -1828,6 +1792,11 @@ async function sendDM(client, userId, message) {
     .catch((error) => console.error('❌ Crédits du vendredi :', error.message));
   weeklyGiftTick();
   setInterval(weeklyGiftTick, 5 * 60 * 1000);
+
+  // 🚜 Pénalités anti-farm en cours avant le redémarrage → reprogrammer la notif de fin
+  for (const { userId, remainingMs } of farm.listPenalties()) {
+    scheduleFarmRelease(app.client, userId, console, remainingMs);
+  }
 
   // 🎬 Page d'ouverture animée (si WEB_PUBLIC_URL est défini)
   try {
