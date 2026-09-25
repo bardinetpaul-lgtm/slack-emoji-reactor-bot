@@ -30,11 +30,15 @@ const COLLECTIONS_PATH = path.join(DATA_DIR, 'collections.json');
 const args = process.argv.slice(2);
 const APPLY = args.includes('--apply');
 const FORCE = args.includes('--force');
+const DEBUG = args.includes('--debug');
 const sinceArg = (args.find((a) => a.startsWith('--since=')) || '').split('=')[1];
 const SINCE = new Date(sinceArg || '2026-07-17T00:00:00Z');
 
-const REVEAL_RE = /^🎴 \*(.+)\* — carte \d+\/\d+/;
-const LINK_RE = /<([^|>]+)\|(?:👉 Clique ici pour voir l'image|▶️ Clique ici pour voir la vidéo)>/;
+// Slack peut renvoyer les emojis en :shortcode: → on ne s'appuie pas dessus.
+const REVEAL_RE = /\*([^*]+)\*\s*[—–-]+\s*carte \d+\/\d+/;
+const LINK_RE = /<(https?:\/\/[^|>]+)\|[^>]*Clique ici pour voir/;
+// Texte de repli du message de révélation : « <titre> (i/8) »
+const FALLBACK_TEXT_RE = /^(.+) \(\d+\/8\)$/;
 const RARITY_FROM_LINE = [
   [/LÉGENDAIRE/, 'legendary'],
   [/Épique/, 'epic'],
@@ -58,7 +62,14 @@ function loadBankByUrl() {
     ...readJson('media-bank.json', []),
     ...readJson('media-bank-custom.json', []),
   ];
-  return new Map(bank.map((m) => [m.url, m]));
+  const byUrl = new Map(bank.map((m) => [m.url, m]));
+  // Index secondaire par titre (repli quand le message n'a pas de blocs)
+  byUrl.byTitle = new Map(bank.map((m) => [m.title, m]));
+  return byUrl;
+}
+
+function decodeEntities(s) {
+  return s.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
 }
 
 // ─────────────────────────────────────────────
@@ -68,7 +79,12 @@ function parseRevealMessage(msg, bankByUrl) {
   const blocks = msg.blocks || [];
   const texts = blocks.map((b) => (b.text && b.text.text) || '');
   const header = texts.find((t) => REVEAL_RE.test(t));
-  if (!header) return null;
+  if (!header) {
+    // Repli : pas de blocs exploitables → on tente le texte « <titre> (i/8) »
+    const m = (msg.text || '').match(FALLBACK_TEXT_RE);
+    const byTitle = m && bankByUrl.byTitle && bankByUrl.byTitle.get(m[1]);
+    return byTitle ? { ...byTitle } : null;
+  }
 
   // URL : bloc image (image publique) ou lien cliquable (privée / vidéo)
   const imageBlock = blocks.find((b) => b.type === 'image' && b.image_url);
@@ -78,6 +94,7 @@ function parseRevealMessage(msg, bankByUrl) {
     if (linkText) url = linkText.match(LINK_RE)[1];
   }
   if (!url) return null;
+  url = decodeEntities(url);
 
   const known = bankByUrl.get(url);
   if (known) return { ...known };
@@ -167,8 +184,17 @@ async function main() {
     try {
       const { channel } = await client.conversations.open({ users: userId });
       const messages = await fetchDmMessages(client, channel.id, oldest, latest);
-      const cards = messages
-        .filter((m) => m.user === botUserId || m.bot_id)
+      const botMessages = messages.filter((m) => m.user === botUserId || m.bot_id);
+      if (DEBUG) {
+        console.log(`\n🔍 ${userLabel} — DM ${channel.id} : ${messages.length} message(s), dont ${botMessages.length} du bot`);
+        for (const m of botMessages.slice(0, 3)) {
+          console.log(JSON.stringify({
+            ts: m.ts, user: m.user, bot_id: m.bot_id, subtype: m.subtype, text: m.text,
+            blocks: (m.blocks || []).map((b) => ({ type: b.type, text: b.text && b.text.text, image_url: b.image_url })),
+          }, null, 2));
+        }
+      }
+      const cards = botMessages
         .map((m) => ({ card: parseRevealMessage(m, bankByUrl), ts: m.ts }))
         .filter((x) => x.card)
         .sort((a, b) => Number(a.ts) - Number(b.ts));
@@ -183,7 +209,7 @@ async function main() {
         .filter((r) => byRarity[r])
         .map((r) => `${{ common: '⚪', rare: '🔵', epic: '🟣', legendary: '🟡' }[r]} ${byRarity[r]}`)
         .join(' · ');
-      console.log(`• ${userLabel} : ${cards.length} carte(s)${summary ? ` — ${summary}` : ''}`);
+      console.log(`• ${userLabel} : ${cards.length} carte(s)${summary ? ` — ${summary}` : ''} (${messages.length} msg lus, ${botMessages.length} du bot)`);
     } catch (e) {
       const err = e.data ? e.data.error : e.message;
       console.log(`• ${userLabel} : ❌ ${err}${err === 'missing_scope' ? ' (ajoute im:history et réinstalle l\'app)' : ''}`);
