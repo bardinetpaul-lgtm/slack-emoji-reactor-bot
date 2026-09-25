@@ -19,6 +19,7 @@ const { openOnce } = require('./openBooster');
 const web = require('./web');
 const home = require('./home');
 const { createAdminActions } = require('./admin');
+const settings = require('./settings');
 
 // ─────────────────────────────────────────────
 // 🔧 Validation de la configuration
@@ -41,9 +42,9 @@ const JEANPIP_ADMINS = process.env.JEANPIP_ADMINS
 // ⚔️ Prix d'une Attaque Jeanpip achetée en crédits (si pas d'attaque gratuite)
 const ATTACK_PRICE = 25;
 
-// 💰 Crédits gagnés par Jeanpip envoyé (demi-crédits autorisés)
-const CREDITS_PER_JEANPIP = 0.5;
-const CREDITS_PER_JEANPIP_LABEL = String(CREDITS_PER_JEANPIP).replace('.', ',');
+// 💰 Crédits gagnés par Jeanpip envoyé (demi-crédits autorisés) : réglable en
+//    live par un admin depuis l'onglet Accueil (src/settings.js, défaut 0,5).
+const creditsPerJeanpipLabel = () => String(settings.getCreditsPerJeanpip()).replace('.', ',');
 
 // ─────────────────────────────────────────────
 // 🚨 Anti-spam config
@@ -316,7 +317,7 @@ function buildHomeFor(userId) {
   return home.buildHomeView(userId, {
     isAdmin,
     attackPrice: ATTACK_PRICE,
-    creditsPerJeanpipLabel: CREDITS_PER_JEANPIP_LABEL,
+    creditsPerJeanpipLabel: creditsPerJeanpipLabel(),
     targetEmoji: TARGET_EMOJI,
     farmRemainingMs: getFarmPenaltyRemaining(userId),
     formatRemaining,
@@ -500,10 +501,10 @@ app.event('reaction_added', async ({ event, client, logger }) => {
       // 📈 Compteur durable pour le classement JeanPip du dashboard (all-time + semaine)
       scores.recordHit(reactingUserId);
 
-      // 💰 +CREDITS_PER_JEANPIP crédit permanent (porte-monnaie booster). Spam déjà exclu ci-dessus,
+      // 💰 +N crédit(s) permanent(s) (porte-monnaie booster, N réglable : src/settings.js). Spam déjà exclu ci-dessus,
       //    et présence du bot dans la conversation vérifiée juste au-dessus.
       //    Seule TA réaction crédite : l'attaque et l'auto-react ne créditent pas.
-      const newBalance = credits.addCredit(reactingUserId, CREDITS_PER_JEANPIP);
+      const newBalance = credits.addCredit(reactingUserId, settings.getCreditsPerJeanpip());
       logger.info(`💰 Crédits de <@${reactingUserId}> : ${newBalance}`);
       refreshHomeIfSeen(client, reactingUserId, logger);
     }
@@ -978,7 +979,7 @@ app.command('/jeanpip-credits', async ({ command, ack, client, logger }) => {
           type: 'section',
           text: {
             type: 'mrkdwn',
-            text: `💰 *Tu as ${balance} crédit(s) JeanPip !*\n\nTu gagnes *+${CREDITS_PER_JEANPIP_LABEL} crédit* à chaque fois que tu poses une réaction :${TARGET_EMOJI}: sur un message.\n\n🎁 Dépense-les en boosters avec \`/jeanpip-booster\`\n⚔️ ou achète une Attaque Jeanpip (*${ATTACK_PRICE}* crédits) avec \`/jeanpip-attack\` !`,
+            text: `💰 *Tu as ${balance} crédit(s) JeanPip !*\n\nTu gagnes *+${creditsPerJeanpipLabel()} crédit(s)* à chaque fois que tu poses une réaction :${TARGET_EMOJI}: sur un message.\n\n🎁 Dépense-les en boosters avec \`/jeanpip-booster\`\n⚔️ ou achète une Attaque Jeanpip (*${ATTACK_PRICE}* crédits) avec \`/jeanpip-attack\` !`,
           },
         },
       ],
@@ -1421,6 +1422,7 @@ const ADMIN_MODALS = {
   admin_credits_open: home.buildCreditsModal,
   admin_addmedia_open: home.buildAddMediaModal,
   admin_target_add_open: home.buildAddTargetModal,
+  admin_credit_value_open: home.buildCreditValueModal,
 };
 
 for (const [actionId, buildModal] of Object.entries(ADMIN_MODALS)) {
@@ -1497,6 +1499,34 @@ app.view('admin_addmedia_submit', async ({ ack, body, view, client, logger }) =>
     await sendAdminResult(client, adminId, result, logger);
   } catch (error) {
     logger.error('❌ Erreur dans admin_addmedia_submit:', error);
+  }
+});
+
+// ⚙️ Modale « Crédits par Jeanpip » (valeur d'un Jeanpip envoyé, sans rétroactivité)
+app.view('admin_credit_value_submit', async ({ ack, body, view, client, logger }) => {
+  const adminId = body.user.id;
+  if (!isAdminUser(adminId, logger, 'admin_credit_value_submit')) return ack(fieldError('value', 'Réservé aux admins.'));
+
+  const raw = (view.state.values.value.value.value || '').trim().replace(',', '.');
+  const value = /^\d+(?:\.\d+)?$/.test(raw) ? parseFloat(raw) : NaN;
+  const result = settings.setCreditsPerJeanpip(value);
+  if (!result.ok) {
+    return ack(fieldError('value', result.error === 'invalide'
+      ? `Multiple de 0,5 entre ${settings.CREDITS_PER_JEANPIP_MIN} et ${settings.CREDITS_PER_JEANPIP_MAX} attendu (ex. 0,5 · 1 · 2).`
+      : `Erreur d'écriture : ${result.detail}`));
+  }
+
+  await ack();
+  const label = (n) => String(n).replace('.', ',');
+  logger.info(`⚙️ <@${adminId}> a réglé 1 Jeanpip = ${result.value} crédit(s) (avant : ${result.previous})`);
+  try {
+    await sendAdminResult(client, adminId, {
+      text: `⚙️ *Réglage enregistré : 1 Jeanpip envoyé = ${label(result.value)} crédit(s).*\nAvant : ${label(result.previous)}. S'applique aux prochains Jeanpips (pas de rétroactivité).`,
+    }, logger);
+    // Le solde affiché ne change pas, mais la ligne « +N crédit(s) » oui → on republie
+    for (const userId of homeViewers) await refreshHome(client, userId, logger);
+  } catch (error) {
+    logger.error('❌ Erreur dans admin_credit_value_submit:', error);
   }
 });
 
@@ -1595,7 +1625,7 @@ app.command('/jeanpip-help', async ({ command, ack, client, logger }) => {
           type: 'section',
           text: {
             type: 'mrkdwn',
-            text: `🎁 *Boosters JeanPip — \`/jeanpip-booster\`*\nTu as *${creditBalance}* crédit(s) 💰\n\n*Comment gagner des crédits :*\n• *+${CREDITS_PER_JEANPIP_LABEL} crédit* à chaque réaction :${TARGET_EMOJI}: que TU poses (spam exclu)\n\n*Comment les dépenser :*\n• \`/jeanpip-booster\` → achète un booster (${boosters.listBoosters().map((b) => `${b.emoji} ${b.price}`).join(' · ')})\n• \`/jeanpip-attack\` → achète une Attaque Jeanpip (${ATTACK_PRICE}) si tu n'en as pas de gratuite\n• Chaque booster = *8 cartes* révélées une par une\n• Plus le booster est cher, plus les cartes rares sont probables !\n\n_Tape \`/jeanpip-credits\` pour voir ton solde à tout moment._`,
+            text: `🎁 *Boosters JeanPip — \`/jeanpip-booster\`*\nTu as *${creditBalance}* crédit(s) 💰\n\n*Comment gagner des crédits :*\n• *+${creditsPerJeanpipLabel()} crédit(s)* à chaque réaction :${TARGET_EMOJI}: que TU poses (spam exclu)\n\n*Comment les dépenser :*\n• \`/jeanpip-booster\` → achète un booster (${boosters.listBoosters().map((b) => `${b.emoji} ${b.price}`).join(' · ')})\n• \`/jeanpip-attack\` → achète une Attaque Jeanpip (${ATTACK_PRICE}) si tu n'en as pas de gratuite\n• Chaque booster = *8 cartes* révélées une par une\n• Plus le booster est cher, plus les cartes rares sont probables !\n\n_Tape \`/jeanpip-credits\` pour voir ton solde à tout moment._`,
           },
         },
         { type: 'divider' },

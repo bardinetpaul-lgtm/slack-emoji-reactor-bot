@@ -1,7 +1,8 @@
 // ═══════════════════════════════════════════════════════════
 //  💰 MODULE CREDITS
 //  Porte-monnaie PERMANENT des utilisateurs (jamais de reset).
-//  On gagne 0,5 crédit à chaque réaction :jeanpip: posée (spam exclu).
+//  On gagne N crédit(s) à chaque réaction :jeanpip: posée (spam exclu),
+//  N réglable par un admin (src/settings.js, défaut 0,5).
 //  Les soldes peuvent donc être des demi-crédits (ex. 12.5).
 //  DB = fichier JSON local (data/credits.json)
 //    { users: { U123: 42 } }

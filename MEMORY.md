@@ -110,6 +110,7 @@ slack-emoji-reactor-bot/
 │   ├── credits.json      ← Porte-monnaie booster (runtime, gitignored)
 │   ├── boosters.json     ← Boosters achetés non ouverts (runtime, gitignored)
 │   ├── collections.json  ← Cartes possédées par user (runtime, gitignored)
+│   ├── settings.json     ← Réglages admin (crédits par Jeanpip) (runtime, gitignored)
 │   ├── web-secret        ← Secret des liens FIFA si WEB_SECRET vide (runtime, gitignored)
 │   └── card-cache/       ← Images des cartes pour la page FIFA (runtime, gitignored)
 ├── public/               ← Page d'ouverture FIFA (open.html/css/js + assets/)
@@ -127,6 +128,7 @@ slack-emoji-reactor-bot/
     ├── openBooster.js    ← Ouverture d'un booster, partagée Slack + web (openOnce)
     ├── web.js            ← Serveur HTTP de la page d'ouverture FIFA
     ├── cardImages.js     ← Proxy + cache des images slack-files pour la page
+    ├── settings.js       ← Réglages live (crédits par Jeanpip), data/settings.json
     ├── home.js           ← Onglet Accueil (vue par user) + modales (fonctions pures)
     └── admin.js          ← Actions admin partagées (commandes slash + panneau Accueil)
 ```
@@ -152,7 +154,9 @@ bouton liste de diffusion (`broadcast_join/leave`). Pas de vue collection (refus
 **Panneau 👑 Admin :** construit UNIQUEMENT pour `JEANPIP_ADMINS` (Slack ne permet pas de
 masquer une commande slash, d'où l'Accueil). 4 boutons → modales : offrir une attaque,
 crédits ± (demi-crédits acceptés, positif = notifie, négatif = correction silencieuse),
-ajouter un média (lien + rareté + titre), ajouter une cible auto-react ; liste des cibles
+ajouter un média (lien + rareté + titre), ajouter une cible auto-react, ⚙️ crédits par Jeanpip
+(valeur d'un Jeanpip envoyé : multiple de 0,5 entre 0,5 et 10, sans rétroactivité, persistée dans
+`data/settings.json` via `src/settings.js`) ; liste des cibles
 avec bouton « Retirer » (cibles `.env` marquées fixes). **Chaque action admin revérifie
 `JEANPIP_ADMINS` côté serveur.** Les erreurs de saisie s'affichent dans la modale, les
 confirmations arrivent en DM.
@@ -178,7 +182,7 @@ Stockage : `data/subscribers.json` (runtime, gitignored).
 
 | Situation | Comportement |
 |---|---|
-| Tu réagis au message d'un **inscrit** | Il reçoit son Jeanpip ✅ · tu reçois le tien ✅ · tu gagnes 0,5 crédit ✅ |
+| Tu réagis au message d'un **inscrit** | Il reçoit son Jeanpip ✅ · tu reçois le tien ✅ · tu gagnes des crédits (0,5 par défaut) ✅ |
 | Tu réagis au message d'un **non-inscrit** | Il ne reçoit **rien** ❌ · tu reçois quand même le tien ✅ · **aucun crédit** ❌ |
 
 La liste est respectée **partout** : réactions, `/jeanpip-attack` (ne cible que les
@@ -189,9 +193,9 @@ tu réagis, tes boosters, et les punitions anti-spam.
 
 ## 🎁 Mode Booster JeanPip
 
-**Gagner des crédits :** +0,5 crédit permanent à chaque réaction `:jeanpip:` que TU poses
+**Gagner des crédits :** +0,5 crédit (par défaut, réglable par un admin depuis l'Accueil) permanent à chaque réaction `:jeanpip:` que TU poses
 (spam exclu ; l'attaque et l'auto-react ne créditent pas — anti-farming). Jamais de reset.
-Les soldes peuvent donc contenir des demi-crédits (`CREDITS_PER_JEANPIP` dans `src/app.js`).
+Les soldes peuvent donc contenir des demi-crédits (réglage `creditsPerJeanpip` dans `data/settings.json`, module `src/settings.js`).
 
 **Dépenser :**
 - `/jeanpip-booster` → boutique DM avec 3 boutons :

@@ -14,6 +14,7 @@ const credits = require('./credits');
 const boosters = require('./boosters');
 const broadcast = require('./broadcast');
 const { RARITIES } = require('./media');
+const settings = require('./settings');
 const { formatCredits } = require('./admin');
 
 // Nombre max de cibles auto-react affichées (limite Slack : 100 blocs par vue)
@@ -66,7 +67,7 @@ function buildHomeView(userId, ctx) {
 
   const blocks = [
     { type: 'header', text: { type: 'plain_text', text: '🤖 Jeanpip', emoji: true } },
-    section(`💰 *Ton solde : ${formatCredits(balance)} crédit(s)*\n_+${ctx.creditsPerJeanpipLabel} crédit à chaque réaction :${ctx.targetEmoji}: que tu poses (Jeanpip délivré, hors spam/farm)._`),
+    section(`💰 *Ton solde : ${formatCredits(balance)} crédit(s)*\n_+${ctx.creditsPerJeanpipLabel} crédit(s) à chaque réaction :${ctx.targetEmoji}: que tu poses (Jeanpip délivré, hors spam/farm)._`),
     { type: 'divider' },
   ];
 
@@ -150,8 +151,10 @@ function buildAdminBlocks(autoTargets) {
         button('💳 Crédits ±', 'admin_credits_open'),
         button('🖼️ Ajouter un média', 'admin_addmedia_open'),
         button('🎪 Ajouter une cible', 'admin_target_add_open'),
+        button('⚙️ Crédits par Jeanpip', 'admin_credit_value_open'),
       ],
     },
+    { type: 'context', elements: [{ type: 'mrkdwn', text: `⚙️ Réglage actuel : *1 Jeanpip envoyé = ${formatCredits(settings.getCreditsPerJeanpip())} crédit(s)*` }] },
     section(`🎪 *Cibles auto-react (${autoTargets.length})*${autoTargets.length ? '' : '\n_Aucune cible auto-react configurée._'}`),
   ];
 
@@ -275,8 +278,26 @@ function buildAddTargetModal() {
   ]);
 }
 
+/** ⚙️ Modale « Crédits par Jeanpip » (valeur actuelle pré-remplie). */
+function buildCreditValueModal() {
+  return modal('admin_credit_value_submit', 'Crédits par Jeanpip', 'Enregistrer', [
+    {
+      type: 'input',
+      block_id: 'value',
+      label: { type: 'plain_text', text: '1 Jeanpip envoyé = combien de crédits ?' },
+      element: {
+        type: 'plain_text_input',
+        action_id: 'value',
+        initial_value: formatCredits(settings.getCreditsPerJeanpip()),
+      },
+      hint: { type: 'plain_text', text: `Multiple de 0,5 entre ${formatCredits(settings.CREDITS_PER_JEANPIP_MIN)} et ${settings.CREDITS_PER_JEANPIP_MAX} (ex. 0,5 · 1 · 2). S'applique aux prochains Jeanpips, pas de rétroactivité.` },
+    },
+  ]);
+}
+
 module.exports = {
   buildHomeView,
+  buildCreditValueModal,
   buildAttackModal,
   buildGiveAttackModal,
   buildCreditsModal,
