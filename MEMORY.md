@@ -58,7 +58,7 @@ chat:write           → Envoyer des messages/DM
 im:write             → Ouvrir des conversations DM
 im:history           → Lire l'historique des DM (rattrapage des collections)
 users:read           → Récupérer les infos utilisateurs
-files:read           → Images des cartes sur la page d'ouverture FIFA
+files:read           → Images des cartes sur la page d'ouverture animée
 ```
 
 **Optionnels (pour auto-join) :**
@@ -111,9 +111,9 @@ slack-emoji-reactor-bot/
 │   ├── boosters.json     ← Boosters achetés non ouverts (runtime, gitignored)
 │   ├── collections.json  ← Cartes possédées par user (runtime, gitignored)
 │   ├── settings.json     ← Réglages admin (crédits par Jeanpip) (runtime, gitignored)
-│   ├── web-secret        ← Secret des liens FIFA si WEB_SECRET vide (runtime, gitignored)
-│   └── card-cache/       ← Images des cartes pour la page FIFA (runtime, gitignored)
-├── public/               ← Page d'ouverture FIFA (open.html/css/js + assets/)
+│   ├── web-secret        ← Secret des liens d'ouverture animée si WEB_SECRET vide (runtime, gitignored)
+│   └── card-cache/       ← Images des cartes pour la page d'ouverture animée (runtime, gitignored)
+├── public/               ← Page d'ouverture animée (open.html/css/js + assets/)
 ├── scripts/              ← backfill-collections, test-web-open, preview-web-open
 └── src/
     ├── app.js            ← Point d'entrée + listeners + slash commands + boutons
@@ -126,7 +126,7 @@ slack-emoji-reactor-bot/
     ├── collections.js    ← Cartes possédées par user + phrases doublon/triplon
     ├── broadcast.js      ← Liste de diffusion opt-in (qui accepte de recevoir)
     ├── openBooster.js    ← Ouverture d'un booster, partagée Slack + web (openOnce)
-    ├── web.js            ← Serveur HTTP de la page d'ouverture FIFA
+    ├── web.js            ← Serveur HTTP de la page d'ouverture animée
     ├── cardImages.js     ← Proxy + cache des images slack-files pour la page
     ├── settings.js       ← Réglages live (crédits par Jeanpip), data/settings.json
     ├── home.js           ← Onglet Accueil (vue par user) + modales (fonctions pures)
@@ -169,7 +169,7 @@ confirmations arrivent en DM.
 actions admin. Pour les passages « passifs » (crédits gagnés via une réaction, ouverture de
 booster, cadeau d'un admin), `refreshHomeIfSeen()` ne republie que pour les users ayant
 ouvert l'Accueil depuis le démarrage (Set en mémoire) → pas de `views.publish` à chaque
-réaction de tout le workspace. Limite connue : une ouverture FIFA (page web) ne republie pas
+réaction de tout le workspace. Limite connue : une ouverture animée (page web) ne republie pas
 l'Accueil → le compteur « non ouverts » se met à jour à la prochaine ouverture de l'onglet.
 
 ---
@@ -211,7 +211,7 @@ les 3 dernières suivent une distribution **par slot** (tables dans `src/booster
 chacune totalise 100 %). Ex. booster épique, slot 8 : 50 % épique / 20 % rare / 30 % légendaire.
 
 **Flux d'ouverture :** achat → débit immédiat → DM « Booster acheté » avec **2 boutons** :
-- 🎬 **Ouverture FIFA** → lien vers la page web d'animation (voir ci-dessous).
+- 🎬 **Ouverture animée** → lien vers la page web d'animation (voir ci-dessous).
   N'apparaît que si `WEB_PUBLIC_URL` est défini.
 - 💬 **Ouvrir dans Slack** → cartes révélées une toutes les **2 s dans le DM**
   (`SLACK_REVEAL_INTERVAL_MS` dans `src/app.js`).
@@ -221,7 +221,7 @@ ouvert → tire → ajoute en collection → mémorise les cartes dans `boosters
 premier gagne, l'autre répond « déjà ouvert ». Les cartes sont en collection AVANT
 l'animation (un restart ou un onglet fermé ne fait rien perdre).
 
-### 🎬 Page d'ouverture « à la FIFA »
+### 🎬 Page d'ouverture animée
 
 - Servie par le bot lui-même (`src/web.js`, module `http` natif) sur `127.0.0.1:3100`,
   exposée via le reverse proxy du dashboard : `https://dashboard-lorient.dimsi.cloud/jeanpip/`.

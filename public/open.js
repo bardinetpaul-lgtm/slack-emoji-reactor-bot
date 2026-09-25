@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════
-//  🎬 Jeanpip — ouverture de booster « à la FIFA »
+//  🎬 Jeanpip — ouverture de booster animée
 //
 //  La page ne tire RIEN : elle appelle POST api/open/<id>?t=<token>,
 //  le serveur tire les cartes, les met en collection, et renvoie
@@ -512,7 +512,7 @@
 
   function showError(kind) {
     const errors = {
-      invalid:   ['🔒', 'Lien invalide', "Ce lien d'ouverture n'est pas valide. Utilise le bouton « Ouverture FIFA » reçu dans Slack."],
+      invalid:   ['🔒', 'Lien invalide', "Ce lien d'ouverture n'est pas valide. Utilise le bouton « Ouverture animée » reçu dans Slack."],
       not_found: ['🕵️', 'Booster introuvable', "Ce booster n'existe pas (ou plus). Vérifie ton DM Jeanpip dans Slack."],
       slack:     ['💬', 'Déjà ouvert dans Slack', 'Ce booster a déjà été ouvert dans Slack : tes cartes sont déjà dans ta collection !'],
       network:   ['📡', 'Serveur injoignable', "Impossible de joindre le serveur Jeanpip. Réessaie dans un instant, ou ouvre ton booster directement dans Slack."],

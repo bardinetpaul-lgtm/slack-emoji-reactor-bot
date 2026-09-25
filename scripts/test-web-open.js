@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // ═══════════════════════════════════════════════════════════
-//  🧪 Test de la page d'ouverture FIFA (sans Slack)
+//  🧪 Test de la page d'ouverture animée (sans Slack)
 //
 //  Copie src/, public/ et la banque de médias dans un dossier
 //  temporaire → aucun fichier runtime réel (boosters, collections…)
@@ -61,7 +61,7 @@ async function test(name, fn) {
   const post = (id, t) => fetch(`${base}/api/open/${id}?t=${t}`, { method: 'POST' });
   const totalCards = (u) => collections.getCollection(u).reduce((s, c) => s + c.count, 0);
 
-  console.log('\n🧪 Page d\'ouverture FIFA\n');
+  console.log('\n🧪 Page d\'ouverture animée\n');
 
   await test('buildOpenUrl pointe vers WEB_PUBLIC_URL/open/<id>?t=<hex64>', () => {
     const url = web.buildOpenUrl('b_x', 'U1');

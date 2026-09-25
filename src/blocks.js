@@ -119,7 +119,7 @@ function buildMediaBlocks({ headerText, media }) {
 }
 
 /**
- * Message DM « booster ouvert en mode FIFA » : remplace les boutons
+ * Message DM « booster ouvert avec l'animation » : remplace les boutons
  * du message d'achat par un récap texte des 8 cartes.
  * @param {Object} booster - entrée du catalogue { emoji, label } (ou null)
  * @param {Array} cards    - cartes tirées { title, rarity, url, type }
@@ -141,7 +141,7 @@ function buildWebOpenedBlocks(booster, cards, counts) {
       type: 'section',
       text: {
         type: 'mrkdwn',
-        text: `${emoji} *Booster ${label} — ✅ ouvert en mode FIFA !* 🎬\n\n${lines.join('\n')}`,
+        text: `${emoji} *Booster ${label} — ✅ ouvert avec l'animation !* 🎬\n\n${lines.join('\n')}`,
       },
     },
     {

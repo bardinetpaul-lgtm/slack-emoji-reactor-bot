@@ -1071,7 +1071,7 @@ app.action(/^buy_booster_/, async ({ ack, body, action, client, logger }) => {
     const id = boosters.createPending(userId, type);
     const balance = credits.getBalance(userId);
 
-    // 🎬 Ouverture FIFA (page web, bureaux uniquement) si configurée,
+    // 🎬 Ouverture animée (page web, bureaux uniquement) si configurée,
     //    sinon seulement l'ouverture dans Slack.
     const openUrl = web.buildOpenUrl(id, userId);
     const openButtons = [];
@@ -1079,7 +1079,7 @@ app.action(/^buy_booster_/, async ({ ack, body, action, client, logger }) => {
       openButtons.push({
         type: 'button',
         style: 'primary',
-        text: { type: 'plain_text', text: '🎬 Ouverture FIFA' },
+        text: { type: 'plain_text', text: '🎬 Ouverture animée' },
         action_id: 'open_booster_web',
         url: openUrl,
       });
@@ -1105,7 +1105,7 @@ app.action(/^buy_booster_/, async ({ ack, body, action, client, logger }) => {
     if (openUrl) {
       blocks.push({
         type: 'context',
-        elements: [{ type: 'mrkdwn', text: "🎬 _L'ouverture FIFA ne marche que depuis le bureau de Lorient ou d'Asnières. En télétravail, ouvre-le dans Slack._" }],
+        elements: [{ type: 'mrkdwn', text: "🎬 _L'ouverture animée ne marche que depuis le bureau de Lorient ou d'Asnières. En télétravail, ouvre-le dans Slack._" }],
       });
     }
 
@@ -1158,8 +1158,8 @@ app.action('open_booster', async ({ ack, body, action, client, logger }) => {
     if (result.status === 'already') {
       if (result.via === 'web') {
         await sendDM(client, userId, {
-          text: `🎬 Booster déjà ouvert en mode FIFA`,
-          blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `🎬 *Ce booster a déjà été ouvert en mode FIFA.* Tes cartes sont dans ta collection !` } }],
+          text: `🎬 Booster déjà ouvert avec l'animation`,
+          blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `🎬 *Ce booster a déjà été ouvert avec l'animation.* Tes cartes sont dans ta collection !` } }],
         });
       }
       logger.info(`ℹ️ Booster ${id} déjà ouvert (${result.via}), clic ignoré`);
@@ -1227,7 +1227,7 @@ ${collections.copyPhrase(copyCounts[i])}` : ''}`,
 });
 
 // ─────────────────────────────────────────────
-// 🎬 Action : clic sur le bouton-lien « Ouverture FIFA »
+// 🎬 Action : clic sur le bouton-lien « Ouverture animée »
 //    Slack ouvre l'URL côté client mais envoie quand même une action :
 //    il faut l'acquitter (sinon ⚠️ dans Slack). L'ouverture a lieu sur la page.
 // ─────────────────────────────────────────────
@@ -1692,7 +1692,7 @@ async function sendDM(client, userId, message) {
   scores.checkAndReset();
   setInterval(() => scores.checkAndReset(), 60 * 60 * 1000);
 
-  // 🎬 Page d'ouverture FIFA (si WEB_PUBLIC_URL est défini)
+  // 🎬 Page d'ouverture animée (si WEB_PUBLIC_URL est défini)
   try {
     web.startWebServer({ client: app.client, logger: console });
   } catch (webError) {
