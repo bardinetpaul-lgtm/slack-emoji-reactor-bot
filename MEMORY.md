@@ -110,7 +110,7 @@ slack-emoji-reactor-bot/
 │   ├── credits.json      ← Porte-monnaie booster (runtime, gitignored)
 │   ├── boosters.json     ← Boosters achetés non ouverts (runtime, gitignored)
 │   ├── collections.json  ← Cartes possédées par user (runtime, gitignored)
-│   ├── settings.json     ← Réglages admin (crédits par Jeanpip) (runtime, gitignored)
+│   ├── settings.json     ← Réglages admin (crédits par Jeanpip, limite anti-farm) (runtime, gitignored)
 │   ├── web-secret        ← Secret des liens d'ouverture animée si WEB_SECRET vide (runtime, gitignored)
 │   └── card-cache/       ← Images des cartes pour la page d'ouverture animée (runtime, gitignored)
 ├── public/               ← Page d'ouverture animée (open.html/css/js + assets/)
@@ -128,7 +128,7 @@ slack-emoji-reactor-bot/
     ├── openBooster.js    ← Ouverture d'un booster, partagée Slack + web (openOnce)
     ├── web.js            ← Serveur HTTP de la page d'ouverture animée
     ├── cardImages.js     ← Proxy + cache des images slack-files pour la page
-    ├── settings.js       ← Réglages live (crédits par Jeanpip), data/settings.json
+    ├── settings.js       ← Réglages live (crédits par Jeanpip, limite anti-farm), data/settings.json
     ├── home.js           ← Onglet Accueil (vue par user) + modales (fonctions pures)
     └── admin.js          ← Actions admin partagées (commandes slash + panneau Accueil)
 ```
@@ -149,14 +149,19 @@ Aucun nouveau scope OAuth.
 débloquée, illimitée pour un admin, sinon `ATTACK_PRICE` crédits ; mêmes règles que
 `/jeanpip-attack` via `launchAttack`), boutons d'achat de boosters (`buy_booster_<type>`,
 le booster s'ouvre ensuite dans l'onglet *Messages*) + compteur de boosters non ouverts,
-bouton liste de diffusion (`broadcast_join/leave`). Pas de vue collection (refusée pour l'instant).
+bouton liste de diffusion (`broadcast_join/leave`), 🚜 quota anti-farm de l'heure (« 3/10 Jeanpips »,
+limite atteinte, ou pénalité restante ; calculé par `getFarmQuota`). Pas de vue collection (refusée pour l'instant).
+⚠️ Le quota n'avance pas tout seul avec le temps (Slack ne rafraîchit pas l'Accueil) : recalculé à
+chaque Jeanpip compté, au début/fin de pénalité et à chaque ouverture de l'onglet. L'historique de
+l'heure est en mémoire → remis à 0 au redémarrage du bot.
 
 **Panneau 👑 Admin :** construit UNIQUEMENT pour `JEANPIP_ADMINS` (Slack ne permet pas de
-masquer une commande slash, d'où l'Accueil). 4 boutons → modales : offrir une attaque,
+masquer une commande slash, d'où l'Accueil). 6 boutons → modales : offrir une attaque,
 crédits ± (demi-crédits acceptés, positif = notifie, négatif = correction silencieuse),
 ajouter un média (lien + rareté + titre), ajouter une cible auto-react, ⚙️ crédits par Jeanpip
 (valeur d'un Jeanpip envoyé : multiple de 0,5 entre 0,5 et 10, sans rétroactivité, persistée dans
-`data/settings.json` via `src/settings.js`) ; liste des cibles
+`data/settings.json` via `src/settings.js`), 🚜 limite anti-farm (Jeanpips max par heure et par
+personne : entier de 1 à 100, défaut 10, effet immédiat, pénalités en cours inchangées) ; liste des cibles
 avec bouton « Retirer » (cibles `.env` marquées fixes). **Chaque action admin revérifie
 `JEANPIP_ADMINS` côté serveur.** Les erreurs de saisie s'affichent dans la modale, les
 confirmations arrivent en DM.
