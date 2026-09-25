@@ -33,6 +33,9 @@ const JEANPIP_ADMINS = process.env.JEANPIP_ADMINS
   ? process.env.JEANPIP_ADMINS.split(',').map((id) => id.trim()).filter(Boolean)
   : [];
 
+// ⚔️ Prix d'une Attaque Jeanpip achetée en crédits (si pas d'attaque gratuite)
+const ATTACK_PRICE = 50;
+
 // ─────────────────────────────────────────────
 // 🚨 Anti-spam config
 // ─────────────────────────────────────────────
@@ -524,92 +527,174 @@ app.command('/jeanpip-attack', async ({ command, ack, client, logger }) => {
     }
 
     if (!isAdmin && !userHasAttack) {
+      // 💰 Pas d'attaque gratuite → on propose de l'acheter en crédits
       const currentScore = scores.getScore(userId);
+      const balance = credits.getBalance(userId);
+      const canAfford = balance >= ATTACK_PRICE;
       await safeSendDM(client, userId, {
-        text: `❌ Tu n'as pas encore débloqué l'Attaque Jeanpip !`,
+        text: `⚔️ Tu n'as pas d'Attaque Jeanpip gratuite — achète-la pour ${ATTACK_PRICE} crédits !`,
         blocks: [
           {
             type: 'section',
             text: {
               type: 'mrkdwn',
-              text: `❌ *Tu n'as pas encore débloqué l'Attaque Jeanpip !*\n\nTon score cette semaine : *${currentScore}/${scores.ATTACK_THRESHOLD}* :${TARGET_EMOJI}:\n\nEnvoie des Jeanpips pour débloquer la feature ! 💪\n\n_Tape \`/jeanpip-help\` pour voir toutes les features disponibles._`,
+              text: `⚔️ *Tu n'as pas d'Attaque Jeanpip gratuite.*\n\nTon score cette semaine : *${currentScore}/${scores.ATTACK_THRESHOLD}* :${TARGET_EMOJI}: (envoie-en ${scores.ATTACK_THRESHOLD} pour la débloquer gratuitement)\n\n💰 *Ou achète-la maintenant : ${ATTACK_PRICE} crédits* — ton solde : *${balance}*${canAfford ? '' : `\n\n❌ _Il te manque ${ATTACK_PRICE - balance} crédit(s)._`}`,
             },
           },
+          ...(canAfford ? [{
+            type: 'actions',
+            elements: [{
+              type: 'button',
+              style: 'danger',
+              text: { type: 'plain_text', text: `⚔️ Lancer l'attaque dans #${command.channel_name} (${ATTACK_PRICE} crédits)` },
+              action_id: 'buy_attack',
+              value: channelId,
+            }],
+          }] : []),
         ],
       }, logger);
       return;
     }
 
-    logger.info(`⚔️  Attaque Jeanpip lancée par <@${userId}> dans <#${channelId}>`);
-
-    // 🔎 Récupérer les 7 dernières personnes uniques (avec leur dernier message)
-    let victims;
-    try {
-      victims = await getLastUniqueAuthors(client, channelId, 7, [userId, botUserId], logger);
-    } catch (histError) {
-      logger.error(`❌ Impossible de lire l'historique du channel:`, histError.message);
-      await safeSendDM(client, userId, {
-        text: `❌ Je n'arrive pas à lire ce channel. Suis-je bien invité dedans ?`,
-        blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `❌ *Je n'arrive pas à lire ce channel.*\nAssure-toi que le bot est invité dans le channel (\`/invite @${botName}\`).` } }],
-      }, logger);
-      return;
-    }
-
-    if (victims.length === 0) {
-      await safeSendDM(client, userId, {
-        text: `😅 Personne à attaquer dans ce channel !`,
-        blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `😅 *Personne à attaquer dans ce channel !*\n\nPersonne n'y a posté récemment… ou personne n'est inscrit à la liste de diffusion Jeanpip 📮\n\n_Ton attaque n'a pas été consommée._` } }],
-      }, logger);
-      return;
-    }
-
-    if (!isAdmin) scores.consumeAttack(userId);
-
-    const attackerInfo = await client.users.info({ user: userId });
-    const attackerName = attackerInfo.user.real_name || attackerInfo.user.name;
-
-    let sent = 0;
-    for (const victim of victims) {
-      const victimId = victim.user;
-      try {
-        // 1️⃣ Réagir avec :jeanpip: sur le dernier message de la victime (visible dans le channel)
-        try {
-          await client.reactions.add({
-            channel: channelId,
-            name: TARGET_EMOJI,
-            timestamp: victim.ts,
-          });
-          logger.info(`⚔️  Réaction :${TARGET_EMOJI}: ajoutée sur le msg de <@${victimId}>`);
-        } catch (reactError) {
-          // already_reacted ou message introuvable → on continue quand même
-          logger.info(`ℹ️  Pas pu réagir sur le msg de <@${victimId}>: ${reactError.data ? reactError.data.error : reactError.message}`);
-        }
-
-        // 2️⃣ Envoyer le DM avec média aléatoire pondéré (affiche la rareté)
-        const media = await getRandomMedia();
-        const ok = await safeSendDM(client, victimId, {
-          text: `🚨 ALERTE ! ${attackerName} a lancé une Attaque Jeanpip !`,
-          blocks: buildMediaBlocks({
-            headerText: `🚨 *ALERTE ATTAQUE JEANPIP !*\n*<@${userId}>* t'a ciblé dans <#${channelId}> ! :${TARGET_EMOJI}:`,
-            media: media,
-          }),
-        }, logger);
-        if (ok) sent++;
-      } catch (error) {
-        logger.error(`❌ Erreur envoi attaque à <@${victimId}>:`, error.message);
-      }
-    }
-
-    await safeSendDM(client, userId, {
-      text: `⚔️ Attaque Jeanpip lancée sur ${sent} personnes !`,
-      blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `⚔️ *Attaque Jeanpip lancée !*\n\nTu as ciblé *${sent} personne(s)* dans <#${channelId}> :${TARGET_EMOJI}:\n${victims.map(v => `• <@${v.user}>`).join('\n')}` } }],
-    }, logger);
-
-    logger.info(`✅ Attaque Jeanpip terminée : ${sent}/${victims.length} victimes`);
+    await launchAttack(client, userId, channelId, logger, { consumeFree: !isAdmin });
   } catch (error) {
     logger.error('❌ Erreur dans /jeanpip-attack:', error);
   }
 });
+
+// ─────────────────────────────────────────────
+// 💰 Action : clic sur « Lancer l'attaque (X crédits) »
+//    action_id = buy_attack · value = <channelId>
+// ─────────────────────────────────────────────
+const attackPurchaseLocks = new Set(); // userId → achat en cours (anti-double-clic)
+
+app.action('buy_attack', async ({ ack, body, action, client, logger }) => {
+  await ack();
+
+  const userId = body.user.id;
+  const channelId = action.value;
+  if (attackPurchaseLocks.has(userId)) return;
+  attackPurchaseLocks.add(userId);
+
+  try {
+    const farmRemaining = getFarmPenaltyRemaining(userId);
+    if (farmRemaining > 0) {
+      await safeSendDM(client, userId, {
+        text: `🚜 Anti-farm : tu ne peux pas lancer d'attaque pour le moment.`,
+        blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `🚜 *Tu es sous pénalité anti-farm.*\n\nRéessaie dans *${formatRemaining(farmRemaining)}*. _Aucun crédit n'a été débité._` } }],
+      }, logger);
+      return;
+    }
+
+    const launched = await launchAttack(client, userId, channelId, logger, { price: ATTACK_PRICE });
+
+    // 🔕 Désactiver le bouton une fois l'attaque partie
+    if (launched && body.channel && body.message) {
+      try {
+        await client.chat.update({
+          channel: body.channel.id,
+          ts: body.message.ts,
+          text: `⚔️ Attaque Jeanpip achetée !`,
+          blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `⚔️ *Attaque Jeanpip achetée et lancée dans <#${channelId}> !* (-${ATTACK_PRICE} crédits)` } }],
+        });
+      } catch (updateError) {
+        logger.error(`❌ Impossible de désactiver le bouton :`, updateError.message);
+      }
+    }
+  } catch (error) {
+    logger.error('❌ Erreur dans buy_attack:', error);
+  } finally {
+    attackPurchaseLocks.delete(userId);
+  }
+});
+
+/**
+ * Lance une Attaque Jeanpip dans `channelId`.
+ *   • consumeFree : consomme l'attaque gratuite débloquée par le score
+ *   • price       : débite ce nombre de crédits (attaque achetée)
+ * Rien n'est consommé/débité si personne n'est attaquable.
+ * Retourne true si l'attaque est partie.
+ */
+async function launchAttack(client, userId, channelId, logger, { consumeFree = false, price = 0 } = {}) {
+  logger.info(`⚔️  Attaque Jeanpip lancée par <@${userId}> dans <#${channelId}>${price ? ` (payée ${price} crédits)` : ''}`);
+
+  // 🔎 Récupérer les 7 dernières personnes uniques (avec leur dernier message)
+  let victims;
+  try {
+    victims = await getLastUniqueAuthors(client, channelId, 7, [userId, botUserId], logger);
+  } catch (histError) {
+    logger.error(`❌ Impossible de lire l'historique du channel:`, histError.message);
+    await safeSendDM(client, userId, {
+      text: `❌ Je n'arrive pas à lire ce channel. Suis-je bien invité dedans ?`,
+      blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `❌ *Je n'arrive pas à lire ce channel.*\nAssure-toi que le bot est invité dans le channel (\`/invite @${botName}\`).${price ? '\n\n_Aucun crédit n\'a été débité._' : ''}` } }],
+    }, logger);
+    return false;
+  }
+
+  if (victims.length === 0) {
+    await safeSendDM(client, userId, {
+      text: `😅 Personne à attaquer dans ce channel !`,
+      blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `😅 *Personne à attaquer dans ce channel !*\n\nPersonne n'y a posté récemment… ou personne n'est inscrit à la liste de diffusion Jeanpip 📮\n\n_${price ? 'Aucun crédit n\'a été débité.' : 'Ton attaque n\'a pas été consommée.'}_` } }],
+    }, logger);
+    return false;
+  }
+
+  if (price) {
+    if (!credits.spend(userId, price)) {
+      const balance = credits.getBalance(userId);
+      await safeSendDM(client, userId, {
+        text: `❌ Solde insuffisant pour l'Attaque Jeanpip`,
+        blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `❌ *Il te manque ${price - balance} crédit(s)* pour acheter l'Attaque Jeanpip.\n\n💰 Ton solde : *${balance}* · Prix : *${price}*` } }],
+      }, logger);
+      return false;
+    }
+  } else if (consumeFree) {
+    scores.consumeAttack(userId);
+  }
+
+  const attackerInfo = await client.users.info({ user: userId });
+  const attackerName = attackerInfo.user.real_name || attackerInfo.user.name;
+
+  let sent = 0;
+  for (const victim of victims) {
+    const victimId = victim.user;
+    try {
+      // 1️⃣ Réagir avec :jeanpip: sur le dernier message de la victime (visible dans le channel)
+      try {
+        await client.reactions.add({
+          channel: channelId,
+          name: TARGET_EMOJI,
+          timestamp: victim.ts,
+        });
+        logger.info(`⚔️  Réaction :${TARGET_EMOJI}: ajoutée sur le msg de <@${victimId}>`);
+      } catch (reactError) {
+        // already_reacted ou message introuvable → on continue quand même
+        logger.info(`ℹ️  Pas pu réagir sur le msg de <@${victimId}>: ${reactError.data ? reactError.data.error : reactError.message}`);
+      }
+
+      // 2️⃣ Envoyer le DM avec média aléatoire pondéré (affiche la rareté)
+      const media = await getRandomMedia();
+      const ok = await safeSendDM(client, victimId, {
+        text: `🚨 ALERTE ! ${attackerName} a lancé une Attaque Jeanpip !`,
+        blocks: buildMediaBlocks({
+          headerText: `🚨 *ALERTE ATTAQUE JEANPIP !*\n*<@${userId}>* t'a ciblé dans <#${channelId}> ! :${TARGET_EMOJI}:`,
+          media: media,
+        }),
+      }, logger);
+      if (ok) sent++;
+    } catch (error) {
+      logger.error(`❌ Erreur envoi attaque à <@${victimId}>:`, error.message);
+    }
+  }
+
+  await safeSendDM(client, userId, {
+    text: `⚔️ Attaque Jeanpip lancée sur ${sent} personnes !`,
+    blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `⚔️ *Attaque Jeanpip lancée !*\n\nTu as ciblé *${sent} personne(s)* dans <#${channelId}> :${TARGET_EMOJI}:\n${victims.map(v => `• <@${v.user}>`).join('\n')}` } }],
+  }, logger);
+
+  logger.info(`✅ Attaque Jeanpip terminée : ${sent}/${victims.length} victimes`);
+  return true;
+}
 
 // ─────────────────────────────────────────────
 // 🎁 Slash command : /jeanpip-give @user  (admin uniquement)
@@ -1309,7 +1394,9 @@ app.command('/jeanpip-help', async ({ command, ack, client, logger }) => {
           type: 'section',
           text: {
             type: 'mrkdwn',
-            text: `⚔️ *Attaque Jeanpip — \`/jeanpip-attack\`*\nEnvoie un Jeanpip aux *7 dernières personnes* ayant posté dans le channel où tu lances la commande !\n\n*Comment débloquer :*\n• Envoie *${scores.ATTACK_THRESHOLD} Jeanpips* dans la semaine\n• Tu reçois un DM de notification quand c'est débloqué\n• Lance \`/jeanpip-attack\` dans le channel de ton choix\n• Ton compteur repart à 0, tu peux redébloquer ensuite !\n\n⚠️ _Si tu ne l'actives pas avant dimanche 20h → tu perds l'attaque_${isAdmin ? '\n\n👑 *Tu es admin : accès illimité + `/jeanpip-give @user` + `/jeanpip-auto` !*' : ''}`,
+            text: `⚔️ *Attaque Jeanpip — \`/jeanpip-attack\`*\nEnvoie un Jeanpip aux *7 dernières personnes* ayant posté dans le channel où tu lances la commande !\n\n*Comment débloquer :*\n• Envoie *${scores.ATTACK_THRESHOLD} Jeanpips* dans la semaine\n• Tu reçois un DM de notification quand c'est débloqué\n• Lance \`/jeanpip-attack\` dans le channel de ton choix\n• Ton compteur repart à 0, tu peux redébloquer ensuite !
+
+💰 *Pas envie d'attendre ?* Achète une attaque pour *${ATTACK_PRICE} crédits* : lance `/jeanpip-attack` et clique sur le bouton.\n\n⚠️ _Si tu ne l'actives pas avant dimanche 20h → tu perds l'attaque_${isAdmin ? '\n\n👑 *Tu es admin : accès illimité + `/jeanpip-give @user` + `/jeanpip-auto` !*' : ''}`,
           },
         },
         { type: 'divider' },
@@ -1328,7 +1415,7 @@ app.command('/jeanpip-help', async ({ command, ack, client, logger }) => {
           type: 'section',
           text: {
             type: 'mrkdwn',
-            text: `🎁 *Boosters JeanPip — \`/jeanpip-booster\`*\nTu as *${creditBalance}* crédit(s) 💰\n\n*Comment gagner des crédits :*\n• *+1 crédit* à chaque réaction :${TARGET_EMOJI}: que TU poses (spam exclu)\n\n*Comment les dépenser :*\n• \`/jeanpip-booster\` → achète un booster (⚪ 10 · 🔵 20 · 🟣 30)\n• Chaque booster = *8 cartes* révélées une par une\n• Plus le booster est cher, plus les cartes rares sont probables !\n\n_Tape \`/jeanpip-credits\` pour voir ton solde à tout moment._`,
+            text: `🎁 *Boosters JeanPip — \`/jeanpip-booster\`*\nTu as *${creditBalance}* crédit(s) 💰\n\n*Comment gagner des crédits :*\n• *+1 crédit* à chaque réaction :${TARGET_EMOJI}: que TU poses (spam exclu)\n\n*Comment les dépenser :*\n• \`/jeanpip-booster\` → achète un booster (${boosters.listBoosters().map((b) => `${b.emoji} ${b.price}`).join(' · ')})\n• \`/jeanpip-attack\` → achète une Attaque Jeanpip (${ATTACK_PRICE}) si tu n'en as pas de gratuite\n• Chaque booster = *8 cartes* révélées une par une\n• Plus le booster est cher, plus les cartes rares sont probables !\n\n_Tape \`/jeanpip-credits\` pour voir ton solde à tout moment._`,
           },
         },
         { type: 'divider' },
@@ -1352,7 +1439,7 @@ app.command('/jeanpip-help', async ({ command, ack, client, logger }) => {
           type: 'section',
           text: {
             type: 'mrkdwn',
-            text: `📋 *Toutes les commandes*\n\`/jeanpip\` → Entrer ou sortir de la liste de diffusion\n\`/jeanpip-help\` → Affiche ce message avec ton score actuel\n\`/jeanpip-attack\` → Lance une Attaque Jeanpip sur le channel\n\`/jeanpip-credits\` → Affiche ton solde de crédits\n\`/jeanpip-booster\` → Ouvre la boutique de boosters${isAdmin ? '\n`/jeanpip-give @user` → (admin) Offre une Attaque Jeanpip à quelqu\'un\n`/jeanpip-give-credits @user <montant>` → (admin) Crédite le porte-monnaie de quelqu\'un\n`/jeanpip-addmedia <lien> <rareté> [titre]` → (admin) Ajoute un média à la banque\n`/jeanpip-auto add|remove|list` → (admin) Gère les cibles auto-react' : ''}`,
+            text: `📋 *Toutes les commandes*\n\`/jeanpip\` → Entrer ou sortir de la liste de diffusion\n\`/jeanpip-help\` → Affiche ce message avec ton score actuel\n\`/jeanpip-attack\` → Lance une Attaque Jeanpip sur le channel (gratuite si débloquée, sinon ${ATTACK_PRICE} crédits)\n\`/jeanpip-credits\` → Affiche ton solde de crédits\n\`/jeanpip-booster\` → Ouvre la boutique de boosters${isAdmin ? '\n`/jeanpip-give @user` → (admin) Offre une Attaque Jeanpip à quelqu\'un\n`/jeanpip-give-credits @user <montant>` → (admin) Crédite le porte-monnaie de quelqu\'un\n`/jeanpip-addmedia <lien> <rareté> [titre]` → (admin) Ajoute un média à la banque\n`/jeanpip-auto add|remove|list` → (admin) Gère les cibles auto-react' : ''}`,
           },
         },
         {
