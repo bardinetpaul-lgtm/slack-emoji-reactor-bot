@@ -1081,7 +1081,7 @@ app.command('/jeanpip-booster', async ({ command, ack, client, logger }) => {
           },
         },
         { type: 'actions', elements: buttons },
-        { type: 'context', elements: [{ type: 'mrkdwn', text: '⚪ Commun · 10 crédits   🔵 Rare · 20   🟣 Épique · 30' }] },
+        { type: 'context', elements: [{ type: 'mrkdwn', text: boosters.listBoosters().map((b) => `${b.emoji} ${b.label} · ${b.price} crédits`).join('   ') }] },
       ],
     }, logger);
     logger.info(`🎁 /jeanpip-booster : boutique envoyée à <@${userId}> (solde ${balance})`);
