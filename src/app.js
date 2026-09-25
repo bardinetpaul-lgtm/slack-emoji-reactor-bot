@@ -7,7 +7,7 @@
 const { App, LogLevel } = require('@slack/bolt');
 require('dotenv').config();
 
-const { getRandomMedia, getRarityInfo, normalizeRarity, addMedia, RARITIES } = require('./media');
+const { getRandomMedia, normalizeRarity } = require('./media');
 const { buildMediaBlocks } = require('./blocks');
 const scores = require('./scores');
 const targets = require('./targets');
@@ -17,6 +17,8 @@ const collections = require('./collections');
 const broadcast = require('./broadcast');
 const { openOnce } = require('./openBooster');
 const web = require('./web');
+const home = require('./home');
+const { createAdminActions } = require('./admin');
 
 // ─────────────────────────────────────────────
 // 🔧 Validation de la configuration
@@ -298,6 +300,47 @@ function parseUserId(text) {
   return null;
 }
 
+// 👑 Actions admin partagées (commandes slash + onglet Accueil)
+const adminActions = createAdminActions({ safeSendDM, isBot, targetEmoji: TARGET_EMOJI });
+
+// ─────────────────────────────────────────────
+// 🏠 Onglet Accueil
+// ─────────────────────────────────────────────
+
+// Users ayant ouvert l'Accueil depuis le démarrage : on ne republie
+// « passivement » (ex. crédits gagnés via une réaction) que pour eux.
+const homeViewers = new Set();
+
+function buildHomeFor(userId) {
+  const isAdmin = JEANPIP_ADMINS.includes(userId);
+  return home.buildHomeView(userId, {
+    isAdmin,
+    attackPrice: ATTACK_PRICE,
+    creditsPerJeanpipLabel: CREDITS_PER_JEANPIP_LABEL,
+    targetEmoji: TARGET_EMOJI,
+    farmRemainingMs: getFarmPenaltyRemaining(userId),
+    formatRemaining,
+    autoTargets: isAdmin ? adminActions.listAutoTargets() : undefined,
+  });
+}
+
+/** Republie l'onglet Accueil d'un user (views.publish). N'échoue jamais. */
+async function refreshHome(client, userId, logger) {
+  try {
+    await client.views.publish({ user_id: userId, view: buildHomeFor(userId) });
+    homeViewers.add(userId);
+  } catch (error) {
+    const reason = error.data ? error.data.error : error.message;
+    (logger || console).error(`❌ Impossible de publier l'Accueil de <@${userId}> : ${reason}`);
+  }
+}
+
+/** Republie l'Accueil seulement si le user l'a déjà ouvert depuis le démarrage. */
+function refreshHomeIfSeen(client, userId, logger) {
+  if (userId && homeViewers.has(userId)) return refreshHome(client, userId, logger);
+  return Promise.resolve();
+}
+
 // ─────────────────────────────────────────────
 // 🚀 Initialisation
 // ─────────────────────────────────────────────
@@ -462,6 +505,7 @@ app.event('reaction_added', async ({ event, client, logger }) => {
       //    Seule TA réaction crédite : l'attaque et l'auto-react ne créditent pas.
       const newBalance = credits.addCredit(reactingUserId, CREDITS_PER_JEANPIP);
       logger.info(`💰 Crédits de <@${reactingUserId}> : ${newBalance}`);
+      refreshHomeIfSeen(client, reactingUserId, logger);
     }
 
     // 🎉 Notification déblocage attaque
@@ -473,7 +517,7 @@ app.event('reaction_added', async ({ event, client, logger }) => {
             type: 'section',
             text: {
               type: 'mrkdwn',
-              text: `🎉 *Tu as débloqué l'Attaque Jeanpip !* :${TARGET_EMOJI}:\n\nTu as envoyé *${scores.ATTACK_THRESHOLD} Jeanpips* cette semaine, bravo !\n\n*Comment l'activer :*\nTape la commande \`/jeanpip-attack\` dans n'importe quel channel pour envoyer un Jeanpip aux 7 dernières personnes ayant posté dans le canal dans lequel tu l'actives !\n\n⚠️ _Si tu n'actives pas ton attaque avant dimanche 20h, tu perds tes Jeanpips._`,
+              text: `🎉 *Tu as débloqué l'Attaque Jeanpip !* :${TARGET_EMOJI}:\n\nTu as envoyé *${scores.ATTACK_THRESHOLD} Jeanpips* cette semaine, bravo !\n\n*Comment l'activer :*\nTape la commande \`/jeanpip-attack\` dans n'importe quel channel (ou clique sur ⚔️ dans l'onglet *Accueil* du bot) pour envoyer un Jeanpip aux 7 dernières personnes ayant posté dans le canal choisi !\n\n⚠️ _Si tu n'actives pas ton attaque avant dimanche 20h, tu perds tes Jeanpips._`,
             },
           },
         ],
@@ -714,12 +758,37 @@ async function launchAttack(client, userId, channelId, logger, { consumeFree = f
   }, logger);
 
   logger.info(`✅ Attaque Jeanpip terminée : ${sent}/${victims.length} victimes`);
+  await refreshHome(client, userId, logger);
   return true;
+}
+
+// ─────────────────────────────────────────────
+// 👑 Helpers communs aux commandes admin
+// ─────────────────────────────────────────────
+
+/** DM « réservé aux admins » ; retourne true si l'user N'EST PAS admin. */
+async function rejectNonAdmin(client, userId, logger, commandName) {
+  if (JEANPIP_ADMINS.includes(userId)) return false;
+  await safeSendDM(client, userId, {
+    text: `⛔ Commande réservée aux admins.`,
+    blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `⛔ *Cette commande est réservée aux admins.*` } }],
+  }, logger);
+  logger.info(`⛔ <@${userId}> a tenté ${commandName} sans être admin`);
+  return true;
+}
+
+/** Envoie en DM à l'admin le résultat d'une action admin ({ text, blocks? }). */
+async function sendAdminResult(client, adminId, result, logger) {
+  await safeSendDM(client, adminId, {
+    text: result.text.replace(/\*/g, ''),
+    blocks: result.blocks || [{ type: 'section', text: { type: 'mrkdwn', text: result.text } }],
+  }, logger);
 }
 
 // ─────────────────────────────────────────────
 // 🎁 Slash command : /jeanpip-give @user  (admin uniquement)
 //    Crédite une Attaque Jeanpip à quelqu'un et le notifie
+//    (aussi disponible dans le panneau 👑 Admin de l'Accueil)
 // ─────────────────────────────────────────────
 app.command('/jeanpip-give', async ({ command, ack, client, logger }) => {
   await ack();
@@ -727,14 +796,7 @@ app.command('/jeanpip-give', async ({ command, ack, client, logger }) => {
   const adminId = command.user_id;
 
   try {
-    if (!JEANPIP_ADMINS.includes(adminId)) {
-      await safeSendDM(client, adminId, {
-        text: `⛔ Commande réservée aux admins.`,
-        blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `⛔ *Cette commande est réservée aux admins.*` } }],
-      }, logger);
-      logger.info(`⛔ <@${adminId}> a tenté /jeanpip-give sans être admin`);
-      return;
-    }
+    if (await rejectNonAdmin(client, adminId, logger, '/jeanpip-give')) return;
 
     const targetId = parseUserId(command.text);
     if (!targetId) {
@@ -745,44 +807,9 @@ app.command('/jeanpip-give', async ({ command, ack, client, logger }) => {
       return;
     }
 
-    if (await isBot(client, targetId)) {
-      await safeSendDM(client, adminId, {
-        text: `🤖 Impossible de créditer un bot.`,
-        blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `🤖 *Impossible de créditer un bot.*` } }],
-      }, logger);
-      return;
-    }
-
-    const given = scores.giveAttack(targetId);
-
-    if (!given) {
-      await safeSendDM(client, adminId, {
-        text: `ℹ️ <@${targetId}> a déjà une Attaque Jeanpip disponible.`,
-        blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `ℹ️ *<@${targetId}> a déjà une Attaque Jeanpip disponible.*\nRien à faire.` } }],
-      }, logger);
-      logger.info(`ℹ️ <@${targetId}> avait déjà une attaque, give ignoré`);
-      return;
-    }
-
-    await safeSendDM(client, targetId, {
-      text: `🎁 On t'a offert une Attaque Jeanpip !`,
-      blocks: [
-        {
-          type: 'section',
-          text: {
-            type: 'mrkdwn',
-            text: `🎁 *On t'a offert une Attaque Jeanpip !* :${TARGET_EMOJI}:\n\nUn admin vient de te créditer une Attaque Jeanpip 🎉\n\n*Comment l'activer :*\nTape la commande \`/jeanpip-attack\` dans n'importe quel channel pour envoyer un Jeanpip aux 7 dernières personnes ayant posté dans le canal dans lequel tu l'actives !\n\n⚠️ _Si tu ne l'actives pas avant dimanche 20h, tu la perds._`,
-          },
-        },
-      ],
-    }, logger);
-
-    await safeSendDM(client, adminId, {
-      text: `✅ Attaque Jeanpip offerte à <@${targetId}> !`,
-      blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `✅ *Attaque Jeanpip offerte à <@${targetId}> !*\nLa personne a été notifiée.` } }],
-    }, logger);
-
-    logger.info(`🎁 <@${adminId}> a offert une attaque à <@${targetId}>`);
+    const result = await adminActions.giveAttack(client, adminId, targetId, logger);
+    await sendAdminResult(client, adminId, result, logger);
+    if (result.ok) await refreshHomeIfSeen(client, targetId, logger);
   } catch (error) {
     logger.error('❌ Erreur dans /jeanpip-give:', error);
   }
@@ -798,13 +825,7 @@ app.command('/jeanpip-give-credits', async ({ command, ack, client, logger }) =>
   const adminId = command.user_id;
 
   try {
-    if (!JEANPIP_ADMINS.includes(adminId)) {
-      await safeSendDM(client, adminId, {
-        text: `⛔ Commande réservée aux admins.`,
-        blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `⛔ *Cette commande est réservée aux admins.*` } }],
-      }, logger);
-      return;
-    }
+    if (await rejectNonAdmin(client, adminId, logger, '/jeanpip-give-credits')) return;
 
     const targetId = parseUserId(command.text);
 
@@ -814,56 +835,20 @@ app.command('/jeanpip-give-credits', async ({ command, ack, client, logger }) =>
     const rest = (command.text || '')
       .replace(/<@[A-Z0-9]+(?:\|[^>]+)?>/ig, ' ')
       .replace(/\b[UW][A-Z0-9]{6,}\b/ig, ' ');
-    const amountMatch = rest.match(/-?\d+/);
-    const amount = amountMatch ? parseInt(amountMatch[0], 10) : NaN;
+    const amountMatch = rest.match(/-?\d+(?:[.,]\d+)?/);
+    const amount = amountMatch ? parseFloat(amountMatch[0].replace(',', '.')) : NaN;
 
     if (!targetId || !Number.isFinite(amount) || amount === 0) {
       await safeSendDM(client, adminId, {
         text: `❓ Usage : /jeanpip-give-credits @utilisateur <montant>`,
-        blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `❓ *Usage :* \`/jeanpip-give-credits @utilisateur <montant>\`\nEx : \`/jeanpip-give-credits @paul 50\` pour ajouter, \`/jeanpip-give-credits @paul -20\` pour retirer.\nLe montant doit être un entier non nul.` } }],
+        blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `❓ *Usage :* \`/jeanpip-give-credits @utilisateur <montant>\`\nEx : \`/jeanpip-give-credits @paul 50\` pour ajouter, \`/jeanpip-give-credits @paul -20\` pour retirer.\nLe montant doit être non nul (demi-crédits acceptés, ex. \`2,5\`).` } }],
       }, logger);
       return;
     }
 
-    if (await isBot(client, targetId)) {
-      await safeSendDM(client, adminId, {
-        text: `🤖 Impossible de créditer un bot.`,
-        blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `🤖 *Impossible de créditer un bot.*` } }],
-      }, logger);
-      return;
-    }
-
-    if (amount > 0) {
-      // ➕ Cadeau : on ajoute et on notifie la personne
-      const newBalance = credits.addCredit(targetId, amount);
-
-      await safeSendDM(client, targetId, {
-        text: `🎁 Un admin t'a offert ${amount} crédits JeanPip !`,
-        blocks: [{
-          type: 'section',
-          text: { type: 'mrkdwn', text: `🎁 *Un admin t'a offert ${amount} crédit(s) JeanPip !* 💰\n\nNouveau solde : *${newBalance}* crédit(s)\n\nDépense-les avec \`/jeanpip-booster\` ! 🎁` },
-        }],
-      }, logger);
-
-      await safeSendDM(client, adminId, {
-        text: `✅ ${amount} crédits offerts à <@${targetId}>`,
-        blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `✅ *${amount} crédit(s) offert(s) à <@${targetId}>.*\nNouveau solde de la personne : *${newBalance}*.` } }],
-      }, logger);
-
-      logger.info(`💳 <@${adminId}> a crédité +${amount} à <@${targetId}> (solde ${newBalance})`);
-    } else {
-      // ➖ Correction : on retire (solde jamais négatif), sans notifier la personne
-      const before = credits.getBalance(targetId);
-      const newBalance = credits.setBalance(targetId, before + amount); // amount négatif
-      const removed = before - newBalance;
-
-      await safeSendDM(client, adminId, {
-        text: `✅ ${removed} crédits retirés à <@${targetId}>`,
-        blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `✅ *Correction appliquée à <@${targetId}>.*\nAncien solde : *${before}* → nouveau solde : *${newBalance}* (retiré : ${removed}).\n\n_La personne n'a pas été notifiée._` } }],
-      }, logger);
-
-      logger.info(`💳 <@${adminId}> a corrigé <@${targetId}> : ${before} → ${newBalance}`);
-    }
+    const result = await adminActions.adjustCredits(client, adminId, targetId, amount, logger);
+    await sendAdminResult(client, adminId, result, logger);
+    if (result.ok) await refreshHomeIfSeen(client, targetId, logger);
   } catch (error) {
     logger.error('❌ Erreur dans /jeanpip-give-credits:', error);
   }
@@ -879,13 +864,7 @@ app.command('/jeanpip-addmedia', async ({ command, ack, client, logger }) => {
   const adminId = command.user_id;
 
   try {
-    if (!JEANPIP_ADMINS.includes(adminId)) {
-      await safeSendDM(client, adminId, {
-        text: `⛔ Commande réservée aux admins.`,
-        blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `⛔ *Cette commande est réservée aux admins.*` } }],
-      }, logger);
-      return;
-    }
+    if (await rejectNonAdmin(client, adminId, logger, '/jeanpip-addmedia')) return;
 
     const parts = (command.text || '').trim().split(/\s+/).filter(Boolean);
     const url = parts[0];
@@ -909,36 +888,9 @@ app.command('/jeanpip-addmedia', async ({ command, ack, client, logger }) => {
       return;
     }
 
-    const result = addMedia({ url, rarity, title });
-
-    if (!result.ok) {
-      const reason = {
-        url_invalide: 'Le lien est invalide (il doit commencer par http:// ou https://).',
-        rarete_invalide: 'La rareté est invalide.',
-        ecriture: `Erreur d'écriture du fichier${result.detail ? ` : ${result.detail}` : ''}.`,
-      }[result.error] || 'Erreur inconnue.';
-      await safeSendDM(client, adminId, {
-        text: `❌ ${reason}`,
-        blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `❌ *Impossible d'ajouter le média.*\n${reason}` } }],
-      }, logger);
-      return;
-    }
-
-    const info = getRarityInfo(rarity);
-
     // Confirmation + aperçu du média ajouté (l'admin vérifie que le lien s'affiche bien)
-    await safeSendDM(client, adminId, {
-      text: `✅ Média ${info.label} ajouté !`,
-      blocks: [
-        {
-          type: 'section',
-          text: { type: 'mrkdwn', text: `✅ *Média ajouté à la banque !*\n\n🔢 Numéro attribué : *Surprise #${result.number}*\n${info.emoji} Rareté : *${info.label}* · Type : *${result.media.type}*\n📊 Il y a maintenant *${result.count}* média(s) en ${info.label}.\n\n👇 Aperçu :` },
-        },
-        ...buildMediaBlocks({ headerText: `🖼️ *Nouveau Jeanpip ${info.label}*`, media: result.media }),
-      ],
-    }, logger);
-
-    logger.info(`🖼️ <@${adminId}> a ajouté un média ${rarity} (${result.media.type}) : ${url}`);
+    const result = adminActions.addMediaToBank(adminId, { url, rarity, title }, logger);
+    await sendAdminResult(client, adminId, result, logger);
   } catch (error) {
     logger.error('❌ Erreur dans /jeanpip-addmedia:', error);
   }
@@ -959,13 +911,7 @@ app.command('/jeanpip-auto', async ({ command, ack, client, logger }) => {
 
   try {
     // 🔒 Réservé aux admins
-    if (!JEANPIP_ADMINS.includes(adminId)) {
-      await safeSendDM(client, adminId, {
-        text: `⛔ Commande réservée aux admins.`,
-        blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `⛔ *Cette commande est réservée aux admins.*` } }],
-      }, logger);
-      return;
-    }
+    if (await rejectNonAdmin(client, adminId, logger, '/jeanpip-auto')) return;
 
     const text = (command.text || '').trim();
     const parts = text.split(/\s+/);
@@ -973,10 +919,9 @@ app.command('/jeanpip-auto', async ({ command, ack, client, logger }) => {
 
     // 📋 LIST
     if (action === 'list' || action === '') {
-      const list = targets.getTargets();
-      const envSet = new Set(targets.ENV_TARGETS);
+      const list = adminActions.listAutoTargets();
       const lines = list.length
-        ? list.map((id) => `• <@${id}>${envSet.has(id) ? ' _(fixe .env)_' : ''}`).join('\n')
+        ? list.map((t) => `• <@${t.id}>${t.fixed ? ' _(fixe .env)_' : ''}`).join('\n')
         : '_Aucune cible auto-react configurée._';
       await safeSendDM(client, adminId, {
         text: `🎪 Cibles auto-react (${list.length})`,
@@ -995,35 +940,13 @@ app.command('/jeanpip-auto', async ({ command, ack, client, logger }) => {
       return;
     }
 
-    // ➕ ADD
-    if (action === 'add') {
-      const res = targets.addTarget(targetId);
-      const msg = {
-        added: `✅ <@${targetId}> est maintenant une cible auto-react ! :${TARGET_EMOJI}:`,
-        already: `ℹ️ <@${targetId}> est déjà une cible auto-react.`,
-        env: `ℹ️ <@${targetId}> est déjà défini comme cible fixe dans le .env.`,
-      }[res];
-      await safeSendDM(client, adminId, {
-        text: msg,
-        blocks: [{ type: 'section', text: { type: 'mrkdwn', text: msg } }],
-      }, logger);
-      logger.info(`🎪 add <@${targetId}> par <@${adminId}> → ${res}`);
-      return;
-    }
-
-    // ➖ REMOVE
-    if (action === 'remove') {
-      const res = targets.removeTarget(targetId);
-      const msg = {
-        removed: `✅ <@${targetId}> n'est plus une cible auto-react.`,
-        not_found: `ℹ️ <@${targetId}> n'était pas une cible auto-react.`,
-        env: `⚠️ <@${targetId}> est une cible fixe du .env, impossible de la retirer en live. Modifie le .env et redémarre le bot.`,
-      }[res];
-      await safeSendDM(client, adminId, {
-        text: msg,
-        blocks: [{ type: 'section', text: { type: 'mrkdwn', text: msg } }],
-      }, logger);
-      logger.info(`🎪 remove <@${targetId}> par <@${adminId}> → ${res}`);
+    // ➕ ADD / ➖ REMOVE
+    if (action === 'add' || action === 'remove') {
+      const result = action === 'add'
+        ? adminActions.addAutoTarget(adminId, targetId, logger)
+        : adminActions.removeAutoTarget(adminId, targetId, logger);
+      await sendAdminResult(client, adminId, result, logger);
+      if (result.ok) await refreshHomeIfSeen(client, adminId, logger);
       return;
     }
 
@@ -1191,6 +1114,7 @@ app.action(/^buy_booster_/, async ({ ack, body, action, client, logger }) => {
     });
     boosters.setMessageRef(id, sent.channel, sent.ts);
     logger.info(`🛒 <@${userId}> a acheté un booster ${booster.type} (id ${id}, solde ${balance})`);
+    await refreshHome(client, userId, logger);
   } catch (error) {
     logger.error('❌ Erreur dans buy_booster:', error);
   }
@@ -1240,6 +1164,7 @@ app.action('open_booster', async ({ ack, body, action, client, logger }) => {
       logger.info(`ℹ️ Booster ${id} déjà ouvert (${result.via}), clic ignoré`);
       return;
     }
+    refreshHomeIfSeen(client, userId, logger); // compteur « boosters non ouverts »
 
     const { pending, cards, counts: copyCounts } = result;
     const booster = boosters.getBooster(pending.type);
@@ -1389,6 +1314,9 @@ app.action(/^broadcast_(join|leave)$/, async ({ ack, body, action, client, logge
       ? `✅ *C'est fait, tu es dans la liste de diffusion !* :${TARGET_EMOJI}:\n\nTu vas maintenant recevoir les Jeanpips que les autres t'envoient. 🎉`
       : `🚪 *Tu es sorti de la liste de diffusion.*\n\nPersonne ne peut plus t'envoyer de Jeanpip. Tu peux revenir quand tu veux avec \`/jeanpip\`.`;
 
+    // Clic depuis l'onglet Accueil : pas de message à mettre à jour
+    await refreshHome(client, userId, logger);
+
     // Met à jour le message d'origine avec le nouvel état + le bouton inverse
     if (channelId && messageTs) {
       try {
@@ -1408,6 +1336,190 @@ app.action(/^broadcast_(join|leave)$/, async ({ ack, body, action, client, logge
   } catch (error) {
     logger.error('❌ Erreur dans broadcast_join/leave:', error);
   }
+});
+
+// ═════════════════════════════════════════════
+// 🏠 ONGLET ACCUEIL (App Home)
+//    Construit par user (src/home.js). Le panneau 👑 Admin n'est construit
+//    que pour JEANPIP_ADMINS, et chaque action admin revérifie les droits.
+// ═════════════════════════════════════════════
+app.event('app_home_opened', async ({ event, client, logger }) => {
+  if (event.tab !== 'home') return;
+  homeViewers.add(event.user);
+  await refreshHome(client, event.user, logger);
+});
+
+async function openModal(client, body, view, logger) {
+  try {
+    await client.views.open({ trigger_id: body.trigger_id, view });
+  } catch (error) {
+    logger.error(`❌ Impossible d'ouvrir la modale ${view.callback_id} :`, error.data ? error.data.error : error.message);
+  }
+}
+
+function isAdminUser(userId, logger, what) {
+  if (JEANPIP_ADMINS.includes(userId)) return true;
+  logger.warn(`⛔ <@${userId}> a tenté ${what} sans être admin`);
+  return false;
+}
+
+/** Réponse de view_submission affichant une erreur sous un champ de la modale. */
+function fieldError(blockId, message) {
+  return { response_action: 'errors', errors: { [blockId]: message } };
+}
+
+/** Texte mrkdwn → texte brut court (pour les erreurs de modale). */
+function plain(text) {
+  return text.replace(/[*_`]/g, '').replace(/<@([A-Z0-9]+)>/g, 'cette personne').split('\n')[0];
+}
+
+// ⚔️ Attaque depuis l'Accueil : modale avec choix du channel
+app.action('home_attack_open', async ({ ack, body, client, logger }) => {
+  await ack();
+  const userId = body.user.id;
+  await openModal(client, body, home.buildAttackModal(userId, {
+    isAdmin: JEANPIP_ADMINS.includes(userId),
+    attackPrice: ATTACK_PRICE,
+  }), logger);
+});
+
+app.view('home_attack_submit', async ({ ack, body, view, client, logger }) => {
+  const userId = body.user.id;
+  const channelId = view.state.values.channel.value.selected_conversation;
+  const mode = home.attackMode(userId, JEANPIP_ADMINS.includes(userId));
+
+  // ✋ Vérifications rapides AVANT de fermer la modale (erreur affichée dedans)
+  if (!channelId) return ack(fieldError('channel', 'Choisis un channel.'));
+  const farmRemaining = getFarmPenaltyRemaining(userId);
+  if (farmRemaining > 0) {
+    return ack(fieldError('channel', `🚜 Pénalité anti-farm : réessaie dans ${formatRemaining(farmRemaining)}.`));
+  }
+  if (mode === 'paid' && credits.getBalance(userId) < ATTACK_PRICE) {
+    return ack(fieldError('channel', `Solde insuffisant : il te faut ${ATTACK_PRICE} crédits.`));
+  }
+  if (attackPurchaseLocks.has(userId)) {
+    return ack(fieldError('channel', 'Une attaque est déjà en cours de lancement…'));
+  }
+
+  await ack();
+  attackPurchaseLocks.add(userId);
+  try {
+    // Mêmes règles que /jeanpip-attack : gratuite consommée / admin illimité / payée.
+    // Rien n'est débité ni consommé si personne n'est attaquable (DM d'explication).
+    await launchAttack(client, userId, channelId, logger,
+      mode === 'paid' ? { price: ATTACK_PRICE } : { consumeFree: mode === 'free' });
+  } catch (error) {
+    logger.error('❌ Erreur dans home_attack_submit:', error);
+  } finally {
+    attackPurchaseLocks.delete(userId);
+  }
+});
+
+// 👑 Boutons du panneau admin → ouverture des modales
+const ADMIN_MODALS = {
+  admin_give_attack_open: home.buildGiveAttackModal,
+  admin_credits_open: home.buildCreditsModal,
+  admin_addmedia_open: home.buildAddMediaModal,
+  admin_target_add_open: home.buildAddTargetModal,
+};
+
+for (const [actionId, buildModal] of Object.entries(ADMIN_MODALS)) {
+  app.action(actionId, async ({ ack, body, client, logger }) => {
+    await ack();
+    if (!isAdminUser(body.user.id, logger, actionId)) return;
+    await openModal(client, body, buildModal(), logger);
+  });
+}
+
+// 🎁 Modale « Offrir une attaque »
+app.view('admin_give_attack_submit', async ({ ack, body, view, client, logger }) => {
+  const adminId = body.user.id;
+  if (!isAdminUser(adminId, logger, 'admin_give_attack_submit')) return ack(fieldError('user', 'Réservé aux admins.'));
+
+  const targetId = view.state.values.user.value.selected_user;
+  if (scores.hasAttack(targetId)) return ack(fieldError('user', 'Cette personne a déjà une Attaque Jeanpip disponible.'));
+
+  await ack();
+  try {
+    const result = await adminActions.giveAttack(client, adminId, targetId, logger);
+    await sendAdminResult(client, adminId, result, logger);
+    if (result.ok) await refreshHomeIfSeen(client, targetId, logger);
+  } catch (error) {
+    logger.error('❌ Erreur dans admin_give_attack_submit:', error);
+  }
+});
+
+// 💳 Modale « Crédits ± »
+app.view('admin_credits_submit', async ({ ack, body, view, client, logger }) => {
+  const adminId = body.user.id;
+  if (!isAdminUser(adminId, logger, 'admin_credits_submit')) return ack(fieldError('user', 'Réservé aux admins.'));
+
+  const values = view.state.values;
+  const targetId = values.user.value.selected_user;
+  const raw = (values.amount.value.value || '').trim().replace(',', '.');
+  const amount = /^-?\d+(?:\.\d+)?$/.test(raw) ? Math.round(parseFloat(raw) * 2) / 2 : NaN;
+  if (!Number.isFinite(amount) || amount === 0) {
+    return ack(fieldError('amount', 'Montant non nul attendu (ex. 50, 2,5 ou -20).'));
+  }
+
+  await ack();
+  try {
+    const result = await adminActions.adjustCredits(client, adminId, targetId, amount, logger);
+    await sendAdminResult(client, adminId, result, logger);
+    if (result.ok) {
+      await refreshHomeIfSeen(client, targetId, logger);
+      if (targetId !== adminId) await refreshHomeIfSeen(client, adminId, logger);
+    }
+  } catch (error) {
+    logger.error('❌ Erreur dans admin_credits_submit:', error);
+  }
+});
+
+// 🖼️ Modale « Ajouter un média »
+app.view('admin_addmedia_submit', async ({ ack, body, view, client, logger }) => {
+  const adminId = body.user.id;
+  if (!isAdminUser(adminId, logger, 'admin_addmedia_submit')) return ack(fieldError('url', 'Réservé aux admins.'));
+
+  const values = view.state.values;
+  const url = (values.url.value.value || '').trim();
+  const rarity = values.rarity.value.selected_option && values.rarity.value.selected_option.value;
+  const title = (values.title.value.value || '').trim();
+
+  if (!/^https?:\/\//i.test(url)) return ack(fieldError('url', 'Le lien doit commencer par http:// ou https://.'));
+  if (!rarity) return ack(fieldError('rarity', 'Choisis une rareté.'));
+
+  const result = adminActions.addMediaToBank(adminId, { url, rarity, title }, logger);
+  if (!result.ok) return ack(fieldError('url', plain(result.text.split('\n')[1] || result.text)));
+
+  await ack();
+  try {
+    // Confirmation + aperçu en DM (l'admin vérifie que le lien s'affiche bien)
+    await sendAdminResult(client, adminId, result, logger);
+  } catch (error) {
+    logger.error('❌ Erreur dans admin_addmedia_submit:', error);
+  }
+});
+
+// 🎪 Modale « Ajouter une cible » + bouton « Retirer »
+app.view('admin_target_add_submit', async ({ ack, body, view, client, logger }) => {
+  const adminId = body.user.id;
+  if (!isAdminUser(adminId, logger, 'admin_target_add_submit')) return ack(fieldError('user', 'Réservé aux admins.'));
+
+  const targetId = view.state.values.user.value.selected_user;
+  const result = adminActions.addAutoTarget(adminId, targetId, logger);
+  if (!result.ok) return ack(fieldError('user', plain(result.text)));
+
+  await ack();
+  await refreshHome(client, adminId, logger);
+});
+
+app.action('admin_target_remove', async ({ ack, body, action, client, logger }) => {
+  await ack();
+  const adminId = body.user.id;
+  if (!isAdminUser(adminId, logger, 'admin_target_remove')) return;
+
+  adminActions.removeAutoTarget(adminId, action.value, logger);
+  await refreshHome(client, adminId, logger);
 });
 
 // ─────────────────────────────────────────────
@@ -1430,6 +1542,13 @@ app.command('/jeanpip-help', async ({ command, ack, client, logger }) => {
         {
           type: 'header',
           text: { type: 'plain_text', text: `🤖 Jeanpip Bot — Guide complet` },
+        },
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: `🏠 *Le plus simple : l'onglet Accueil du bot !*\nClique sur le bot dans la barre latérale → onglet *Accueil* : ton solde, ton score, l'achat de boosters, l'Attaque Jeanpip (avec choix du channel) et la liste de diffusion, en boutons.${isAdmin ? '\n👑 _Tu y trouveras aussi le panneau Admin._' : ''}`,
+          },
         },
         { type: 'divider' },
         {
@@ -1457,7 +1576,7 @@ app.command('/jeanpip-help', async ({ command, ack, client, logger }) => {
             type: 'mrkdwn',
             text: `⚔️ *Attaque Jeanpip — \`/jeanpip-attack\`*\nEnvoie un Jeanpip aux *7 dernières personnes* ayant posté dans le channel où tu lances la commande !\n\n*Comment débloquer :*\n• Envoie *${scores.ATTACK_THRESHOLD} Jeanpips* dans la semaine\n• Tu reçois un DM de notification quand c'est débloqué\n• Lance \`/jeanpip-attack\` dans le channel de ton choix\n• Ton compteur repart à 0, tu peux redébloquer ensuite !
 
-💰 *Pas envie d'attendre ?* Achète une attaque pour *${ATTACK_PRICE} crédits* : lance `/jeanpip-attack` et clique sur le bouton.\n\n⚠️ _Si tu ne l'actives pas avant dimanche 20h → tu perds l'attaque_${isAdmin ? '\n\n👑 *Tu es admin : accès illimité + `/jeanpip-give @user` + `/jeanpip-auto` !*' : ''}`,
+💰 *Pas envie d'attendre ?* Achète une attaque pour *${ATTACK_PRICE} crédits* : lance `/jeanpip-attack` et clique sur le bouton.\n\n⚠️ _Si tu ne l'actives pas avant dimanche 20h → tu perds l'attaque_${isAdmin ? '\n\n👑 *Tu es admin : accès illimité + panneau 👑 Admin dans l\'onglet Accueil (ou `/jeanpip-give @user`, `/jeanpip-auto`) !*' : ''}`,
           },
         },
         { type: 'divider' },

@@ -48,12 +48,13 @@ const fakeClient = {
     update: async (m) => { updated.push(m); return { ok: true }; },
   },
   auth: { test: async () => ({ user_id: 'B_BOT', user: 'jeanpip' }) },
+  views: { publish: async () => ({ ok: true }) }, // onglet Accueil rafraîchi après achat
   files: { info: async () => { throw new Error('fake'); } },
 };
 const actions = [];
 class FakeApp {
   constructor() { this.client = fakeClient; }
-  event() {} message() {} command() {}
+  event() {} message() {} command() {} view() {}
   action(id, fn) { actions.push({ id, fn }); }
   error() {}
   async start() {}
