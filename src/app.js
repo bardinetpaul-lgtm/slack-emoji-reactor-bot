@@ -18,8 +18,9 @@ const broadcast = require('./broadcast');
 const { openOnce } = require('./openBooster');
 const web = require('./web');
 const home = require('./home');
-const { createAdminActions } = require('./admin');
+const { createAdminActions, formatCredits } = require('./admin');
 const settings = require('./settings');
+const weeklyGift = require('./weeklyGift');
 
 // ─────────────────────────────────────────────
 // 🔧 Validation de la configuration
@@ -1416,6 +1417,72 @@ app.view('home_attack_submit', async ({ ack, body, view, client, logger }) => {
   }
 });
 
+// 🎁 Crédits JeanPip du vendredi : modale « Offrir des crédits »
+app.action('weekly_gift_open', async ({ ack, body, client, logger }) => {
+  await ack();
+  const userId = body.user.id;
+  if (weeklyGift.getAllowance(userId) <= 0) {
+    await refreshHome(client, userId, logger); // crédits expirés entre-temps
+    return;
+  }
+  await openModal(client, body, home.buildWeeklyGiftModal(userId), logger);
+});
+
+app.view('weekly_gift_submit', async ({ ack, body, view, client, logger }) => {
+  const userId = body.user.id;
+  const values = view.state.values;
+  const targetId = values.user.value.selected_user;
+  const amount = Number(values.amount.value.value);
+
+  const result = weeklyGift.give(userId, targetId, amount);
+  if (!result.ok) {
+    const allowance = weeklyGift.getAllowance(userId);
+    return ack({
+      soi: fieldError('user', 'Tu ne peux pas te les offrir à toi-même 😉'),
+      non_inscrit: fieldError('user', "Cette personne n'est pas inscrite à la liste de diffusion."),
+      montant: fieldError('amount', 'Nombre entier de crédits attendu (au moins 1).'),
+      solde: fieldError('amount', allowance > 0 ? `Il ne te reste que ${allowance} crédit(s) à offrir.` : "Tu n'as plus de crédits à offrir cette semaine."),
+    }[result.error]);
+  }
+
+  await ack();
+  logger.info(`🎁 <@${userId}> a offert ${amount} crédit(s) du vendredi à <@${targetId}> (reste ${result.remaining})`);
+  try {
+    await safeSendDM(client, targetId, {
+      text: `🎁 <@${userId}> t'a offert ${amount} crédits JeanPip !`,
+      blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `🎁 *<@${userId}> t'a offert ${amount} crédit(s) JeanPip !* 💰\n\nNouveau solde : *${formatCredits(result.recipientBalance)}* crédit(s)\n\nDépense-les avec \`/jeanpip-booster\` ou depuis l'onglet *Accueil* du bot ! 🎁` } }],
+    }, logger);
+  } catch (error) {
+    logger.error(`❌ DM de don à <@${targetId}> impossible :`, error.message);
+  }
+  await refreshHome(client, userId, logger);
+  await refreshHomeIfSeen(client, targetId, logger);
+});
+
+/** Vendredi 9h : distribue les crédits à offrir et prévient chaque inscrit. */
+async function runWeeklyGift(client, logger) {
+  const granted = weeklyGift.distributeIfDue(broadcast.getSubscribers());
+  if (granted.length === 0) return;
+  logger.info(`🎁 Crédits du vendredi : ${weeklyGift.WEEKLY_AMOUNT} à offrir pour ${granted.length} inscrit(s)`);
+
+  const text = `🎁 JeanPip vous donne ${weeklyGift.WEEKLY_AMOUNT} crédits que vous ne pouvez pas garder pour vous, depuis votre dashboard accordez-les aux personnes de votre choix. Bonne fin de semaine !`;
+  for (const userId of granted) {
+    try {
+      await safeSendDM(client, userId, {
+        text,
+        blocks: [
+          { type: 'section', text: { type: 'mrkdwn', text } },
+          { type: 'context', elements: [{ type: 'mrkdwn', text: `_Onglet *Accueil* du bot → « 🎁 Offrir des crédits ». Ce qui n'est pas donné est perdu vendredi prochain 9h._` }] },
+        ],
+      }, logger);
+    } catch (error) {
+      logger.error(`❌ DM du vendredi à <@${userId}> impossible :`, error.message);
+    }
+  }
+  // 🏠 Accueils déjà ouverts : afficher le nouveau solde à offrir (et masquer l'ancien)
+  for (const userId of homeViewers) await refreshHome(client, userId, logger);
+}
+
 // 👑 Boutons du panneau admin → ouverture des modales
 const ADMIN_MODALS = {
   admin_give_attack_open: home.buildGiveAttackModal,
@@ -1691,6 +1758,12 @@ async function sendDM(client, userId, message) {
 
   scores.checkAndReset();
   setInterval(() => scores.checkAndReset(), 60 * 60 * 1000);
+
+  // 🎁 Crédits JeanPip du vendredi 9h (vérifié toutes les 5 min, rattrapé au redémarrage)
+  const weeklyGiftTick = () => runWeeklyGift(app.client, console)
+    .catch((error) => console.error('❌ Crédits du vendredi :', error.message));
+  weeklyGiftTick();
+  setInterval(weeklyGiftTick, 5 * 60 * 1000);
 
   // 🎬 Page d'ouverture animée (si WEB_PUBLIC_URL est défini)
   try {

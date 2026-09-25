@@ -15,6 +15,7 @@ const boosters = require('./boosters');
 const broadcast = require('./broadcast');
 const { RARITIES } = require('./media');
 const settings = require('./settings');
+const weeklyGift = require('./weeklyGift');
 const { formatCredits } = require('./admin');
 
 // Nombre max de cibles auto-react affichées (limite Slack : 100 blocs par vue)
@@ -70,6 +71,16 @@ function buildHomeView(userId, ctx) {
     section(`💰 *Ton solde : ${formatCredits(balance)} crédit(s)*\n_+${ctx.creditsPerJeanpipLabel} crédit(s) à chaque réaction :${ctx.targetEmoji}: que tu poses (Jeanpip délivré, hors spam/farm)._`),
     { type: 'divider' },
   ];
+
+  // 🎁 Crédits JeanPip du vendredi à offrir (seulement s'il en reste)
+  const giftAllowance = weeklyGift.getAllowance(userId);
+  if (giftAllowance > 0) {
+    blocks.push(section(
+      `🎁 *Tu as ${giftAllowance} crédit(s) JeanPip à offrir*\n_Tu ne peux pas les garder : donne-les aux inscrits de ton choix. Ce qui n'est pas donné est perdu vendredi 9h._`,
+      button('🎁 Offrir des crédits', 'weekly_gift_open', { style: 'primary' }),
+    ));
+    blocks.push({ type: 'divider' });
+  }
 
   // 📊 Semaine + ⚔️ Attaque
   const scoreLine = `📊 *Ta semaine :* ${score}/${scores.ATTACK_THRESHOLD} :${ctx.targetEmoji}:`;
@@ -219,6 +230,29 @@ function buildAttackModal(userId, { isAdmin, attackPrice }) {
   ]);
 }
 
+/** 🎁 Modale « Offrir des crédits » (crédits JeanPip du vendredi). */
+function buildWeeklyGiftModal(userId) {
+  const allowance = weeklyGift.getAllowance(userId);
+  return modal('weekly_gift_submit', 'Offrir des crédits', '🎁 Offrir', [
+    section(`🎁 Il te reste *${allowance} crédit(s)* à offrir cette semaine.\n_Ils vont dans le porte-monnaie de la personne choisie. Tu peux les répartir entre plusieurs personnes._`),
+    userInput('À qui ?'),
+    {
+      type: 'input',
+      block_id: 'amount',
+      label: { type: 'plain_text', text: 'Combien de crédits ?' },
+      element: {
+        type: 'number_input',
+        action_id: 'value',
+        is_decimal_allowed: false,
+        min_value: '1',
+        max_value: String(Math.max(1, allowance)),
+        initial_value: String(Math.max(1, allowance)),
+      },
+      hint: { type: 'plain_text', text: 'La personne doit être inscrite à la liste de diffusion.' },
+    },
+  ]);
+}
+
 function buildGiveAttackModal() {
   return modal('admin_give_attack_submit', 'Offrir une attaque', 'Offrir', [
     userInput('À qui offrir une Attaque Jeanpip ?'),
@@ -299,6 +333,7 @@ module.exports = {
   buildHomeView,
   buildCreditValueModal,
   buildAttackModal,
+  buildWeeklyGiftModal,
   buildGiveAttackModal,
   buildCreditsModal,
   buildAddMediaModal,
