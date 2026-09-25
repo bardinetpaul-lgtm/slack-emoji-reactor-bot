@@ -22,6 +22,7 @@ const { createAdminActions, formatCredits, AUTHOR_REWARDS } = require('./admin')
 const settings = require('./settings');
 const farm = require('./farm');
 const weeklyGift = require('./weeklyGift');
+const { SPAM_CARDS } = require('./spamCards');
 
 // ─────────────────────────────────────────────
 // 🔧 Validation de la configuration
@@ -53,22 +54,8 @@ const creditsPerJeanpipLabel = () => String(settings.getCreditsPerJeanpip()).rep
 // ─────────────────────────────────────────────
 const SPAM_THRESHOLD_SECONDS = 8;
 const SPAM_PUNISHMENT_INTERVAL_MS = 5000;
-// 🔢 Numérotation des photos anti-spam, dans le même style que la banque
-//    (« Surprise #N »). Numéros FIXES #62→#71 : ne jamais les modifier.
-const SPAM_PHOTO_START = 62;
-
-const SPAM_TROLL_SEQUENCE = [
-  { type: 'image', url: 'https://slack-files.com/T6EFSEHCN-F0BDBMU8CTS-77c6932553', title: '🚨 Spammer c\'est mal.' },
-  { type: 'image', url: 'https://slack-files.com/T6EFSEHCN-F0BCE3SGC7P-941026d6a8', title: '🚨 Spammer c\'est mal.' },
-  { type: 'image', url: 'https://slack-files.com/T6EFSEHCN-F0BC21YHVAB-83455d1ed8', title: '🚨 Spammer c\'est mal.' },
-  { type: 'image', url: 'https://slack-files.com/T6EFSEHCN-F0BDBQLPEF2-af87fefb2a', title: '🚨 Spammer c\'est mal.' },
-  { type: 'image', url: 'https://slack-files.com/T6EFSEHCN-F0BCE55GUBX-07592141a1', title: '🚨 Spammer c\'est mal.' },
-  { type: 'image', url: 'https://slack-files.com/T6EFSEHCN-F0BCE5J6URK-53abe5b196', title: '🚨 Spammer c\'est mal.' },
-  { type: 'image', url: 'https://slack-files.com/T6EFSEHCN-F0BC23V6JKH-e490b68a5e', title: '🚨 Spammer c\'est mal.' },
-  { type: 'image', url: 'https://slack-files.com/T6EFSEHCN-F0BCB7W1FH9-737f44b887', title: '🚨 Spammer c\'est mal.' },
-  { type: 'image', url: 'https://slack-files.com/T6EFSEHCN-F0BCFG6PKFY-7090b859e8', title: '🚨 Spammer c\'est mal.' },
-  { type: 'image', url: 'https://slack-files.com/T6EFSEHCN-F0BCM8HH7FE-514efee20f', title: '🚨 Spammer c\'est mal.' },
-];
+// 🔢 Les 10 photos troll (« Surprise #62 → #71 ») : src/spamCards.js
+const SPAM_TROLL_SEQUENCE = SPAM_CARDS;
 
 const reactionHistory = new Map();
 const spammersBeingPunished = new Set();
@@ -95,16 +82,19 @@ async function punishSpammer(client, userId, logger) {
   logger.info(`💀 PUNITION ANTI-SPAM lancée pour <@${userId}>`);
   for (let i = 0; i < total; i++) {
     try {
-      // 🔢 Photo numérotée « Surprise #N » à partir de 61, comme la banque de médias
-      const photoNumber = SPAM_PHOTO_START + i;
-      const photoTitle = `🚨 Surprise #${photoNumber}`;
+      // 🔢 Photo numérotée « Surprise #62 → #71 », comme la banque de médias
+      const card = SPAM_TROLL_SEQUENCE[i];
+      // 🗂️ Elle entre dans la collection (intercalaire « Hors série » du classeur)
+      const nextCount = collections.getCount(userId, card.url) + 1;
       await sendDM(client, userId, {
-        text: `${photoTitle} — Spammer c'est mal. (${i + 1}/${total})`,
+        text: `${card.title} — Spammer c'est mal. (${i + 1}/${total})`,
         blocks: buildMediaBlocks({
-          headerText: `🚨 *Spammer c'est mal.* — ${photoTitle} (${i + 1}/${total})`,
-          media: { ...SPAM_TROLL_SEQUENCE[i], title: photoTitle },
+          headerText: `🚨 *Spammer c'est mal.* — ${card.title} (${i + 1}/${total})
+${collections.copyPhrase(nextCount)}`,
+          media: { type: card.type, url: card.url, title: card.title },
         }),
       });
+      collections.addCards(userId, [card]);
       logger.info(`💀 Punition ${i + 1}/${total} envoyée à <@${userId}>`);
       if (i < total - 1) {
         await new Promise((resolve) => setTimeout(resolve, SPAM_PUNISHMENT_INTERVAL_MS));

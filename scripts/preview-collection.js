@@ -28,6 +28,7 @@ process.env.WEB_SECRET = 'preview';
 const web = require(path.join(TMP, 'src', 'web.js'));
 const collections = require(path.join(TMP, 'src', 'collections.js'));
 const media = require(path.join(TMP, 'src', 'media.js'));
+const { SPAM_CARDS } = require(path.join(TMP, 'src', 'spamCards.js'));
 
 const fakeClient = {
   chat: { update: async () => {} },
@@ -40,6 +41,7 @@ const all = media.getAllMedia();
 const owned = all.filter((_, i) => i % 2 === 0 || i % 7 === 0);
 collections.addCards('U_PREVIEW', owned, '2026-09-01T10:00:00.000Z');
 collections.addCards('U_PREVIEW', owned.slice(0, 6), '2026-09-10T10:00:00.000Z');
+collections.addCards('U_PREVIEW', SPAM_CARDS.slice(0, 4), '2026-09-12T10:00:00.000Z'); // 🚨 Hors série
 
 // Le direct : une carte au hasard toutes les 12 s
 setInterval(() => {

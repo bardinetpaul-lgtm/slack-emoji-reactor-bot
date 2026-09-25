@@ -7,8 +7,10 @@
 //
 //  Confidentialité : pour une carte NON possédée, on n'envoie que son
 //  numéro et sa rareté — jamais son image, son titre ni son lien.
-//  Les cartes possédées qui ne sont plus dans la banque vont dans
-//  l'intercalaire « Hors série ».
+//
+//  Intercalaire « Hors série » (hors pourcentage de complétion) :
+//    • les 10 photos anti-spam #62 → #71 (emplacements toujours affichés)
+//    • les cartes possédées qui ne sont plus dans la banque
 //
 //  Fonction pure (lecture seule) : aucun appel Slack ici.
 // ═══════════════════════════════════════════════════════════
@@ -18,6 +20,7 @@ const crypto = require('crypto');
 const collections = require('./collections');
 const { getAllMedia, RARITIES } = require('./media');
 const { cardImageUrl } = require('./cardImages');
+const { SPAM_CARDS } = require('./spamCards');
 
 const SECTION_ORDER = ['common', 'rare', 'epic', 'legendary'];
 
@@ -90,11 +93,17 @@ function buildAlbum(userId) {
       : { n: numbers[i], rarity, owned: false });
   });
 
-  // 🗃️ Cartes possédées retirées de la banque
-  const extra = [...owned.values()]
+  // 🚨 Hors série : les photos anti-spam (emplacements fixes)…
+  const extra = SPAM_CARDS.filter((c) => !seen.has(c.url)).map((c) => {
+    seen.add(c.url);
+    const card = owned.get(c.url);
+    return card ? ownedSticker(c.number, 'extra', card, c) : { n: c.number, rarity: 'extra', owned: false };
+  });
+  // 🗃️ … puis les cartes possédées retirées de la banque
+  extra.push(...[...owned.values()]
     .filter((c) => !seen.has(c.url))
     .sort((a, b) => (a.firstAt || '').localeCompare(b.firstAt || ''))
-    .map((c) => ownedSticker(numberFromTitle(c.title) || 0, rarityOf(c.rarity), c, null));
+    .map((c) => ownedSticker(numberFromTitle(c.title) || 0, 'extra', c, null)));
 
   const list = SECTION_ORDER.map((key) => ({
     key,
@@ -107,20 +116,21 @@ function buildAlbum(userId) {
   let total = 0;
   let got = 0;
   let copies = 0;
+  let unique = 0;
   for (const s of list) {
     for (const st of s.stickers) {
-      if (st.owned) copies += st.count;
-      if (s.key === 'extra') continue;
       byRarity[s.key] = byRarity[s.key] || { total: 0, owned: 0 };
       byRarity[s.key].total += 1;
-      total += 1;
       if (st.owned) {
         byRarity[s.key].owned += 1;
-        got += 1;
+        copies += st.count;
+        unique += 1;
       }
+      if (s.key === 'extra') continue;
+      total += 1;
+      if (st.owned) got += 1;
     }
   }
-  const unique = got + extra.length;
   const stats = { total, owned: got, copies, doubles: copies - unique, byRarity };
 
   // 🔁 Empreinte : change dès qu'une carte arrive (la page ne redessine que dans ce cas)
