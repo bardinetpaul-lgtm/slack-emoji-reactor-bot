@@ -1,7 +1,8 @@
 // ═══════════════════════════════════════════════════════════
 //  💰 MODULE CREDITS
 //  Porte-monnaie PERMANENT des utilisateurs (jamais de reset).
-//  On gagne 1 crédit à chaque réaction :jeanpip: posée (spam exclu).
+//  On gagne 0,5 crédit à chaque réaction :jeanpip: posée (spam exclu).
+//  Les soldes peuvent donc être des demi-crédits (ex. 12.5).
 //  DB = fichier JSON local (data/credits.json)
 //    { users: { U123: 42 } }
 // ═══════════════════════════════════════════════════════════
@@ -56,12 +57,12 @@ function getBalance(userId) {
 
 // ─────────────────────────────────────────────
 // 🔧 Fixer le solde exact d'un user (jamais négatif).
-//    Utilisé pour les corrections admin. Retourne le nouveau solde.
+//    Arrondi au demi-crédit. Utilisé pour les corrections admin. Retourne le nouveau solde.
 // ─────────────────────────────────────────────
 
 function setBalance(userId, value) {
   const data = load();
-  data.users[userId] = Math.max(0, Math.floor(value));
+  data.users[userId] = Math.max(0, Math.floor(value * 2) / 2);
   save(data);
   return data.users[userId];
 }

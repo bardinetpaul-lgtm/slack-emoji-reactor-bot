@@ -34,7 +34,7 @@ function commonSlots(n) {
 
 // ─────────────────────────────────────────────
 // 📦 Catalogue des boosters (data-driven, extensible)
-//    Prix : common 10 · rare 20 · epic 30
+//    Prix : common 20 · rare 45 · epic 60
 //    Chaque `slots` = 8 distributions (une par carte).
 //    Les tables des 3 derniers slots totalisent 100% chacune.
 // ─────────────────────────────────────────────
@@ -44,7 +44,7 @@ const BOOSTERS = {
     type: 'common',
     label: 'Commun',
     emoji: '⚪',
-    price: 10,
+    price: 20,
     slots: [
       ...commonSlots(5),
       { common: 80, rare: 10, epic: 10 },
@@ -56,7 +56,7 @@ const BOOSTERS = {
     type: 'rare',
     label: 'Rare',
     emoji: '🔵',
-    price: 20,
+    price: 45,
     slots: [
       ...commonSlots(5),
       { common: 60, rare: 20, epic: 20 },
@@ -68,7 +68,7 @@ const BOOSTERS = {
     type: 'epic',
     label: 'Épique',
     emoji: '🟣',
-    price: 30,
+    price: 60,
     slots: [
       ...commonSlots(5),
       { common: 40, rare: 30, epic: 28, legendary: 2 },
