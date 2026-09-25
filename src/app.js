@@ -1228,7 +1228,7 @@ app.action('open_booster', async ({ ack, body, action, client, logger }) => {
 
     // 🗂️ Enregistrer les cartes AVANT la révélation (un crash en cours
     //    de révélation ne fait pas perdre les cartes).
-    const isNew = collections.addCards(userId, cards);
+    const copyCounts = collections.addCards(userId, cards);
 
     // ⏱️ Révélation progressive : une carte toutes les 5 s, dans la conversation
     //    classique de Jeanpip (pas en réponse/thread au message d'ouverture).
@@ -1239,7 +1239,8 @@ app.action('open_booster', async ({ ack, body, action, client, logger }) => {
           channel: channelId,
           text: `${card.title} (${i + 1}/${cards.length})`,
           blocks: buildMediaBlocks({
-            headerText: `🎴 *${card.title}* — carte ${i + 1}/${cards.length}${isNew[i] ? ' · ✨ *Nouvelle !*' : ''}`,
+            headerText: `🎴 *${card.title}* — carte ${i + 1}/${cards.length}${copyCounts[i] ? `
+${collections.copyPhrase(copyCounts[i])}` : ''}`,
             media: card,
           }),
         });
