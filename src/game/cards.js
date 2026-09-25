@@ -152,4 +152,5 @@ module.exports = {
   getCardStats,
   damageMultiplier,
   reloadOverrides,
+  getOverride,
 };

@@ -48,6 +48,7 @@ const check = (ok, msg) => { oLog(`  ${ok ? '✅' : '❌'} ${msg}`); if (!ok) pr
   check(posted.some((m) => m.channel === 'D_UAUTH' && m.text.includes('+30')), 'auteur notifié en DM');
   check(posted.some((m) => m.channel === 'D_UADMIN' && m.blocks[0].text.text.includes('Attribué à <@UAUTH>')), 'admin voit l’attribution');
   check(bank().at(-1).author === 'UAUTH', 'auteur enregistré sur le média');
+  check(posted.some((m) => m.channel === 'D_UADMIN' && m.blocks[0].text.text.includes('personnage d\'Arène est né')), 'admin voit le personnage d’Arène du nouveau Jeanpip');
 
   a = await submit({ url: 'https://x.test/2.gif', rarity: 'rare', author: 'UBOT' });
   check(a && a.errors && a.errors.author, 'bot refusé (erreur sur le champ auteur)');
