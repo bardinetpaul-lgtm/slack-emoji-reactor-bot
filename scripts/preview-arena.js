@@ -7,6 +7,8 @@
 //  cartes du catalogue. Le VRAI moteur tourne ici à 10 Hz et pousse
 //  l'état en SSE ; les poses partent en POST : même contrat qu'en prod.
 //  Aucune collection touchée (pas de règlement de fin de combat).
+//  Les cartes affichent les VRAIES images de la collection (proxy
+//  api/card-image, cache disque data/card-cache/, comme en prod).
 //
 //  Usage : node scripts/preview-arena.js [port]   (3200 par défaut)
 //          puis http://127.0.0.1:3200/arena/preview?t=jardin
@@ -21,7 +23,7 @@ console.log = () => {};   // media.js annonce le catalogue au chargement
 const media = require('../src/media');
 const engine = require('../src/game/engine');
 const characters = require('../src/game/characters');
-const { cardImageUrl } = require('../src/cardImages');
+const { cardImageUrl, getCardImage } = require('../src/cardImages');
 console.log = origLog;
 
 const PORT = parseInt(process.argv[2], 10) || 3200;
@@ -144,6 +146,18 @@ const server = http.createServer(async (req, res) => {
     const result = current ? engine.applyAction(current.state, 'A', action) : { ok: false, reason: 'not_running' };
     res.writeHead(200, { 'Content-Type': 'application/json' });
     return res.end(JSON.stringify({ ok: result.ok, reason: result.reason }));
+  }
+
+  // 🖼️ Vraies images des cartes (même route que la prod : proxy + cache disque).
+  //    Sans token Slack ici : repli sur la page publique de partage.
+  const img = /^\/api\/card-image\/([A-Z0-9]+)$/.exec(url.pathname);
+  if (img) {
+    const noSlack = { files: { info: async () => { throw new Error('aperçu sans token Slack'); } } };
+    const quiet = { warn: () => {}, error: (...a) => console.error(...a) };
+    const image = await getCardImage(noSlack, img[1], quiet);
+    if (!image) { res.writeHead(404); return res.end(); }
+    res.writeHead(200, { 'Content-Type': image.mime, 'Cache-Control': 'public, max-age=604800' });
+    return res.end(fs.readFileSync(image.file));
   }
 
   // Fichiers statiques de public/
