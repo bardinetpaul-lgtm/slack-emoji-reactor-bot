@@ -34,7 +34,7 @@ Chaque carte du catalogue (125 cartes) reçoit un **archétype**, déterminé ai
 | ⚔️ Guerrier | 27 % | 3 | 500 | 70 | mêlée | moyenne | tout |
 | 🏹 Tireur | 23 % | 3 | 320 | 80 | distance | moyenne | tout |
 | 🐝 Essaim | 15 % | 3 | 3 × 230 | 3 × 42 | mêlée | rapide | tout |
-| 💥 Sort | 10 % | 4 | – | 350 en zone | – | instantané | 1re unité ennemie du couloir (sinon la tour/QG), dégâts en zone autour |
+| 💥 Sort | 10 % | 4 | – | 350 en zone | – | instantané | 1re unité ennemie du couloir (sinon Pompe, tour, QG), dégâts en zone autour, **40 % sur les bâtiments** |
 | ⚗️ Pompe | 5 % | 4 | 500 | – | – | immobile | +1 élixir / 7 s pendant 45 s |
 
 ### Rareté
@@ -43,15 +43,19 @@ Chaque carte du catalogue (125 cartes) reçoit un **archétype**, déterminé ai
 |---|---|---|
 | ⚪ Commune | ×1,0 | +0 |
 | 🔵 Rare | ×1,06 | +0 |
-| 🟣 Épique | ×1,5 | +1 |
-| 🟡 Légendaire | ×1,6 | +1 |
+| 🟣 Épique | ×1,13 | +0 |
+| 🟡 Légendaire | ×1,2 | +0 |
 
 Pour la **Pompe**, la rareté multiplie PV et durée de vie, **jamais la cadence de production**.
+Pour l'**Essaim**, le bonus de rareté est réduit de moitié (ses 3 unités en profitent chacune).
 
 ### Cycle de contres
 
-Un archétype inflige **×1,5 de dégâts** à celui qu'il contre (affiché sur la carte) :
+Un archétype inflige **×1,5 de dégâts** à celui qu'il contre, et seulement **×0,67** à celui
+qui le contre (affiché sur la carte) :
 **Tank → Guerrier → Tireur → Essaim → Tank**, et le **Sort** (zone) contre l'Essaim.
+Le Tank ne visant que les bâtiments, « Tank bat Guerrier » se lit en défense : le Guerrier ne
+lui fait que ×0,67.
 
 ### Spécialités (prévu, non livré en V1)
 
@@ -59,12 +63,19 @@ Un archétype inflige **×1,5 de dégâts** à celui qu'il contre (affiché sur 
 entrée du registre `src/game/specialties.js` qui s'accroche aux moments `onDeploy`, `onHit`,
 `onDeath`, `onTick`. Toute nouvelle spécialité est validée par `scripts/simulate-balance.js`.
 
-### Équilibrage (valeurs de départ)
+### Équilibrage
 
-Simulation préliminaire (1 couloir, poses simultanées, une carte rare+ + 1 commune contre toutes
-les mains communes de même coût) : commune 52 %, rare 64 %, épique 56 %, **légendaire 67 %**
-de victoires à élixir égal. Les contres, les tours et la Pompe s'ajoutent : **les valeurs sont
-revalidées par `scripts/simulate-balance.js` pendant l'implémentation**.
+Mesuré par `scripts/simulate-balance.js` sur le vrai moteur (contres, tours, Pompe inclus).
+
+| Rareté | Duel à élixir égal (carte + 1 commune contre toutes les mains communes de même coût) | Combat complet de 2 min, 1 carte de cette rareté dans le deck, contre deck 100 % commun |
+|---|---|---|
+| ⚪ Commune | 50 % (archétypes : 46 à 52 %) | – |
+| 🔵 Rare | 60 % | 51 % |
+| 🟣 Épique | 63 % | 53 % |
+| 🟡 Légendaire | 69 % | 57 % |
+
+Un surcoût d'élixir pour les raretés hautes a été testé puis écarté : il les rendait plus faibles
+que les rares en duel.
 Critère : aucune rareté au-dessus de ~70 % de victoires à élixir égal, aucun archétype commun
 hors de [35 %, 65 %].
 
@@ -107,6 +118,9 @@ hors de [35 %, 65 %].
 2. À **2:00** : le plus de **tours détruites** gagne ; à égalité, le plus de **PV de QG (en %)** ;
    à égalité parfaite, **match nul**.
 3. **Abandon** ou **déconnexion > 20 s** → défaite. Les deux déconnectés → combat annulé.
+
+Une **Pompe arrivée au bout de sa durée de vie** n'est pas détruite : elle compte comme survivante.
+Une pose encore en train d'apparaître (délai de 1 s) à la fin compte aussi comme survivante.
 
 ## 💰 Économie et butin
 
