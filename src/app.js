@@ -117,7 +117,8 @@ async function punishSpammer(client, userId, logger) {
 
 // ─────────────────────────────────────────────
 // 🚜 Anti-farm config
-//    Plus de FARM_MAX_PER_HOUR Jeanpips en 1 h → pénalité de 1 h.
+//    Plus de N Jeanpips en 1 h → pénalité de 1 h (N réglable par un admin
+//    depuis l'onglet Accueil : settings.farmMaxPerHour, défaut 10).
 //    Pendant la pénalité :
 //      ❌ ses Jeanpips n'envoient plus rien aux autres
 //      ❌ il n'accumule plus de crédits (ni score)
@@ -125,12 +126,14 @@ async function punishSpammer(client, userId, logger) {
 //      ✅ il peut toujours ouvrir ses boosters
 // ─────────────────────────────────────────────
 const FARM_WINDOW_MS = 60 * 60 * 1000;   // fenêtre glissante : 1 heure
-const FARM_MAX_PER_HOUR = 10;            // au-delà de 10 → pénalité
 const FARM_PENALTY_MS = 60 * 60 * 1000;  // durée de la pénalité : 1 heure
 
 const farmHistory = new Map();      // userId → [timestamps des jeanpips]
 const farmPenalties = new Map();    // userId → timestamp de fin de pénalité
 const farmReleaseTimers = new Map(); // userId → timer de fin de pénalité
+
+/** Limite anti-farm en cours (Jeanpips max par heure glissante). */
+const farmMaxPerHour = () => settings.getFarmMaxPerHour();
 
 /**
  * Temps de pénalité restant pour un user (0 s'il n'est pas pénalisé).
@@ -158,12 +161,24 @@ function recordJeanpipForFarm(userId) {
   recent.push(now);
   farmHistory.set(userId, recent);
 
-  if (recent.length > FARM_MAX_PER_HOUR) {
+  if (recent.length > farmMaxPerHour()) {
     farmPenalties.set(userId, now + FARM_PENALTY_MS);
     farmHistory.delete(userId);
     return true;
   }
   return false;
+}
+
+/**
+ * Où en est un user de son quota anti-farm (pour l'onglet Accueil).
+ * Retourne { used, max, nextFreeMs } : nextFreeMs = délai avant que le plus
+ * ancien Jeanpip de la fenêtre n'en sorte (0 si la fenêtre est vide).
+ */
+function getFarmQuota(userId) {
+  const now = Date.now();
+  const recent = (farmHistory.get(userId) || []).filter((t) => now - t < FARM_WINDOW_MS);
+  const nextFreeMs = recent.length ? Math.max(0, recent[0] + FARM_WINDOW_MS - now) : 0;
+  return { used: recent.length, max: farmMaxPerHour(), nextFreeMs };
 }
 
 /** Formate un temps restant en texte lisible (« 42 min »). */
@@ -181,6 +196,7 @@ function scheduleFarmRelease(client, userId, logger) {
     farmPenalties.delete(userId);
     farmHistory.delete(userId);
     farmReleaseTimers.delete(userId);
+    refreshHomeIfSeen(client, userId, logger); // pénalité terminée → quota à 0
     try {
       await safeSendDM(client, userId, {
         text: `✅ Ton accès au Jeanpip est rétabli !`,
@@ -189,7 +205,7 @@ function scheduleFarmRelease(client, userId, logger) {
             type: 'section',
             text: {
               type: 'mrkdwn',
-              text: `✅ *Ton accès au Jeanpip est rétabli !* :${TARGET_EMOJI}:\n\nTa pénalité anti-farm est terminée. Tu peux de nouveau :\n• 📤 Envoyer des Jeanpips aux autres\n• 💰 Gagner des crédits\n\n_Reste sous ${FARM_MAX_PER_HOUR} Jeanpips par heure pour éviter un nouveau bridage._ 😉`,
+              text: `✅ *Ton accès au Jeanpip est rétabli !* :${TARGET_EMOJI}:\n\nTa pénalité anti-farm est terminée. Tu peux de nouveau :\n• 📤 Envoyer des Jeanpips aux autres\n• 💰 Gagner des crédits\n\n_Reste sous ${farmMaxPerHour()} Jeanpips par heure pour éviter un nouveau bridage._ 😉`,
             },
           },
         ],
@@ -320,6 +336,7 @@ function buildHomeFor(userId) {
     creditsPerJeanpipLabel: creditsPerJeanpipLabel(),
     targetEmoji: TARGET_EMOJI,
     farmRemainingMs: getFarmPenaltyRemaining(userId),
+    farmQuota: getFarmQuota(userId),
     formatRemaining,
     autoTargets: isAdmin ? adminActions.listAutoTargets() : undefined,
   });
@@ -461,13 +478,13 @@ app.event('reaction_added', async ({ event, client, logger }) => {
 
     // ✅ Bot présent + message d'autrui + destinataire inscrit → le Jeanpip compte.
 
-    // 🚜 Anti-farm : plus de 10 Jeanpips en 1 h → pénalité de 1 h.
+    // 🚜 Anti-farm : plus de N Jeanpips en 1 h (réglable) → pénalité de 1 h.
     //    On ne compte que les Jeanpips réellement délivrés.
     let farmBlocked = delivers && getFarmPenaltyRemaining(reactingUserId) > 0;
 
     if (delivers && !farmBlocked && recordJeanpipForFarm(reactingUserId)) {
       farmBlocked = true;
-      logger.warn(`🚜 ANTI-FARM : <@${reactingUserId}> dépasse ${FARM_MAX_PER_HOUR} Jeanpips/h → pénalité 1 h`);
+      logger.warn(`🚜 ANTI-FARM : <@${reactingUserId}> dépasse ${farmMaxPerHour()} Jeanpips/h → pénalité 1 h`);
       await safeSendDM(client, reactingUserId, {
         text: `🚜 Alerte anti-farm : tu es bridé pendant 1 heure.`,
         blocks: [
@@ -475,7 +492,7 @@ app.event('reaction_added', async ({ event, client, logger }) => {
             type: 'section',
             text: {
               type: 'mrkdwn',
-              text: `🚜 *ALERTE ANTI-FARM !* :${TARGET_EMOJI}:\n\nTu as posé *plus de ${FARM_MAX_PER_HOUR} Jeanpips en moins d'une heure*.\n\n*Pendant 1 heure :*\n• ❌ Tes Jeanpips n'envoient plus rien aux autres\n• ❌ Tu n'accumules plus de crédits\n• ✅ Tu continues à *recevoir* des Jeanpips\n• ✅ Tu peux toujours *ouvrir tes boosters*\n\n_Lève le pied, ça revient tout seul dans 1 h._ 😉`,
+              text: `🚜 *ALERTE ANTI-FARM !* :${TARGET_EMOJI}:\n\nTu as posé *plus de ${farmMaxPerHour()} Jeanpips en moins d'une heure*.\n\n*Pendant 1 heure :*\n• ❌ Tes Jeanpips n'envoient plus rien aux autres\n• ❌ Tu n'accumules plus de crédits\n• ✅ Tu continues à *recevoir* des Jeanpips\n• ✅ Tu peux toujours *ouvrir tes boosters*\n\n_Lève le pied, ça revient tout seul dans 1 h._ 😉`,
             },
           },
         ],
@@ -483,6 +500,7 @@ app.event('reaction_added', async ({ event, client, logger }) => {
 
       // ⏰ Prévenir la personne dès que son accès est rétabli (dans 1 h)
       scheduleFarmRelease(client, reactingUserId, logger);
+      refreshHomeIfSeen(client, reactingUserId, logger); // quota → pénalité
     }
 
     if (farmBlocked) {
@@ -1423,6 +1441,7 @@ const ADMIN_MODALS = {
   admin_addmedia_open: home.buildAddMediaModal,
   admin_target_add_open: home.buildAddTargetModal,
   admin_credit_value_open: home.buildCreditValueModal,
+  admin_farm_limit_open: home.buildFarmLimitModal,
 };
 
 for (const [actionId, buildModal] of Object.entries(ADMIN_MODALS)) {
@@ -1527,6 +1546,33 @@ app.view('admin_credit_value_submit', async ({ ack, body, view, client, logger }
     for (const userId of homeViewers) await refreshHome(client, userId, logger);
   } catch (error) {
     logger.error('❌ Erreur dans admin_credit_value_submit:', error);
+  }
+});
+
+// 🚜 Modale « Limite anti-farm » (Jeanpips max par heure, effet immédiat)
+app.view('admin_farm_limit_submit', async ({ ack, body, view, client, logger }) => {
+  const adminId = body.user.id;
+  if (!isAdminUser(adminId, logger, 'admin_farm_limit_submit')) return ack(fieldError('value', 'Réservé aux admins.'));
+
+  const raw = (view.state.values.value.value.value || '').trim();
+  const value = /^\d+$/.test(raw) ? parseInt(raw, 10) : NaN;
+  const result = settings.setFarmMaxPerHour(value);
+  if (!result.ok) {
+    return ack(fieldError('value', result.error === 'invalide'
+      ? `Nombre entier entre ${settings.FARM_MAX_PER_HOUR_MIN} et ${settings.FARM_MAX_PER_HOUR_MAX} attendu.`
+      : `Erreur d'écriture : ${result.detail}`));
+  }
+
+  await ack();
+  logger.info(`🚜 <@${adminId}> a réglé la limite anti-farm à ${result.value} Jeanpips/h (avant : ${result.previous})`);
+  try {
+    await sendAdminResult(client, adminId, {
+      text: `🚜 *Limite anti-farm enregistrée : ${result.value} Jeanpips max par heure et par personne.*\nAvant : ${result.previous}. Effet immédiat ; les pénalités déjà en cours ne changent pas.`,
+    }, logger);
+    // Le quota « x/N » affiché à chacun change → on republie les Accueils ouverts
+    for (const userId of homeViewers) await refreshHome(client, userId, logger);
+  } catch (error) {
+    logger.error('❌ Erreur dans admin_farm_limit_submit:', error);
   }
 });
 
@@ -1641,7 +1687,7 @@ app.command('/jeanpip-help', async ({ command, ack, client, logger }) => {
           type: 'section',
           text: {
             type: 'mrkdwn',
-            text: `🚜 *Anti-farm*\nSi tu poses *plus de ${FARM_MAX_PER_HOUR} Jeanpips en 1 heure*, tu prends une alerte et pendant *1 heure* :\n• ❌ Tes Jeanpips n'envoient plus rien aux autres\n• ❌ Tu n'accumules plus de crédits\n• ✅ Tu continues à *recevoir* des Jeanpips\n• ✅ Tu peux toujours *ouvrir tes boosters*\n\n_Le Jeanpip se déguste, il ne se farme pas._`,
+            text: `🚜 *Anti-farm*\nSi tu poses *plus de ${farmMaxPerHour()} Jeanpips en 1 heure*, tu prends une alerte et pendant *1 heure* :\n• ❌ Tes Jeanpips n'envoient plus rien aux autres\n• ❌ Tu n'accumules plus de crédits\n• ✅ Tu continues à *recevoir* des Jeanpips\n• ✅ Tu peux toujours *ouvrir tes boosters*\n\n_Le Jeanpip se déguste, il ne se farme pas._`,
           },
         },
         { type: 'divider' },

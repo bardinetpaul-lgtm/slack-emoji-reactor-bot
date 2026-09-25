@@ -55,6 +55,7 @@ function attackMode(userId, isAdmin) {
  * @param {string}  ctx.creditsPerJeanpipLabel
  * @param {string}  ctx.targetEmoji
  * @param {number}  ctx.farmRemainingMs   - pénalité anti-farm restante (0 si aucune)
+ * @param {{used, max, nextFreeMs}} ctx.farmQuota - quota anti-farm sur l'heure glissante
  * @param {Function} ctx.formatRemaining  - ms → « 42 min »
  * @param {Array<{id, fixed}>} [ctx.autoTargets] - cibles auto-react (admins)
  */
@@ -94,6 +95,7 @@ function buildHomeView(userId, ctx) {
 
   blocks.push(section(`${scoreLine}\n${attackText}`, attackButton));
   blocks.push({ type: 'context', elements: [{ type: 'mrkdwn', text: `L'attaque envoie un Jeanpip aux 7 dernières personnes inscrites ayant posté dans le channel choisi. _Scores remis à 0 chaque dimanche 20h._` }] });
+  blocks.push(buildFarmQuotaBlock(ctx));
   blocks.push({ type: 'divider' });
 
   // 🎁 Boosters
@@ -139,6 +141,30 @@ function buildHomeView(userId, ctx) {
   return { type: 'home', blocks };
 }
 
+/**
+ * 🚜 Où en est le joueur de son quota anti-farm sur l'heure glissante.
+ * Pas de mise à jour automatique avec le temps (limite Slack) : recalculé à
+ * chaque Jeanpip envoyé et à chaque ouverture de l'onglet.
+ */
+function buildFarmQuotaBlock(ctx) {
+  let text;
+  if (ctx.farmRemainingMs > 0) {
+    text = `🚜 *Pénalité anti-farm :* encore *${ctx.formatRemaining(ctx.farmRemainingMs)}* — tes Jeanpips n'envoient rien aux autres et ne rapportent pas de crédits.`;
+  } else {
+    const { used, max, nextFreeMs } = ctx.farmQuota;
+    const full = used >= max;
+    text = `🚜 *Quota de l'heure :* ${Math.min(used, max)}/${max} Jeanpips${full ? ' — ⚠️ *limite atteinte*' : ''}`;
+    if (full) {
+      text += `
+_Le prochain Jeanpip avant ${ctx.formatRemaining(nextFreeMs)} déclenche 1 h de pénalité._`;
+    } else if (used > 0) {
+      text += `
+_Ton plus ancien Jeanpip sort du compteur dans ${ctx.formatRemaining(nextFreeMs)}._`;
+    }
+  }
+  return { type: 'context', elements: [{ type: 'mrkdwn', text }] };
+}
+
 function buildAdminBlocks(autoTargets) {
   const blocks = [
     { type: 'divider' },
@@ -152,9 +178,10 @@ function buildAdminBlocks(autoTargets) {
         button('🖼️ Ajouter un média', 'admin_addmedia_open'),
         button('🎪 Ajouter une cible', 'admin_target_add_open'),
         button('⚙️ Crédits par Jeanpip', 'admin_credit_value_open'),
+        button('🚜 Limite anti-farm', 'admin_farm_limit_open'),
       ],
     },
-    { type: 'context', elements: [{ type: 'mrkdwn', text: `⚙️ Réglage actuel : *1 Jeanpip envoyé = ${formatCredits(settings.getCreditsPerJeanpip())} crédit(s)*` }] },
+    { type: 'context', elements: [{ type: 'mrkdwn', text: `⚙️ Réglages actuels : *1 Jeanpip envoyé = ${formatCredits(settings.getCreditsPerJeanpip())} crédit(s)* · 🚜 *anti-farm : ${settings.getFarmMaxPerHour()} Jeanpips/h max*` }] },
     section(`🎪 *Cibles auto-react (${autoTargets.length})*${autoTargets.length ? '' : '\n_Aucune cible auto-react configurée._'}`),
   ];
 
@@ -295,8 +322,29 @@ function buildCreditValueModal() {
   ]);
 }
 
+/** 🚜 Modale « Limite anti-farm » (valeur actuelle pré-remplie). */
+function buildFarmLimitModal() {
+  return modal('admin_farm_limit_submit', 'Limite anti-farm', 'Enregistrer', [
+    {
+      type: 'input',
+      block_id: 'value',
+      label: { type: 'plain_text', text: 'Jeanpips max par heure et par personne' },
+      element: {
+        type: 'number_input',
+        action_id: 'value',
+        is_decimal_allowed: false,
+        min_value: String(settings.FARM_MAX_PER_HOUR_MIN),
+        max_value: String(settings.FARM_MAX_PER_HOUR_MAX),
+        initial_value: String(settings.getFarmMaxPerHour()),
+      },
+      hint: { type: 'plain_text', text: `Entier de ${settings.FARM_MAX_PER_HOUR_MIN} à ${settings.FARM_MAX_PER_HOUR_MAX}. Au-delà, 1 h de pénalité. Effet immédiat ; les pénalités en cours ne changent pas.` },
+    },
+  ]);
+}
+
 module.exports = {
   buildHomeView,
+  buildFarmLimitModal,
   buildCreditValueModal,
   buildAttackModal,
   buildGiveAttackModal,
