@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="theme-color" content="#1A201D">
+  <title>Arène · Jeanpip</title>
+  <!-- Chemins relatifs : la page est servie sur …/arena/<id> (derrière un préfixe de proxy) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;600&family=Space+Grotesk:wght@400&display=swap">
+  <link rel="stylesheet" href="../arena.css?v=__ASSET_VERSION__">
+</head>
+<body>
+  <main class="frame" id="frame">
+    <header class="top">
+      <div class="opponent"><span class="dot" aria-hidden="true"></span><span id="opponent">Adversaire</span></div>
+      <span class="clock" id="clock" aria-live="off">2:00</span>
+    </header>
+
+    <!-- ⏳ Préparation -->
+    <section class="phase" id="phase-preparing" hidden>
+      <h1>Prépare ton deck</h1>
+      <p class="muted" id="prep-info">Le combat démarre quand vous êtes prêts tous les deux.</p>
+      <div class="deck-grid" id="prep-deck"></div>
+      <p class="muted small">Les cartes que tu poses sont en jeu : détruites, elles sont perdues. Si tu perds le combat, toutes tes cartes posées sont perdues.</p>
+      <div class="actions">
+        <button type="button" class="btn ghost" id="btn-leave">Quitter</button>
+        <button type="button" class="btn" id="btn-ready">✅ Prêt</button>
+      </div>
+    </section>
+
+    <!-- ⚔️ Combat -->
+    <section class="phase" id="phase-running" hidden>
+      <div class="board-wrap" id="board-wrap">
+        <svg id="board" role="img" aria-label="Arène"></svg>
+        <span class="pill" id="pill" role="status" hidden></span>
+        <span class="x2" id="x2" hidden>×2 élixir</span>
+      </div>
+      <div class="hand-row">
+        <div class="next">
+          <span class="label">Suivante</span>
+          <div class="card small" id="next-card"></div>
+        </div>
+        <div class="hand" id="hand" role="group" aria-label="Main"></div>
+      </div>
+      <div class="elixir" aria-label="Élixir">
+        <span class="badge" id="elixir-count">5</span>
+        <div class="segs" id="elixir-segs"></div>
+      </div>
+    </section>
+
+    <!-- 🏁 Fin -->
+    <section class="phase" id="phase-ended" hidden>
+      <h1 id="result-title">Combat terminé</h1>
+      <p class="muted" id="result-sub"></p>
+      <div class="result" id="result"></div>
+      <p class="muted small">Le récapitulatif t'attend aussi en DM dans Slack.</p>
+    </section>
+
+    <p class="muted center" id="status">Connexion à l'arène…</p>
+  </main>
+
+  <script src="../arena-board.js?v=__ASSET_VERSION__"></script>
+  <script src="../arena.js?v=__ASSET_VERSION__"></script>
+</body>
+</html>

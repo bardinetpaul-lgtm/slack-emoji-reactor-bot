@@ -166,9 +166,61 @@
 <rect x="-8" y="-12" width="7" height="7" rx="2" fill="${WHITE}"/><path d="M6 12L24 -6" fill="none"/><path d="M24 -6L30 5L22 3Z" fill="currentColor"/></g></symbol>`;
   const GRADIENT_DEF = '<linearGradient id="dg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FF6229"/><stop offset="1" stop-color="#FF74CC"/></linearGradient>';
 
-  // Échelles des personnages sur le terrain (DA)
-  const UNIT_SCALE = { tank: 0.62, guerrier: 0.52, tireur: 0.5, essaim: 0.55, pompe: 0.55 };
-  const SWARM_OFFSETS = [[0, -10], [-9, 0], [9, 0]];
+  // ─────────────────────────────────────────────
+  // 👥 Groupes et 🚶 marche
+  //    Une carte = un groupe de personnages en formation. Chaque
+  //    personnage a son sol fixe ; le corps se balance, les jambes
+  //    alternent en marchant (« step »), le Tank et les robes longues
+  //    se dandinent sans pas visible (« sway »), respiration à l'arrêt.
+  //    sprites[url] = 'id' (personnage figé) ou { id, walk }.
+  // ─────────────────────────────────────────────
+  const UNIT_SCALE = { tank: 0.5, guerrier: 0.42, tireur: 0.4, essaim: 0.3, pompe: 0.55 };
+  const FORMATIONS = {
+    1: [[0, 0]],
+    2: [[-9, -2], [9, 2]],
+    3: [[0, -8], [-11, 4], [11, 4]],
+    6: [[-12, -9], [0, -11], [12, -9], [-12, 3], [0, 1], [12, 3]],
+  };
+  const STEP_HZ = { tank: 0.9, guerrier: 1.8, tireur: 1.7, essaim: 2.6 };
+  const GROUND = 'M-20 2A20 7 0 1 0 20 2A20 7 0 1 0 -20 2Z';
+  const spriteOf = (raw) => (!raw ? null : typeof raw === 'string' ? { id: raw, walk: 'none' } : raw);
+
+  function formationOffset(u) {
+    const f = FORMATIONS[u.packSize] || FORMATIONS[1];
+    return f[(u.slot || 0) % f.length] || [0, 0];
+  }
+
+  function renderUnit(u, at, color, sprite, time) {
+    const s = UNIT_SCALE[u.archetype] || 0.42;
+    const [dx, dy] = formationOffset(u);
+    const x = +(at.x + dx).toFixed(2);
+    const y = +(at.y + dy).toFixed(2);
+    const phase = (time / 1000) * (STEP_HZ[u.archetype] || 1.8) * 2 * Math.PI + u.id * 1.7;
+    const sin = Math.sin(phase);
+    const walking = Boolean(u.moving) && sprite.walk !== 'none';
+    const bob = walking ? -Math.abs(sin) * 2.4 : -Math.abs(Math.sin(phase * 0.3)) * 0.8;
+    const tilt = walking ? sin * (sprite.walk === 'sway' ? 5 : 3) : 0;
+    const use = (href) => `<use href="#${href}" x="-45" y="-85" width="90" height="95"/>`;
+    const hpBar = u.hp < u.maxHp ? bar(x, y - 95 * s, 14, u.hp / u.maxHp, color) : '';
+
+    let body;
+    if (sprite.walk === 'step') {
+      const lift = (v) => (walking ? Math.max(0, v) * 4 : 0);
+      const leg = (lx, up, shift) => pathTag(F(R(lx + shift, -15 - up, 7, 15, 3), INK, INK, 1.8));
+      body = use(`${sprite.id}-b`)
+        + leg(-9, lift(sin), walking ? sin * 1.2 : 0)
+        + leg(2, lift(-sin), walking ? -sin * 1.2 : 0)
+        + use(`${sprite.id}-f`);
+    } else if (sprite.walk === 'sway') {
+      body = use(`${sprite.id}-f`);
+    } else {
+      // personnage figé (symbole complet, son sol compris)
+      return `<g transform="translate(${x} ${y}) scale(${s})" style="color:${color}">${use(sprite.id)}</g>${hpBar}`;
+    }
+    return `<g transform="translate(${x} ${y}) scale(${s})" style="color:${color}">`
+      + `<path d="${GROUND}" fill="${color}"/>`
+      + `<g transform="translate(0 ${bob.toFixed(2)}) rotate(${tilt.toFixed(2)} 0 0)">${body}</g></g>${hpBar}`;
+  }
 
   const teamColor = (side, viewer) => (side === viewer ? BLUE : ORANGE);
   const bar = (x, y, w, ratio, color) => pathTag(F(R(x - w / 2, y, w, 5, 2.5), I7)) + pathTag(F(R(x - w / 2, y, Math.max(5, w * ratio), 5, 2.5), color));
@@ -178,7 +230,7 @@
   //    view = engine.publicState(...) ; sprites = { url: symbolId }
   //    fx = [{ type: 'spell', x, y, age }] ; chips = [{ x, y, txt, age, accent? }]
   // ─────────────────────────────────────────────
-  function renderDynamic(view, { arena = 'jardin', sprites = {}, fx = [], chips = [] } = {}) {
+  function renderDynamic(view, { arena = 'jardin', sprites = {}, fx = [], chips = [], time = 0 } = {}) {
     const viewer = view.you;
     const dark = arenaOf(arena).dark;
     const out = [];
@@ -208,7 +260,7 @@
       const at = toBoard(b.lane, b.y, viewer);
       const color = teamColor(b.side, viewer);
       if (b.kind === 'pompe') {
-        if (b.alive && sprites[b.url]) items.push({ y: at.y, svg: `<use href="#${sprites[b.url]}" x="-45" y="-85" width="90" height="95" transform="translate(${at.x} ${at.y}) scale(${UNIT_SCALE.pompe})" style="color:${color}"/>` + (b.hp < b.maxHp ? bar(at.x, at.y - 52, 22, b.hp / b.maxHp, color) : '') });
+        if (b.alive && spriteOf(sprites[b.url])) items.push({ y: at.y, svg: `<use href="#${spriteOf(sprites[b.url]).id}" x="-45" y="-85" width="90" height="95" transform="translate(${at.x} ${at.y}) scale(${UNIT_SCALE.pompe})" style="color:${color}"/>` + (b.hp < b.maxHp ? bar(at.x, at.y - 52, 22, b.hp / b.maxHp, color) : '') });
         continue;
       }
       const king = b.kind === 'qg';
@@ -223,22 +275,10 @@
       items.push({ y: pos.y, svg });
     }
     for (const u of view.units || []) {
-      const id = sprites[u.url];
-      if (!id) continue;
+      const sprite = spriteOf(sprites[u.url]);
+      if (!sprite) continue;
       const at = toBoard(u.lane, u.y, viewer);
-      const color = teamColor(u.side, viewer);
-      const s = UNIT_SCALE[u.archetype] || 0.52;
-      let svg;
-      if (u.archetype === 'essaim') {
-        // les 3 abeilles d'un essaim sont 3 unités du moteur : chacune garde sa place dans le trio
-        const k = (u.id % 3 + 3) % 3;
-        const [dx, dy] = SWARM_OFFSETS[k];
-        svg = `<use href="#${id}" x="-45" y="-85" width="90" height="95" transform="translate(${at.x + dx} ${at.y + dy}) scale(${(s * 0.62).toFixed(3)})" style="color:${color}"/>`;
-      } else {
-        svg = `<use href="#${id}" x="-45" y="-85" width="90" height="95" transform="translate(${at.x} ${at.y}) scale(${s})" style="color:${color}"/>`;
-      }
-      if (u.hp < u.maxHp) svg += bar(at.x, at.y - (u.archetype === 'essaim' ? 36 : 54 * s + 6), u.archetype === 'essaim' ? 14 : 22, u.hp / u.maxHp, color);
-      items.push({ y: at.y, svg });
+      items.push({ y: at.y, svg: renderUnit(u, at, teamColor(u.side, viewer), sprite, time) });
     }
     items.sort((a, b) => a.y - b.y);
     out.push(...under, ...items.map((i) => i.svg));
@@ -375,7 +415,7 @@
         const before = new Map((prev.units || []).map((u) => [u.id, u]));
         view = { ...curr, units: curr.units.map((u) => {
           const p = before.get(u.id);
-          return p ? { ...u, y: p.y + (u.y - p.y) * t } : u;
+          return p ? { ...u, y: p.y + (u.y - p.y) * t, moving: Math.abs(u.y - p.y) > 0.001 } : u;
         }) };
       }
       fx = fx.filter((f) => now - f.born < (f.type === 'ring' ? 800 : 700));
@@ -385,6 +425,7 @@
         sprites,
         fx: fx.map((f) => ({ ...f, age: now - f.born })),
         chips: chips.map((c) => ({ ...c, age: now - c.born })),
+        time: now,
       });
     }
 

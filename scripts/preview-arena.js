@@ -1,14 +1,16 @@
 #!/usr/bin/env node
 // ═══════════════════════════════════════════════════════════
-//  👀 Aperçu animé de l'Arène (sans Slack)
+//  👀 Aperçu JOUABLE de l'Arène (sans Slack)
 //
-//  Deux bots s'affrontent avec de vraies cartes du catalogue : le VRAI
-//  moteur tourne côté serveur à 10 Hz et pousse l'état en SSE, la page
-//  le dessine avec public/arena-board.js (DA « Arènes » + personnages).
-//  Exactement la chaîne de la prod, sans Slack ni collection.
+//  Tu joues le camp du bas contre un bot, sur la vraie page de combat
+//  (public/arena.html + arena.js + arena-board.js), avec de vraies
+//  cartes du catalogue. Le VRAI moteur tourne ici à 10 Hz et pousse
+//  l'état en SSE ; les poses partent en POST : même contrat qu'en prod.
+//  Aucune collection touchée (pas de règlement de fin de combat).
 //
 //  Usage : node scripts/preview-arena.js [port]   (3200 par défaut)
-//          puis http://127.0.0.1:3200/?arena=jardin|port|serveurs
+//          puis http://127.0.0.1:3200/arena/preview?t=jardin
+//          (t = arène : jardin | port | serveurs)
 // ═══════════════════════════════════════════════════════════
 const fs = require('fs');
 const http = require('http');
@@ -19,13 +21,16 @@ console.log = () => {};   // media.js annonce le catalogue au chargement
 const media = require('../src/media');
 const engine = require('../src/game/engine');
 const characters = require('../src/game/characters');
+const { cardImageUrl } = require('../src/cardImages');
 console.log = origLog;
 
 const PORT = parseInt(process.argv[2], 10) || 3200;
-const BOARD_JS = path.join(__dirname, '..', 'public', 'arena-board.js');
+const PUBLIC = path.join(__dirname, '..', 'public');
+const TYPES = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.jpg': 'image/jpeg', '.png': 'image/png' };
+const ARENAS = ['jardin', 'port', 'serveurs'];
 
 // ─────────────────────────────────────────────
-// 🤖 Un combat entre bots
+// 🤖 Combat : toi (A) contre le bot (B)
 // ─────────────────────────────────────────────
 
 function shuffled(list) {
@@ -37,119 +42,120 @@ function shuffled(list) {
   return a;
 }
 
-function newMatch() {
+function newMatch(arena) {
   const pool = shuffled(media.getAllMedia());
   const deck = (cards) => cards.map((m) => ({ url: m.url, title: m.title, rarity: m.rarity }));
-  const copies = (cards) => Object.fromEntries(cards.map((m) => [m.url, 3]));
+  const copies = (cards) => Object.fromEntries(cards.map((m, i) => [m.url, 1 + (i % 3)]));
   const a = pool.slice(0, 8);
   const b = pool.slice(8, 16);
   const state = engine.createMatch({
     id: 'preview', seed: Math.floor(Math.random() * 1e9),
     players: { A: { userId: 'Toi', deck: deck(a), copies: copies(a) }, B: { userId: 'Bot', deck: deck(b), copies: copies(b) } },
   });
-  const cards = [...a, ...b];
   const sprites = {};
-  const symbols = cards.map((m, i) => { sprites[m.url] = `c${i}`; return characters.renderSymbol(m, `c${i}`); }).join('');
-  return { state, sprites, symbols };
+  const images = {};
+  const symbols = [...a, ...b].map((m, i) => {
+    const set = characters.renderSpriteSet(m, `c${i}`);
+    sprites[m.url] = set.sprite;
+    const img = cardImageUrl(m);
+    if (img) images[m.url] = /^https?:/.test(img) ? img : `../${img}`;   // relatif à …/arena/<id>
+    return set.svg;
+  }).join('');
+  return { state, setup: { arena: ARENAS.includes(arena) ? arena : 'jardin', names: { you: 'Toi', opponent: 'Bot Jeanpip' }, symbols, sprites, images } };
 }
 
-/** Bot simple : défend le couloir menacé, sinon pousse ; garde parfois l'élixir. */
-function botAct(state, side) {
-  const p = state.players[side];
-  const playable = p.hand.filter((u) => engine.cardStats(state, side, u).cost <= p.elixir);
-  if (!playable.length || Math.random() < 0.85) return;
+/** Bot : défend le couloir menacé, sinon pousse ; garde parfois l'élixir. */
+function botAct(state) {
+  const p = state.players.B;
+  const playable = p.hand.filter((u) => engine.cardStats(state, 'B', u).cost <= p.elixir);
+  if (!playable.length || Math.random() < 0.9) return;
   const url = playable[Math.floor(Math.random() * playable.length)];
-  const foe = side === 'A' ? 'B' : 'A';
-  const threat = state.units.filter((u) => u.side === foe).sort((x, y) => (side === 'A' ? x.y - y.y : y.y - x.y))[0];
-  const lane = threat ? threat.lane : Math.floor(Math.random() * 3);
-  engine.applyAction(state, side, { type: 'deploy', url, lane });
+  const threat = state.units.filter((u) => u.side === 'A').sort((x, y) => y.y - x.y)[0];
+  engine.applyAction(state, 'B', { type: 'deploy', url, lane: threat ? threat.lane : Math.floor(Math.random() * 3) });
 }
 
+/** Vue « fin de combat » simulée (pas de règlement réel en aperçu). */
+function endedView(state) {
+  const r = state.result;
+  const lost = [];
+  const kept = [];
+  for (const p of r.poses.filter((x) => x.side === 'A')) (r.winner === 'B' || p.status === 'destroyed' ? lost : kept).push(p);
+  const loserPoses = r.poses.filter((x) => x.side === 'B');
+  const loot = r.winner === 'A' && loserPoses.length ? loserPoses[0] : null;
+  return {
+    matchId: 'preview', you: 'A', opponent: 'Bot', phase: 'ended', result: r,
+    summary: { you: { lost, kept, loot, stolen: null, boosterId: r.winner === 'A' ? 'aperçu' : null, credits: r.winner === 'A' ? 10 : 0 } },
+  };
+}
+
+let current = null;
+
 // ─────────────────────────────────────────────
-// 🌐 Page + flux SSE
+// 🌐 Serveur
 // ─────────────────────────────────────────────
 
-const PAGE = `<!DOCTYPE html>
-<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Aperçu Arène</title>
-<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;600&family=Space+Grotesk:wght@400&display=swap" rel="stylesheet">
-<style>
-  body{margin:0;background:#1A201D;color:#F3EFED;font-family:'Inter Tight',sans-serif;display:flex;flex-direction:column;align-items:center;gap:16px;padding:24px 16px}
-  .bar{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
-  a{border-radius:10px;padding:10px 14px;font-weight:600;font-size:14px;background:#242B28;color:#F3EFED;text-decoration:none}
-  a.on{background:#F3EFED;color:#1A201D}
-  .frame{background:#242B28;border-radius:32px;padding:16px;width:min(405px,100%);box-sizing:border-box}
-  svg{display:block;width:100%;height:auto;border-radius:24px}
-  .hud{display:flex;justify-content:space-between;align-items:baseline;padding:12px 8px 0;font-size:14px;color:#C7C9C7}
-  .hud b{font-family:'Space Grotesk',sans-serif;font-weight:400;font-size:28px;color:#F3EFED}
-  .x2{color:#FF73C0;font-weight:600}
-</style></head>
-<body>
-<div class="bar">
-  <a href="?arena=jardin">01 · Le jardin</a><a href="?arena=port">02 · Le port</a><a href="?arena=serveurs">03 · La salle serveur</a>
-</div>
-<div class="frame">
-  <svg id="board"></svg>
-  <div class="hud"><span id="score">Tours 0 – 0</span><b id="clock">2:00</b><span id="x2"></span></div>
-</div>
-<script src="/arena-board.js"></script>
-<script>
-  const arena = new URLSearchParams(location.search).get('arena') || 'jardin';
-  document.querySelectorAll('.bar a').forEach((a) => a.classList.toggle('on', a.getAttribute('href') === '?arena=' + arena));
-  let renderer = null;
-  const es = new EventSource('/stream');
-  es.addEventListener('setup', (e) => {
-    const { symbols, sprites } = JSON.parse(e.data);
-    if (renderer) renderer.stop();
-    renderer = ArenaBoard.createRenderer(document.getElementById('board'), { arena, symbols, sprites });
+function readBody(req) {
+  return new Promise((resolve) => {
+    let data = '';
+    req.on('data', (c) => { data += c; });
+    req.on('end', () => { try { resolve(JSON.parse(data || '{}')); } catch { resolve({}); } });
   });
-  es.addEventListener('state', (e) => {
-    const v = JSON.parse(e.data);
-    if (renderer) renderer.push(v);
-    const s = Math.ceil(v.remainingMs / 1000);
-    document.getElementById('clock').textContent = Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
-    document.getElementById('score').textContent = 'Tours ' + v.players.A.towersDestroyed + ' – ' + v.players.B.towersDestroyed;
-    document.getElementById('x2').innerHTML = v.doubleElixir ? '<span class="x2">×2 élixir</span>' : '';
-  });
-</script>
-</body></html>`;
+}
 
-const server = http.createServer((req, res) => {
+const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://127.0.0.1:${PORT}`);
-  if (url.pathname === '/') {
-    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-    return res.end(PAGE);
+
+  if (url.pathname === '/arena/preview') {
+    const html = fs.readFileSync(path.join(PUBLIC, 'arena.html'), 'utf-8').replace(/__ASSET_VERSION__/g, String(Date.now()));
+    res.writeHead(200, { 'Content-Type': TYPES['.html'] });
+    return res.end(html);
   }
-  if (url.pathname === '/arena-board.js') {
-    res.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8' });
-    return res.end(fs.readFileSync(BOARD_JS));
-  }
-  if (url.pathname === '/stream') {
+
+  if (url.pathname === '/api/arena/preview/stream') {
     res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });
     const send = (event, data) => res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
-    let match = newMatch();
-    let pause = 0;
-    send('setup', { symbols: match.symbols, sprites: match.sprites });
+    const arena = url.searchParams.get('t');
+    let match = newMatch(arena);
+    current = match;
+    let endedFor = 0;
+    send('setup', match.setup);
     const timer = setInterval(() => {
       if (match.state.status === 'ended') {
-        pause += 1;
-        if (pause < 30) return;   // 3 s sur l'écran de fin, puis un nouveau combat
-        match = newMatch();
-        pause = 0;
-        send('setup', { symbols: match.symbols, sprites: match.sprites });
+        if (endedFor === 0) send('state', endedView(match.state));
+        endedFor += 1;
+        if (endedFor < 80) return;   // 8 s sur l'écran de fin, puis revanche
+        match = newMatch(arena);
+        current = match;
+        endedFor = 0;
+        send('setup', match.setup);
       }
-      botAct(match.state, 'A');
-      botAct(match.state, 'B');
+      botAct(match.state);
       const events = engine.tick(match.state, engine.STEP_MS);
-      send('state', { ...engine.publicState(match.state, 'A'), events });
+      if (match.state.status === 'running') {
+        send('state', { matchId: 'preview', you: 'A', opponent: 'Bot', phase: 'running', ...engine.publicState(match.state, 'A'), events });
+      }
     }, engine.STEP_MS);
     req.on('close', () => clearInterval(timer));
     return undefined;
+  }
+
+  if (url.pathname === '/api/arena/preview/action' && req.method === 'POST') {
+    const action = await readBody(req);
+    const result = current ? engine.applyAction(current.state, 'A', action) : { ok: false, reason: 'not_running' };
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    return res.end(JSON.stringify({ ok: result.ok, reason: result.reason }));
+  }
+
+  // Fichiers statiques de public/
+  const file = path.normalize(path.join(PUBLIC, url.pathname));
+  if (file.startsWith(PUBLIC) && fs.existsSync(file) && fs.statSync(file).isFile()) {
+    res.writeHead(200, { 'Content-Type': TYPES[path.extname(file)] || 'application/octet-stream' });
+    return res.end(fs.readFileSync(file));
   }
   res.writeHead(404);
   return res.end();
 });
 
 server.listen(PORT, '127.0.0.1', () => {
-  console.log(`🏟️  Aperçu de l'Arène : http://127.0.0.1:${PORT}/?arena=jardin`);
+  console.log(`🏟️  Aperçu jouable de l'Arène : http://127.0.0.1:${PORT}/arena/preview?t=jardin  (ou port, serveurs)`);
 });

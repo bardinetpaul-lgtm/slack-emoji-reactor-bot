@@ -28,14 +28,17 @@ Chaque carte du catalogue (125 cartes) reçoit un **archétype**, déterminé ai
 1. `data/card-overrides.json` s'il contient une entrée pour la carte (clé = URL du média) ;
 2. sinon, tirage **stable** : `sha256(url)` → nombre dans [0, 100) → archétype selon la répartition.
 
-| Archétype | Part | Coût | PV | DPS | Portée | Vitesse | Cible |
-|---|---|---|---|---|---|---|---|
-| 🛡 Tank | 20 % | 5 | 1400 | 45 | mêlée | lente | **bâtiments uniquement** (tours, QG, Pompe) |
-| ⚔️ Guerrier | 27 % | 3 | 500 | 70 | mêlée | moyenne | tout |
-| 🏹 Tireur | 23 % | 3 | 320 | 80 | distance | moyenne | tout |
-| 🐝 Essaim | 15 % | 3 | 3 × 230 | 3 × 42 | mêlée | rapide | tout |
-| 💥 Sort | 10 % | 4 | – | 350 en zone | – | instantané | 1re unité ennemie du couloir (sinon Pompe, tour, QG), dégâts en zone autour, **40 % sur les bâtiments** |
-| ⚗️ Pompe | 5 % | 4 | 500 | – | – | immobile | +1 élixir / 7 s pendant 45 s |
+**Une carte de combattants pose toujours un groupe** (jamais un personnage seul) ; PV et DPS sont
+donnés par personnage.
+
+| Archétype | Part | Coût | Groupe | PV / perso | DPS / perso | Portée | Vitesse | Cible |
+|---|---|---|---|---|---|---|---|---|
+| 🛡 Tank | 20 % | 5 | ×2 | 700 | 22,5 | mêlée | lente | **bâtiments uniquement** (tours, QG, Pompe) |
+| ⚔️ Guerrier | 27 % | 3 | ×3 | 170 | 24 | mêlée | moyenne | tout |
+| 🏹 Tireur | 23 % | 3 | ×3 | 115 | 29 | distance | moyenne | tout |
+| 🐝 Essaim | 15 % | 3 | ×6 | 105 | 20 | mêlée | rapide | tout |
+| 💥 Sort | 10 % | 4 | – | – | 350 en zone | – | instantané | 1re unité ennemie du couloir (sinon Pompe, tour, QG), dégâts en zone autour, **40 % sur les bâtiments** |
+| ⚗️ Pompe | 5 % | 4 | bâtiment | 500 | – | – | immobile | +1 élixir / 7 s pendant 45 s |
 
 ### Rareté
 
@@ -69,10 +72,10 @@ Mesuré par `scripts/simulate-balance.js` sur le vrai moteur (contres, tours, Po
 
 | Rareté | Duel à élixir égal (carte + 1 commune contre toutes les mains communes de même coût) | Combat complet de 2 min, 1 carte de cette rareté dans le deck, contre deck 100 % commun |
 |---|---|---|
-| ⚪ Commune | 50 % (archétypes : 46 à 52 %) | – |
-| 🔵 Rare | 60 % | 51 % |
-| 🟣 Épique | 63 % | 53 % |
-| 🟡 Légendaire | 69 % | 57 % |
+| ⚪ Commune | 50 % (archétypes : 48 à 52 %) | – |
+| 🔵 Rare | 57 % | 51 % |
+| 🟣 Épique | 65 % | 55 % |
+| 🟡 Légendaire | 68 % | 56 % |
 
 Un surcoût d'élixir pour les raretés hautes a été testé puis écarté : il les rendait plus faibles
 que les rares en duel.
@@ -121,6 +124,16 @@ hors de [35 %, 65 %].
 
 Une **Pompe arrivée au bout de sa durée de vie** n'est pas détruite : elle compte comme survivante.
 Une pose encore en train d'apparaître (délai de 1 s) à la fin compte aussi comme survivante.
+
+## 🎨 Rendu (DA Claude Design)
+
+- **Personnages** : `src/game/characters.js`, un par Jeanpip (graine = URL), DA « Personnages - 125 cartes ».
+- **Terrain** : `public/arena-board.js`, DA « Arènes » (Le jardin, Le port, La salle serveur), plan 360×640,
+  chaque joueur voit son camp en bas (bleu), l'adversaire en haut (orange).
+- **Écran de combat** : `public/arena.html/.css/.js`, DA « Combat - Menu de pose » : toucher une carte,
+  puis un point de sa moitié (couloir le plus proche ; chez l'adversaire = pose avancée si brèche).
+- **Animations** : groupes en formation, marche (jambes qui alternent, corps qui se balance ; Tank et
+  robes longues se dandinent sans pas visible), respiration à l'arrêt, anneau de pose, Sorts, chips de dégâts.
 
 ## 💰 Économie et butin
 

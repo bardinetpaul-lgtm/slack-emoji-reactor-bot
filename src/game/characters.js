@@ -193,9 +193,11 @@ function applyOverrides(silhouette, layers, custom) {
 function buildFighter(silhouette, L) {
   const light = L.body === CREAM || L.body === WHITE;
   const tank = silhouette === 'tank';
-  const parts = [P('M-20 2A20 7 0 1 0 20 2A20 7 0 1 0 -20 2Z', 'currentColor', 0)];
-  if (L.cape) parts.push(P('M-12 -34L-19 -3Q0 3 19 -3L12 -34Z', L.accent2));
-  if (!L.robe) parts.push(P(R(-9, -15, 7, 15, 3), INK), P(R(2, -15, 7, 15, 3), INK));
+  const tag = (layer, ...ps) => ps.map((p) => ({ ...p, layer }));
+  const parts = tag('ground', P('M-20 2A20 7 0 1 0 20 2A20 7 0 1 0 -20 2Z', 'currentColor', 0));
+  if (L.cape) parts.push(...tag('back', P('M-12 -34L-19 -3Q0 3 19 -3L12 -34Z', L.accent2)));
+  if (!L.robe) parts.push(...tag('legs', P(R(-9, -15, 7, 15, 3), INK), P(R(2, -15, 7, 15, 3), INK)));
+  const front = parts.length;
   if (tank) parts.push(P('M-19 -13L-17 -37Q0 -43 17 -37L19 -13Q0 -8 -19 -13Z', L.body));
   else if (L.robe) parts.push(P('M-15 -1L-10 -34Q0 -38 10 -34L15 -1Q0 3 -15 -1Z', L.body));
   else parts.push(P('M-13 -13L-11 -34Q0 -39 11 -34L13 -13Q0 -9 -13 -13Z', L.body));
@@ -209,6 +211,7 @@ function buildFighter(silhouette, L) {
   parts.push(P(C(0, -46, 11), L.skin), P(C(-4, -43, 1.7), INK, 0), P(C(4, -43, 1.7), INK, 0));
   parts.push(...HEAD[L.head](L.accent, L.accent2));
   parts.push(...WEAP[L.weapon](L.accent, L.accent2));
+  for (let i = front; i < parts.length; i += 1) parts[i] = { ...parts[i], layer: 'front' };
   return parts;
 }
 
@@ -247,7 +250,11 @@ function describeCharacter(card) {
   const layers = applyOverrides(silhouette, rollLayers(silhouette, rng(hash(String(card.url)))), override && override.character);
   const kind = silhouette === 'pompe' || silhouette === 'sort' ? silhouette : 'fighter';
   const parts = kind === 'pompe' ? buildPompe(layers) : kind === 'sort' ? buildSort(layers) : buildFighter(silhouette, layers);
-  return { archetype, silhouette, kind, swarm: silhouette === 'essaim', layers, parts };
+  // Marche : pas visibles (jambes), sauf Tank (marche lourde, pas de pas
+  // visible, DA) et robe longue (glisse) ; bâtiments et sorts immobiles.
+  let walk = 'none';
+  if (kind === 'fighter') walk = silhouette === 'tank' || layers.robe ? 'sway' : 'step';
+  return { archetype, silhouette, kind, swarm: silhouette === 'essaim', walk, layers, parts };
 }
 
 // ─────────────────────────────────────────────
@@ -260,6 +267,27 @@ const pathTag = (p) => `<path d="${p.d}" fill="${p.fill}" stroke="${INK}" stroke
 function renderSymbol(card, id) {
   const { parts } = describeCharacter(card);
   return `<symbol id="${id}" viewBox="${VIEWBOX}" overflow="visible">${parts.map(pathTag).join('')}</symbol>`;
+}
+
+/**
+ * Jeu de symboles pour l'animation de marche sur le terrain :
+ *   <id>    personnage complet (cartes, galerie)
+ *   <id>-b  dos (cape) · <id>-f  avant (corps, tête, arme) — marche « step »
+ *   <id>-f  tout sauf le sol — marche « sway » (Tank, robe longue)
+ * Le sol et les jambes sont dessinés par le terrain (public/arena-board.js).
+ * → { svg, sprite: { id, walk } }
+ */
+function renderSpriteSet(card, id) {
+  const c = describeCharacter(card);
+  const sym = (sid, parts) => `<symbol id="${sid}" viewBox="${VIEWBOX}" overflow="visible">${parts.map(pathTag).join('')}</symbol>`;
+  let svg = sym(id, c.parts);
+  if (c.walk === 'step') {
+    svg += sym(`${id}-b`, c.parts.filter((p) => p.layer === 'back'));
+    svg += sym(`${id}-f`, c.parts.filter((p) => p.layer === 'front'));
+  } else if (c.walk === 'sway') {
+    svg += sym(`${id}-f`, c.parts.filter((p) => p.layer !== 'ground'));   // tout sauf le sol
+  }
+  return { svg, sprite: { id, walk: c.walk } };
 }
 
 /** Les <use> d'un personnage (essaim = 3 exemplaires à 60 %), comme dans la DA. */
@@ -299,6 +327,7 @@ module.exports = {
   POOLS,
   describeCharacter,
   renderSymbol,
+  renderSpriteSet,
   renderUse,
   renderSvg,
   describeText,

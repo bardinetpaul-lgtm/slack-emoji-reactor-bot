@@ -51,10 +51,10 @@ const view = {
     { id: 5, side: 'A', kind: 'pompe', lane: 1, y: 18, hp: 500, maxHp: 500, alive: true, url: 'p' },
   ],
   units: [
-    { id: 10, side: 'A', lane: 1, y: 40, hp: 300, maxHp: 500, archetype: 'guerrier', url: 'g' },
-    { id: 11, side: 'B', lane: 1, y: 60, hp: 230, maxHp: 230, archetype: 'essaim', url: 'e' },
-    { id: 12, side: 'B', lane: 1, y: 61, hp: 230, maxHp: 230, archetype: 'essaim', url: 'e' },
-    { id: 13, side: 'B', lane: 1, y: 62, hp: 230, maxHp: 230, archetype: 'essaim', url: 'e' },
+    { id: 10, side: 'A', lane: 1, y: 40, hp: 100, maxHp: 170, archetype: 'guerrier', url: 'g', slot: 0, packSize: 3 },
+    { id: 11, side: 'B', lane: 1, y: 60, hp: 105, maxHp: 105, archetype: 'essaim', url: 'e', slot: 0, packSize: 6 },
+    { id: 12, side: 'B', lane: 1, y: 61, hp: 105, maxHp: 105, archetype: 'essaim', url: 'e', slot: 1, packSize: 6 },
+    { id: 13, side: 'B', lane: 1, y: 62, hp: 105, maxHp: 105, archetype: 'essaim', url: 'e', slot: 2, packSize: 6 },
   ],
   pending: [{ side: 'B', url: 'g2', lane: 0, archetype: 'tireur' }],
 };
@@ -64,11 +64,28 @@ check('scène : SVG au format du plan 360×640', svg.startsWith('<svg') && svg.i
 check('scène : tour détruite en ruine', svg.includes('#t-ruine'));
 check('scène : tour principale', svg.includes('#t-king'));
 check('scène : mes unités en bleu, les adverses en orange', svg.includes('#s1') && svg.includes('#1C72F1') && svg.includes('#FF6229'));
-check('scène : essaim = 3 unités du moteur, 3 personnages', (svg.match(/href="#s2"/g) || []).length === 3);
+check('scène : chaque personnage du groupe est dessiné', (svg.match(/href="#s2"/g) || []).length === 3);
 check('scène : Pompe dessinée avec son personnage', svg.includes('href="#s3"'));
 check('scène : pose en cours d\'apparition visible', svg.includes('stroke-dasharray="3 5"'));
 check('scène : barre de vie de la tour abîmée', svg.includes('#FF6229') && svg.includes('#2F3733'));
 check('scène : aucune valeur cassée', !/NaN|undefined/.test(svg));
+
+// 🚶 Marche et formations
+const walker = { id: 20, side: 'A', lane: 0, y: 30, hp: 170, maxHp: 170, archetype: 'guerrier', url: 'w', slot: 1, packSize: 3, moving: true };
+const wv = { you: 'A', buildings: [], units: [walker] };
+const wsprites = { w: { id: 'w1', walk: 'step' } };
+const f1 = board.renderDynamic(wv, { sprites: wsprites, time: 0 });
+const f2 = board.renderDynamic(wv, { sprites: wsprites, time: 180 });
+check('marche : calques dos + jambes + avant', f1.includes('#w1-b') && f1.includes('#w1-f'));
+check('marche : l\'image change au fil du temps', f1 !== f2);
+check('marche : sol fixe sous le personnage', f1.includes('M-20 2A20 7'));
+const legsOf = (svg) => svg.split('#w1-b')[1].split('#w1-f')[0];
+const still = { ...wv, units: [{ ...walker, moving: false }] };
+check('à l\'arrêt : les jambes ne bougent pas', legsOf(board.renderDynamic(still, { sprites: wsprites, time: 0 })) === legsOf(board.renderDynamic(still, { sprites: wsprites, time: 180 })));
+const pos = (slot) => board.renderDynamic({ ...wv, units: [{ ...walker, slot }] }, { sprites: wsprites }).match(/translate\(([\d.-]+) ([\d.-]+)\) scale/).slice(1).join();
+check('formation : chaque membre du groupe a sa place', new Set([0, 1, 2].map(pos)).size === 3);
+const tank = board.renderDynamic({ ...wv, units: [{ ...walker, archetype: 'tank', url: 't', packSize: 2 }] }, { sprites: { t: { id: 't1', walk: 'sway' } }, time: 100 });
+check('Tank : balancement sans jambes animées', tank.includes('#t1-f') && !tank.includes('#t1-b'));
 
 // 👆 Menu de pose : point touché → couloir (DA « Combat - Menu de pose »)
 const noBreach = { you: 'A', buildings: [0, 1, 2].map((lane) => ({ side: 'B', kind: 'tower', lane, alive: true })) };

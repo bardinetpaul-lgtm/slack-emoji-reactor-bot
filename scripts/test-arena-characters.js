@@ -96,6 +96,16 @@ check('SVG : dégradé DA défini', svg.includes('id="dg"'));
 const sym = characters.renderSymbol(card('essaim-1'), 'p1');
 check('symbole réutilisable', sym.startsWith('<symbol id="p1"') && sym.includes('<path'));
 check('essaim : 3 exemplaires dans le rendu', (characters.renderUse(card('essaim-1'), 'p1').match(/<use /g) || []).length === 3);
+const set = characters.renderSpriteSet(card('guerrier-1'), 'g1');
+const walker = characters.describeCharacter(card('guerrier-1'));
+check('marche : Mêlée sans robe = pas visibles', walker.walk === 'step' && set.sprite.walk === 'step');
+check('marche : symboles dos + avant pour animer les jambes', set.svg.includes('id="g1-b"') && set.svg.includes('id="g1-f"') && set.svg.includes('id="g1"'));
+const legs = walker.parts.filter((p) => p.layer === 'legs').map((p) => p.d);
+const frontSym = set.svg.split('id="g1-f"')[1];
+check('marche : jambes absentes des calques dos / avant', legs.length === 2 && legs.every((d) => !frontSym.includes(d) && !set.svg.split('id="g1-b"')[1].split('</symbol>')[0].includes(d)));
+check('marche : Tank = pas de pas visible (balancement)', tanks.every((c) => c.walk === 'sway'));
+check('marche : robe longue = glisse', dist.filter((c) => c.layers.robe).every((c) => c.walk === 'sway'));
+check('marche : Pompe et Sort immobiles', pumps.every((c) => c.walk === 'none') && spells.every((c) => c.walk === 'none'));
 check('description texte pour Slack', /Tank/.test(characters.describeText(card('tank-1'))));
 
 // 📚 Tout le catalogue, et tout nouveau Jeanpip, a son perso
