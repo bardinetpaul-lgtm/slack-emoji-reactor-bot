@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="theme-color" content="#0b1422">
+  <title>Ouverture de booster · Jeanpip</title>
+  <!-- Chemins relatifs : la page est servie sur …/open/<id> (derrière un préfixe de proxy) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;600;800&display=swap">
+  <link rel="stylesheet" href="../open.css">
+</head>
+<body>
+  <div class="bg" aria-hidden="true"></div>
+  <div class="veil" aria-hidden="true"></div>
+  <div class="beams" aria-hidden="true"><i></i><i></i><i></i></div>
+  <div class="flash" aria-hidden="true"></div>
+  <canvas id="fx" aria-hidden="true"></canvas>
+
+  <header class="topbar">
+    <div class="brand">JEANPIP <span>PACK OPENING</span></div>
+    <div class="controls">
+      <button type="button" id="btn-sound" class="icon-btn" aria-pressed="false" title="Activer le son">🔇</button>
+      <button type="button" id="btn-skip" class="pill-btn" hidden>Passer ⏭</button>
+    </div>
+  </header>
+
+  <main id="stage" aria-live="polite">
+    <!-- ⏳ Chargement -->
+    <section class="screen is-active" id="screen-loading">
+      <div class="loader"></div>
+      <p class="hint">Préparation du booster…</p>
+    </section>
+
+    <!-- 🎁 Le pack -->
+    <section class="screen" id="screen-pack">
+      <p class="replay-tag" hidden>🔁 Rediffusion — tes cartes sont déjà dans ta collection</p>
+      <button type="button" class="pack" id="pack" aria-label="Ouvrir le booster">
+        <span class="pack-half top"><span class="pack-face"></span></span>
+        <span class="pack-half bottom"><span class="pack-face"></span></span>
+      </button>
+      <p class="hint pulse">Touche le booster pour l'ouvrir</p>
+    </section>
+
+    <!-- ✨ Walkout -->
+    <section class="screen" id="screen-walkout">
+      <p class="walkout-text" id="walkout-text"></p>
+    </section>
+
+    <!-- 🎴 Révélations -->
+    <section class="screen" id="screen-reveal">
+      <div class="spotlight" id="spotlight"></div>
+      <p class="reveal-counter" id="reveal-counter"></p>
+      <div class="mini-grid" id="mini-grid"></div>
+    </section>
+
+    <!-- 🏁 Récap -->
+    <section class="screen" id="screen-recap">
+      <h1 class="recap-title" id="recap-title"></h1>
+      <p class="recap-stats" id="recap-stats"></p>
+      <div class="recap-grid" id="recap-grid"></div>
+      <div class="recap-actions">
+        <a class="pill-btn primary" href="slack://open">Retour à Slack</a>
+        <button type="button" class="pill-btn" id="btn-replay">Revoir l'ouverture</button>
+      </div>
+      <p class="hint small">Clique sur une carte pour voir le média en grand.</p>
+    </section>
+
+    <!-- ⚠️ Erreurs -->
+    <section class="screen" id="screen-error">
+      <div class="error-box">
+        <div class="error-emoji" id="error-emoji">😕</div>
+        <h1 id="error-title">Oups</h1>
+        <p id="error-text"></p>
+        <a class="pill-btn primary" href="slack://open">Retour à Slack</a>
+      </div>
+    </section>
+  </main>
+
+  <script src="../open.js"></script>
+</body>
+</html>
