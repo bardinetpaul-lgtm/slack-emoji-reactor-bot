@@ -54,7 +54,8 @@ async function test(name, fn) {
 }
 
 (async () => {
-  const server = web.startWebServer({ client: fakeClient, logger: quiet, port: 0 });
+  const openedFor = []; // appels du hook onOpened (rafraîchissement de l'Accueil)
+  const server = web.startWebServer({ client: fakeClient, logger: quiet, port: 0, onOpened: (u) => openedFor.push(u) });
   await new Promise((r) => server.once('listening', r));
   const base = `http://127.0.0.1:${server.address().port}`;
   const tokenOf = (id, owner) => new URL(web.buildOpenUrl(id, owner)).searchParams.get('t');
@@ -118,6 +119,7 @@ async function test(name, fn) {
     await new Promise((r) => setTimeout(r, 20));
     assert.strictEqual(updates.length, 1);
     assert.strictEqual(updates[0].channel, 'D_A');
+    assert.deepStrictEqual(openedFor, ['U_A'], 'onOpened appelé une fois pour le propriétaire');
     firstCards = data.cards;
   });
 
@@ -127,6 +129,8 @@ async function test(name, fn) {
     assert.deepStrictEqual(data.cards, firstCards);
     assert.strictEqual(totalCards('U_A'), 8);
     assert.strictEqual(updates.length, 1);
+    await new Promise((r) => setTimeout(r, 20));
+    assert.deepStrictEqual(openedFor, ['U_A'], 'onOpened rappelé sur un rejeu');
   });
 
   await test('ouvert en web → le bouton Slack répond « déjà ouvert (web) »', () => {
@@ -150,6 +154,20 @@ async function test(name, fn) {
     const statuses = (await Promise.all(responses.map((r) => r.json()))).map((d) => d.status).sort();
     assert.deepStrictEqual(statuses, ['opened', 'replay', 'replay', 'replay']);
     assert.strictEqual(totalCards('U_C'), 8);
+  });
+
+  await test('onOpened : seulement les vraies ouvertures web (pas token invalide, rejeu, déjà ouvert Slack)', async () => {
+    await new Promise((r) => setTimeout(r, 20));
+    assert.deepStrictEqual(openedFor, ['U_A', 'U_C']);
+  });
+
+  await test('onOpened qui plante → la page répond quand même', async () => {
+    const idE = boosters.createPending('U_E', 'common');
+    const s2 = web.startWebServer({ client: fakeClient, logger: quiet, port: 0, onOpened: () => { throw new Error('boum'); } });
+    await new Promise((r) => s2.once('listening', r));
+    const res = await fetch(`http://127.0.0.1:${s2.address().port}/api/open/${idE}?t=${tokenOf(idE, 'U_E')}`, { method: 'POST' });
+    assert.strictEqual((await res.json()).status, 'opened');
+    s2.close();
   });
 
   await test('mauvais propriétaire côté Slack → forbidden', () => {

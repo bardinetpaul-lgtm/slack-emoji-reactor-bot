@@ -169,8 +169,8 @@ confirmations arrivent en DM.
 actions admin. Pour les passages « passifs » (crédits gagnés via une réaction, ouverture de
 booster, cadeau d'un admin), `refreshHomeIfSeen()` ne republie que pour les users ayant
 ouvert l'Accueil depuis le démarrage (Set en mémoire) → pas de `views.publish` à chaque
-réaction de tout le workspace. Limite connue : une ouverture animée (page web) ne republie pas
-l'Accueil → le compteur « non ouverts » se met à jour à la prochaine ouverture de l'onglet.
+réaction de tout le workspace. Une ouverture animée (page web) prévient
+le bot via le hook `onOpened` de `startWebServer` → l'Accueil est rafraîchi aussi (1re ouverture seulement).
 
 ---
 

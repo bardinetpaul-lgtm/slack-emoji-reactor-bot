@@ -1694,7 +1694,12 @@ async function sendDM(client, userId, message) {
 
   // 🎬 Page d'ouverture animée (si WEB_PUBLIC_URL est défini)
   try {
-    web.startWebServer({ client: app.client, logger: console });
+    web.startWebServer({
+      client: app.client,
+      logger: console,
+      // 🏠 Ouverture animée → compteur « boosters non ouverts » de l'Accueil à jour
+      onOpened: (userId) => refreshHomeIfSeen(app.client, userId, console),
+    });
   } catch (webError) {
     console.error('❌ Serveur web non démarré :', webError.message);
   }

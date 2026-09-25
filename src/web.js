@@ -194,7 +194,7 @@ async function updatePurchaseMessage(client, pending, cards, counts, logger) {
   }
 }
 
-function handleOpen(res, id, token, { client, logger }) {
+function handleOpen(res, id, token, { client, logger, onOpened }) {
   const pending = boosters.getPending(id);
   if (!pending) return sendJson(res, 404, { status: 'not_found' });
   if (!verifyToken(id, pending.owner, token)) return sendJson(res, 403, { status: 'invalid' });
@@ -217,6 +217,12 @@ function handleOpen(res, id, token, { client, logger }) {
   if (result.status === 'opened') {
     logger.info(`🎬 <@${pending.owner}> ouvre le booster ${pending.type} avec l'animation (id ${id})`);
     updatePurchaseMessage(client, pending, result.cards, result.counts, logger);
+    // 🏠 Prévient le bot (ex. rafraîchir l'onglet Accueil) — jamais bloquant
+    if (onOpened) {
+      Promise.resolve()
+        .then(() => onOpened(pending.owner))
+        .catch((e) => logger.error('[web] onOpened:', e.message));
+    }
   }
 
   return sendJson(res, 200, {
@@ -271,15 +277,17 @@ function createHandler(deps) {
 /**
  * Démarre le serveur web (si WEB_PUBLIC_URL est défini).
  * Une erreur ici ne fait jamais tomber le bot.
+ * @param {Function} [opts.onOpened] - (userId) appelé après une PREMIÈRE ouverture
+ *                                      animée (pas lors d'un rejeu du lien)
  * @returns {http.Server|null}
  */
-function startWebServer({ client, logger = console, port = WEB_PORT, host = '127.0.0.1', force = false }) {
+function startWebServer({ client, logger = console, port = WEB_PORT, host = '127.0.0.1', force = false, onOpened }) {
   if (!isEnabled() && !force) {
     logger.info('🎬 Page d\'ouverture animée désactivée (WEB_PUBLIC_URL vide)');
     return null;
   }
   getSecret();
-  const server = http.createServer(createHandler({ client, logger }));
+  const server = http.createServer(createHandler({ client, logger, onOpened }));
   server.on('error', (err) => logger.error('[web] serveur:', err.message));
   server.listen(port, host, () => {
     logger.info(`🎬 Page d'ouverture animée : http://${host}:${port} → ${WEB_PUBLIC_URL || '(test)'}`);
