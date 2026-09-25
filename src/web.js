@@ -131,6 +131,40 @@ function serveStatic(res, pathname) {
 }
 
 // ─────────────────────────────────────────────
+// 🏷️ Page d'ouverture avec version des assets
+//    Cloudflare impose un cache navigateur de 4 h sur .css/.js (il écrase
+//    notre no-cache) : open.css?v=<hash> change dès que le contenu change,
+//    donc une mise à jour est vue tout de suite, sans purge ni Ctrl+F5.
+//    Calculé une fois (les fichiers ne changent qu'au déploiement = restart).
+// ─────────────────────────────────────────────
+
+let assetVersion = null;
+
+function getAssetVersion() {
+  if (assetVersion) return assetVersion;
+  const hash = crypto.createHash('sha1');
+  for (const name of ['open.css', 'open.js']) {
+    try {
+      hash.update(fs.readFileSync(path.join(PUBLIC_DIR, name)));
+    } catch {
+      hash.update(name); // fichier absent : version stable quand même
+    }
+  }
+  assetVersion = hash.digest('hex').slice(0, 10);
+  return assetVersion;
+}
+
+function serveOpenPage(res) {
+  fs.readFile(path.join(PUBLIC_DIR, 'open.html'), 'utf-8', (err, html) => {
+    if (err) return send(res, 404, 'Not found');
+    send(res, 200, html.replace(/__ASSET_VERSION__/g, getAssetVersion()), {
+      'Content-Type': STATIC_TYPES['.html'],
+      'Cache-Control': 'no-cache',
+    });
+  });
+}
+
+// ─────────────────────────────────────────────
 // 🎴 Ouverture via la page
 // ─────────────────────────────────────────────
 
@@ -213,7 +247,7 @@ function createHandler(deps) {
       let m;
 
       if (req.method === 'GET' && /^\/open\/[\w-]+$/.test(pathname)) {
-        return serveFile(res, path.join(PUBLIC_DIR, 'open.html'), 'no-cache');
+        return serveOpenPage(res);
       }
       if ((m = /^\/api\/open\/([\w-]+)$/.exec(pathname))) {
         if (req.method !== 'POST') return send(res, 405, 'Method not allowed', { Allow: 'POST' });
