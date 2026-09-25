@@ -9,6 +9,8 @@
 //  Routes (toutes relatives, fonctionnent derrière un préfixe) :
 //    GET  /open/<id>?t=<token>        → page d'animation
 //    POST /api/open/<id>?t=<token>    → ouvre (ou rejoue) le booster
+//    GET  /collection/<user>?t=<token>     → classeur Panini (en direct)
+//    GET  /api/collection/<user>?t=<token> → contenu du classeur (JSON)
 //    GET  /api/card-image/<fileId>    → image d'une carte (proxy + cache)
 //    GET  /<fichier>                  → statiques de public/
 //
@@ -24,6 +26,7 @@ const boosters = require('./boosters');
 const { openOnce } = require('./openBooster');
 const { getCardImage, cardImageUrl } = require('./cardImages');
 const { buildWebOpenedBlocks } = require('./blocks');
+const { buildAlbum } = require('./album');
 
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 const SECRET_PATH = path.join(__dirname, '..', 'data', 'web-secret');
@@ -97,10 +100,34 @@ function signToken(boosterId, ownerId) {
   return crypto.createHmac('sha256', getSecret()).update(`${boosterId}:${ownerId}`).digest('hex');
 }
 
-function verifyToken(boosterId, ownerId, token) {
+function sameToken(expectedHex, token) {
   if (typeof token !== 'string' || !/^[a-f0-9]{64}$/.test(token)) return false;
-  const expected = Buffer.from(signToken(boosterId, ownerId), 'hex');
-  return crypto.timingSafeEqual(expected, Buffer.from(token, 'hex'));
+  return crypto.timingSafeEqual(Buffer.from(expectedHex, 'hex'), Buffer.from(token, 'hex'));
+}
+
+function verifyToken(boosterId, ownerId, token) {
+  return sameToken(signToken(boosterId, ownerId), token);
+}
+
+// 📒 Lien du classeur : permanent, un par joueur. Le « | » n'apparaît jamais
+//    dans un id de booster ([\w-]+) → jamais le même message signé qu'un booster.
+function signCollectionToken(userId) {
+  return crypto.createHmac('sha256', getSecret()).update(`collection|${userId}`).digest('hex');
+}
+
+function verifyCollectionToken(userId, token) {
+  return sameToken(signCollectionToken(userId), token);
+}
+
+/** Chemin relatif du classeur (depuis la racine de la page web). */
+function collectionPath(userId) {
+  return `collection/${encodeURIComponent(userId)}?t=${signCollectionToken(userId)}`;
+}
+
+/** Lien du classeur Panini d'un joueur (null si la page web est désactivée). */
+function buildCollectionUrl(userId) {
+  if (!isEnabled()) return null;
+  return `${WEB_PUBLIC_URL}/${collectionPath(userId)}`;
 }
 
 /** Lien d'ouverture animée d'un booster (null si la page web est désactivée). */
@@ -155,26 +182,28 @@ function serveStatic(res, pathname) {
 //    Calculé une fois (les fichiers ne changent qu'au déploiement = restart).
 // ─────────────────────────────────────────────
 
-let assetVersion = null;
+const assetVersions = {};
 
-function getAssetVersion() {
-  if (assetVersion) return assetVersion;
+function getAssetVersion(names) {
+  const key = names.join('|');
+  if (assetVersions[key]) return assetVersions[key];
   const hash = crypto.createHash('sha1');
-  for (const name of ['open.css', 'open.js']) {
+  for (const name of names) {
     try {
       hash.update(fs.readFileSync(path.join(PUBLIC_DIR, name)));
     } catch {
       hash.update(name); // fichier absent : version stable quand même
     }
   }
-  assetVersion = hash.digest('hex').slice(0, 10);
-  return assetVersion;
+  assetVersions[key] = hash.digest('hex').slice(0, 10);
+  return assetVersions[key];
 }
 
-function serveOpenPage(res) {
-  fs.readFile(path.join(PUBLIC_DIR, 'open.html'), 'utf-8', (err, html) => {
+// Page HTML + ses assets (même nom : open.html → open.css / open.js)
+function servePage(res, name) {
+  fs.readFile(path.join(PUBLIC_DIR, `${name}.html`), 'utf-8', (err, html) => {
     if (err) return send(res, 404, 'Not found');
-    send(res, 200, html.replace(/__ASSET_VERSION__/g, getAssetVersion()), {
+    send(res, 200, html.replace(/__ASSET_VERSION__/g, getAssetVersion([`${name}.css`, `${name}.js`])), {
       'Content-Type': STATIC_TYPES['.html'],
       'Cache-Control': 'no-cache',
     });
@@ -245,7 +274,41 @@ function handleOpen(res, id, token, { client, logger, onOpened }) {
   return sendJson(res, 200, {
     status: result.status === 'opened' ? 'opened' : 'replay',
     booster: boosterInfo,
+    collection: collectionPath(pending.owner),
     cards: result.cards.map((card, i) => toPublicCard(card, result.counts && result.counts[i])),
+  });
+}
+
+// ─────────────────────────────────────────────
+// 📒 Classeur Panini
+// ─────────────────────────────────────────────
+
+// Prénom affiché sur la couverture (users.info, gardé 1 h en mémoire)
+const NAME_TTL_MS = 60 * 60 * 1000;
+const names = new Map();
+
+async function displayName(client, userId, logger) {
+  const cached = names.get(userId);
+  if (cached && Date.now() - cached.at < NAME_TTL_MS) return cached.name;
+  let name = null;
+  try {
+    const info = await client.users.info({ user: userId });
+    const u = info.user || {};
+    name = (u.profile && (u.profile.display_name || u.profile.real_name)) || u.real_name || u.name || null;
+  } catch (e) {
+    logger.warn(`[web] nom de ${userId} : ${e.message}`);
+  }
+  names.set(userId, { name, at: Date.now() });
+  return name;
+}
+
+async function handleCollection(res, userId, token, { client, logger }) {
+  if (!verifyCollectionToken(userId, token)) return sendJson(res, 403, { status: 'invalid' });
+  const album = buildAlbum(userId);
+  return sendJson(res, 200, {
+    status: 'ok',
+    owner: { name: await displayName(client, userId, logger) },
+    ...album,
   });
 }
 
@@ -270,7 +333,13 @@ function createHandler(deps) {
       let m;
 
       if (req.method === 'GET' && /^\/open\/[\w-]+$/.test(pathname)) {
-        return serveOpenPage(res);
+        return servePage(res, 'open');
+      }
+      if (req.method === 'GET' && /^\/collection\/[\w-]+$/.test(pathname)) {
+        return servePage(res, 'collection');
+      }
+      if (req.method === 'GET' && (m = /^\/api\/collection\/([\w-]+)$/.exec(pathname))) {
+        return await handleCollection(res, m[1], url.searchParams.get('t'), deps);
       }
       if ((m = /^\/api\/open\/([\w-]+)$/.exec(pathname))) {
         if (req.method !== 'POST') return send(res, 405, 'Method not allowed', { Allow: 'POST' });
@@ -312,4 +381,4 @@ function startWebServer({ client, logger = console, port = WEB_PORT, host = '127
   return server;
 }
 
-module.exports = { startWebServer, buildOpenUrl, isEnabled, signToken, verifyToken };
+module.exports = { startWebServer, buildOpenUrl, buildCollectionUrl, isEnabled, signToken, verifyToken };
