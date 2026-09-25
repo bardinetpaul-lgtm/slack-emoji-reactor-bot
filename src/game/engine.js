@@ -197,7 +197,7 @@ function spawn(state, pending, events) {
     state.buildings.push({
       id: state.nextId++, side, kind: 'pompe', lane, y: pos(side, 18),
       hp: stats.hp, maxHp: stats.hp, dps: 0, range: 0, alive: true, poseId: pose.id,
-      archetype: 'pompe',
+      archetype: 'pompe', url,
       nextProductionAt: state.timeMs + stats.productionMs,
       productionMs: stats.productionMs,
       expiresAt: state.timeMs + stats.lifetimeMs,
@@ -477,7 +477,7 @@ function publicState(state, viewer) {
     remainingMs: Math.max(0, state.durationMs - state.timeMs),
     doubleElixir: state.durationMs - state.timeMs <= DOUBLE_ELIXIR_MS,
     players,
-    buildings: state.buildings.map(({ id, side, kind, lane, y, hp, maxHp, alive, expiresAt }) => ({ id, side, kind, lane, y, hp, maxHp, alive, expiresAt })),
+    buildings: state.buildings.map(({ id, side, kind, lane, y, hp, maxHp, alive, expiresAt, url }) => ({ id, side, kind, lane, y, hp, maxHp, alive, expiresAt, url })),
     units: state.units.map(({ id, side, lane, y, hp, maxHp, archetype, url, poseId }) => ({ id, side, lane, y, hp, maxHp, archetype, url, poseId })),
     pending: state.pending.map(({ side, url, lane, readyAt }) => ({ side, url, lane, readyAt, archetype: cardStats(state, side, url).archetype })),
     result: state.result,
