@@ -187,6 +187,21 @@ async function test(name, fn) {
     assert.strictEqual((await fetch(`${base}/api/card-image/FNOTINBANK1`)).status, 404);
   });
 
+  // Droits Unix : vérifiés sur la VM (Linux), sautés sous Windows
+  if (process.platform === 'win32') console.log('  ⏭️  secret en 600 : sauté sous Windows (à lancer sur la VM)');
+  else await test('secret généré → fichier data/web-secret en 600 (resserré si déjà là)', () => {
+    const { execFileSync } = require('child_process');
+    const secretFile = path.join(TMP, 'data', 'web-secret');
+    const run = () => execFileSync(process.execPath, ['-e', `require(${JSON.stringify(path.join(TMP, 'src', 'web.js'))}).signToken('b', 'U')`], {
+      env: { ...process.env, WEB_SECRET: '' }, stdio: 'ignore',
+    });
+    run();
+    assert.strictEqual(fs.statSync(secretFile).mode & 0o777, 0o600, 'création');
+    fs.chmodSync(secretFile, 0o644);
+    run();
+    assert.strictEqual(fs.statSync(secretFile).mode & 0o777, 0o600, 'fichier existant');
+  });
+
   await test('GET sur /api/open → 405', async () => {
     assert.strictEqual((await fetch(`${base}/api/open/${idA}`)).status, 405);
   });

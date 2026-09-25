@@ -61,7 +61,10 @@ function getSecret() {
   try {
     if (fs.existsSync(SECRET_PATH)) {
       secret = fs.readFileSync(SECRET_PATH, 'utf-8').trim();
-      if (secret) return secret;
+      if (secret) {
+        restrictSecretFile(); // fichier créé avant ce correctif → droits resserrés
+        return secret;
+      }
     }
   } catch {
     // illisible → on régénère
@@ -69,11 +72,25 @@ function getSecret() {
   secret = crypto.randomBytes(32).toString('hex');
   try {
     fs.mkdirSync(path.dirname(SECRET_PATH), { recursive: true });
-    fs.writeFileSync(SECRET_PATH, secret, 'utf-8');
+    fs.writeFileSync(SECRET_PATH, secret, { encoding: 'utf-8', mode: 0o600 });
+    restrictSecretFile(); // `mode` ne s'applique qu'à la création
   } catch (e) {
     console.error('[web] écriture du secret:', e.message);
   }
   return secret;
+}
+
+/**
+ * 🔒 Le secret signe les liens d'ouverture : lisible/modifiable par le seul
+ * propriétaire (600), sinon un autre compte de la machine pourrait forger
+ * des liens. Sans effet réel sous Windows ; ne fait jamais tomber le bot.
+ */
+function restrictSecretFile() {
+  try {
+    fs.chmodSync(SECRET_PATH, 0o600);
+  } catch (e) {
+    console.error('[web] droits du secret:', e.message);
+  }
 }
 
 function signToken(boosterId, ownerId) {
