@@ -18,8 +18,9 @@ const broadcast = require('./broadcast');
 const { openOnce } = require('./openBooster');
 const web = require('./web');
 const home = require('./home');
-const { createAdminActions, AUTHOR_REWARDS } = require('./admin');
+const { createAdminActions, formatCredits, AUTHOR_REWARDS } = require('./admin');
 const settings = require('./settings');
+const weeklyGift = require('./weeklyGift');
 
 // ─────────────────────────────────────────────
 // 🔧 Validation de la configuration
@@ -117,7 +118,8 @@ async function punishSpammer(client, userId, logger) {
 
 // ─────────────────────────────────────────────
 // 🚜 Anti-farm config
-//    Plus de FARM_MAX_PER_HOUR Jeanpips en 1 h → pénalité de 1 h.
+//    Plus de N Jeanpips en 1 h → pénalité de 1 h (N réglable par un admin
+//    depuis l'onglet Accueil : settings.farmMaxPerHour, défaut 10).
 //    Pendant la pénalité :
 //      ❌ ses Jeanpips n'envoient plus rien aux autres
 //      ❌ il n'accumule plus de crédits (ni score)
@@ -125,12 +127,14 @@ async function punishSpammer(client, userId, logger) {
 //      ✅ il peut toujours ouvrir ses boosters
 // ─────────────────────────────────────────────
 const FARM_WINDOW_MS = 60 * 60 * 1000;   // fenêtre glissante : 1 heure
-const FARM_MAX_PER_HOUR = 10;            // au-delà de 10 → pénalité
 const FARM_PENALTY_MS = 60 * 60 * 1000;  // durée de la pénalité : 1 heure
 
 const farmHistory = new Map();      // userId → [timestamps des jeanpips]
 const farmPenalties = new Map();    // userId → timestamp de fin de pénalité
 const farmReleaseTimers = new Map(); // userId → timer de fin de pénalité
+
+/** Limite anti-farm en cours (Jeanpips max par heure glissante). */
+const farmMaxPerHour = () => settings.getFarmMaxPerHour();
 
 /**
  * Temps de pénalité restant pour un user (0 s'il n'est pas pénalisé).
@@ -158,12 +162,24 @@ function recordJeanpipForFarm(userId) {
   recent.push(now);
   farmHistory.set(userId, recent);
 
-  if (recent.length > FARM_MAX_PER_HOUR) {
+  if (recent.length > farmMaxPerHour()) {
     farmPenalties.set(userId, now + FARM_PENALTY_MS);
     farmHistory.delete(userId);
     return true;
   }
   return false;
+}
+
+/**
+ * Où en est un user de son quota anti-farm (pour l'onglet Accueil).
+ * Retourne { used, max, nextFreeMs } : nextFreeMs = délai avant que le plus
+ * ancien Jeanpip de la fenêtre n'en sorte (0 si la fenêtre est vide).
+ */
+function getFarmQuota(userId) {
+  const now = Date.now();
+  const recent = (farmHistory.get(userId) || []).filter((t) => now - t < FARM_WINDOW_MS);
+  const nextFreeMs = recent.length ? Math.max(0, recent[0] + FARM_WINDOW_MS - now) : 0;
+  return { used: recent.length, max: farmMaxPerHour(), nextFreeMs };
 }
 
 /** Formate un temps restant en texte lisible (« 42 min »). */
@@ -181,6 +197,7 @@ function scheduleFarmRelease(client, userId, logger) {
     farmPenalties.delete(userId);
     farmHistory.delete(userId);
     farmReleaseTimers.delete(userId);
+    refreshHomeIfSeen(client, userId, logger); // pénalité terminée → quota à 0
     try {
       await safeSendDM(client, userId, {
         text: `✅ Ton accès au Jeanpip est rétabli !`,
@@ -189,7 +206,7 @@ function scheduleFarmRelease(client, userId, logger) {
             type: 'section',
             text: {
               type: 'mrkdwn',
-              text: `✅ *Ton accès au Jeanpip est rétabli !* :${TARGET_EMOJI}:\n\nTa pénalité anti-farm est terminée. Tu peux de nouveau :\n• 📤 Envoyer des Jeanpips aux autres\n• 💰 Gagner des crédits\n\n_Reste sous ${FARM_MAX_PER_HOUR} Jeanpips par heure pour éviter un nouveau bridage._ 😉`,
+              text: `✅ *Ton accès au Jeanpip est rétabli !* :${TARGET_EMOJI}:\n\nTa pénalité anti-farm est terminée. Tu peux de nouveau :\n• 📤 Envoyer des Jeanpips aux autres\n• 💰 Gagner des crédits\n\n_Reste sous ${farmMaxPerHour()} Jeanpips par heure pour éviter un nouveau bridage._ 😉`,
             },
           },
         ],
@@ -320,6 +337,7 @@ function buildHomeFor(userId) {
     creditsPerJeanpipLabel: creditsPerJeanpipLabel(),
     targetEmoji: TARGET_EMOJI,
     farmRemainingMs: getFarmPenaltyRemaining(userId),
+    farmQuota: getFarmQuota(userId),
     formatRemaining,
     autoTargets: isAdmin ? adminActions.listAutoTargets() : undefined,
   });
@@ -461,13 +479,13 @@ app.event('reaction_added', async ({ event, client, logger }) => {
 
     // ✅ Bot présent + message d'autrui + destinataire inscrit → le Jeanpip compte.
 
-    // 🚜 Anti-farm : plus de 10 Jeanpips en 1 h → pénalité de 1 h.
+    // 🚜 Anti-farm : plus de N Jeanpips en 1 h (réglable) → pénalité de 1 h.
     //    On ne compte que les Jeanpips réellement délivrés.
     let farmBlocked = delivers && getFarmPenaltyRemaining(reactingUserId) > 0;
 
     if (delivers && !farmBlocked && recordJeanpipForFarm(reactingUserId)) {
       farmBlocked = true;
-      logger.warn(`🚜 ANTI-FARM : <@${reactingUserId}> dépasse ${FARM_MAX_PER_HOUR} Jeanpips/h → pénalité 1 h`);
+      logger.warn(`🚜 ANTI-FARM : <@${reactingUserId}> dépasse ${farmMaxPerHour()} Jeanpips/h → pénalité 1 h`);
       await safeSendDM(client, reactingUserId, {
         text: `🚜 Alerte anti-farm : tu es bridé pendant 1 heure.`,
         blocks: [
@@ -475,7 +493,7 @@ app.event('reaction_added', async ({ event, client, logger }) => {
             type: 'section',
             text: {
               type: 'mrkdwn',
-              text: `🚜 *ALERTE ANTI-FARM !* :${TARGET_EMOJI}:\n\nTu as posé *plus de ${FARM_MAX_PER_HOUR} Jeanpips en moins d'une heure*.\n\n*Pendant 1 heure :*\n• ❌ Tes Jeanpips n'envoient plus rien aux autres\n• ❌ Tu n'accumules plus de crédits\n• ✅ Tu continues à *recevoir* des Jeanpips\n• ✅ Tu peux toujours *ouvrir tes boosters*\n\n_Lève le pied, ça revient tout seul dans 1 h._ 😉`,
+              text: `🚜 *ALERTE ANTI-FARM !* :${TARGET_EMOJI}:\n\nTu as posé *plus de ${farmMaxPerHour()} Jeanpips en moins d'une heure*.\n\n*Pendant 1 heure :*\n• ❌ Tes Jeanpips n'envoient plus rien aux autres\n• ❌ Tu n'accumules plus de crédits\n• ✅ Tu continues à *recevoir* des Jeanpips\n• ✅ Tu peux toujours *ouvrir tes boosters*\n\n_Lève le pied, ça revient tout seul dans 1 h._ 😉`,
             },
           },
         ],
@@ -483,6 +501,7 @@ app.event('reaction_added', async ({ event, client, logger }) => {
 
       // ⏰ Prévenir la personne dès que son accès est rétabli (dans 1 h)
       scheduleFarmRelease(client, reactingUserId, logger);
+      refreshHomeIfSeen(client, reactingUserId, logger); // quota → pénalité
     }
 
     if (farmBlocked) {
@@ -1428,6 +1447,72 @@ app.view('home_attack_submit', async ({ ack, body, view, client, logger }) => {
   }
 });
 
+// 🎁 Crédits JeanPip du vendredi : modale « Offrir des crédits »
+app.action('weekly_gift_open', async ({ ack, body, client, logger }) => {
+  await ack();
+  const userId = body.user.id;
+  if (weeklyGift.getAllowance(userId) <= 0) {
+    await refreshHome(client, userId, logger); // crédits expirés entre-temps
+    return;
+  }
+  await openModal(client, body, home.buildWeeklyGiftModal(userId), logger);
+});
+
+app.view('weekly_gift_submit', async ({ ack, body, view, client, logger }) => {
+  const userId = body.user.id;
+  const values = view.state.values;
+  const targetId = values.user.value.selected_user;
+  const amount = Number(values.amount.value.value);
+
+  const result = weeklyGift.give(userId, targetId, amount);
+  if (!result.ok) {
+    const allowance = weeklyGift.getAllowance(userId);
+    return ack({
+      soi: fieldError('user', 'Tu ne peux pas te les offrir à toi-même 😉'),
+      non_inscrit: fieldError('user', "Cette personne n'est pas inscrite à la liste de diffusion."),
+      montant: fieldError('amount', 'Nombre entier de crédits attendu (au moins 1).'),
+      solde: fieldError('amount', allowance > 0 ? `Il ne te reste que ${allowance} crédit(s) à offrir.` : "Tu n'as plus de crédits à offrir cette semaine."),
+    }[result.error]);
+  }
+
+  await ack();
+  logger.info(`🎁 <@${userId}> a offert ${amount} crédit(s) du vendredi à <@${targetId}> (reste ${result.remaining})`);
+  try {
+    await safeSendDM(client, targetId, {
+      text: `🎁 <@${userId}> t'a offert ${amount} crédits JeanPip !`,
+      blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `🎁 *<@${userId}> t'a offert ${amount} crédit(s) JeanPip !* 💰\n\nNouveau solde : *${formatCredits(result.recipientBalance)}* crédit(s)\n\nDépense-les avec \`/jeanpip-booster\` ou depuis l'onglet *Accueil* du bot ! 🎁` } }],
+    }, logger);
+  } catch (error) {
+    logger.error(`❌ DM de don à <@${targetId}> impossible :`, error.message);
+  }
+  await refreshHome(client, userId, logger);
+  await refreshHomeIfSeen(client, targetId, logger);
+});
+
+/** Vendredi 9h : distribue les crédits à offrir et prévient chaque inscrit. */
+async function runWeeklyGift(client, logger) {
+  const granted = weeklyGift.distributeIfDue(broadcast.getSubscribers());
+  if (granted.length === 0) return;
+  logger.info(`🎁 Crédits du vendredi : ${weeklyGift.WEEKLY_AMOUNT} à offrir pour ${granted.length} inscrit(s)`);
+
+  const text = `🎁 JeanPip vous donne ${weeklyGift.WEEKLY_AMOUNT} crédits que vous ne pouvez pas garder pour vous, depuis votre dashboard accordez-les aux personnes de votre choix. Bonne fin de semaine !`;
+  for (const userId of granted) {
+    try {
+      await safeSendDM(client, userId, {
+        text,
+        blocks: [
+          { type: 'section', text: { type: 'mrkdwn', text } },
+          { type: 'context', elements: [{ type: 'mrkdwn', text: `_Onglet *Accueil* du bot → « 🎁 Offrir des crédits ». Ce qui n'est pas donné est perdu vendredi prochain 9h._` }] },
+        ],
+      }, logger);
+    } catch (error) {
+      logger.error(`❌ DM du vendredi à <@${userId}> impossible :`, error.message);
+    }
+  }
+  // 🏠 Accueils déjà ouverts : afficher le nouveau solde à offrir (et masquer l'ancien)
+  for (const userId of homeViewers) await refreshHome(client, userId, logger);
+}
+
 // 👑 Boutons du panneau admin → ouverture des modales
 const ADMIN_MODALS = {
   admin_give_attack_open: home.buildGiveAttackModal,
@@ -1435,6 +1520,7 @@ const ADMIN_MODALS = {
   admin_addmedia_open: home.buildAddMediaModal,
   admin_target_add_open: home.buildAddTargetModal,
   admin_credit_value_open: home.buildCreditValueModal,
+  admin_farm_limit_open: home.buildFarmLimitModal,
 };
 
 for (const [actionId, buildModal] of Object.entries(ADMIN_MODALS)) {
@@ -1545,6 +1631,33 @@ app.view('admin_credit_value_submit', async ({ ack, body, view, client, logger }
     for (const userId of homeViewers) await refreshHome(client, userId, logger);
   } catch (error) {
     logger.error('❌ Erreur dans admin_credit_value_submit:', error);
+  }
+});
+
+// 🚜 Modale « Limite anti-farm » (Jeanpips max par heure, effet immédiat)
+app.view('admin_farm_limit_submit', async ({ ack, body, view, client, logger }) => {
+  const adminId = body.user.id;
+  if (!isAdminUser(adminId, logger, 'admin_farm_limit_submit')) return ack(fieldError('value', 'Réservé aux admins.'));
+
+  const raw = (view.state.values.value.value.value || '').trim();
+  const value = /^\d+$/.test(raw) ? parseInt(raw, 10) : NaN;
+  const result = settings.setFarmMaxPerHour(value);
+  if (!result.ok) {
+    return ack(fieldError('value', result.error === 'invalide'
+      ? `Nombre entier entre ${settings.FARM_MAX_PER_HOUR_MIN} et ${settings.FARM_MAX_PER_HOUR_MAX} attendu.`
+      : `Erreur d'écriture : ${result.detail}`));
+  }
+
+  await ack();
+  logger.info(`🚜 <@${adminId}> a réglé la limite anti-farm à ${result.value} Jeanpips/h (avant : ${result.previous})`);
+  try {
+    await sendAdminResult(client, adminId, {
+      text: `🚜 *Limite anti-farm enregistrée : ${result.value} Jeanpips max par heure et par personne.*\nAvant : ${result.previous}. Effet immédiat ; les pénalités déjà en cours ne changent pas.`,
+    }, logger);
+    // Le quota « x/N » affiché à chacun change → on republie les Accueils ouverts
+    for (const userId of homeViewers) await refreshHome(client, userId, logger);
+  } catch (error) {
+    logger.error('❌ Erreur dans admin_farm_limit_submit:', error);
   }
 });
 
@@ -1659,7 +1772,7 @@ app.command('/jeanpip-help', async ({ command, ack, client, logger }) => {
           type: 'section',
           text: {
             type: 'mrkdwn',
-            text: `🚜 *Anti-farm*\nSi tu poses *plus de ${FARM_MAX_PER_HOUR} Jeanpips en 1 heure*, tu prends une alerte et pendant *1 heure* :\n• ❌ Tes Jeanpips n'envoient plus rien aux autres\n• ❌ Tu n'accumules plus de crédits\n• ✅ Tu continues à *recevoir* des Jeanpips\n• ✅ Tu peux toujours *ouvrir tes boosters*\n\n_Le Jeanpip se déguste, il ne se farme pas._`,
+            text: `🚜 *Anti-farm*\nSi tu poses *plus de ${farmMaxPerHour()} Jeanpips en 1 heure*, tu prends une alerte et pendant *1 heure* :\n• ❌ Tes Jeanpips n'envoient plus rien aux autres\n• ❌ Tu n'accumules plus de crédits\n• ✅ Tu continues à *recevoir* des Jeanpips\n• ✅ Tu peux toujours *ouvrir tes boosters*\n\n_Le Jeanpip se déguste, il ne se farme pas._`,
           },
         },
         { type: 'divider' },
@@ -1709,6 +1822,12 @@ async function sendDM(client, userId, message) {
 
   scores.checkAndReset();
   setInterval(() => scores.checkAndReset(), 60 * 60 * 1000);
+
+  // 🎁 Crédits JeanPip du vendredi 9h (vérifié toutes les 5 min, rattrapé au redémarrage)
+  const weeklyGiftTick = () => runWeeklyGift(app.client, console)
+    .catch((error) => console.error('❌ Crédits du vendredi :', error.message));
+  weeklyGiftTick();
+  setInterval(weeklyGiftTick, 5 * 60 * 1000);
 
   // 🎬 Page d'ouverture animée (si WEB_PUBLIC_URL est défini)
   try {

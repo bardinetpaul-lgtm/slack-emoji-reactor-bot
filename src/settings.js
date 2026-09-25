@@ -2,7 +2,7 @@
 //  ⚙️ MODULE SETTINGS
 //  Réglages du jeu modifiables en live par un admin (onglet Accueil),
 //  persistés dans data/settings.json (runtime, gitignored).
-//    { creditsPerJeanpip: 0.5 }
+//    { creditsPerJeanpip: 0.5, farmMaxPerHour: 10 }
 // ═══════════════════════════════════════════════════════════
 
 const fs = require('fs');
@@ -14,6 +14,11 @@ const SETTINGS_PATH = path.join(__dirname, '..', 'data', 'settings.json');
 const DEFAULT_CREDITS_PER_JEANPIP = 0.5;
 const CREDITS_PER_JEANPIP_MIN = 0.5;
 const CREDITS_PER_JEANPIP_MAX = 10;
+
+// 🚜 Anti-farm : nombre max de Jeanpips par heure glissante (entier), au-delà → pénalité
+const DEFAULT_FARM_MAX_PER_HOUR = 10;
+const FARM_MAX_PER_HOUR_MIN = 1;
+const FARM_MAX_PER_HOUR_MAX = 100;
 
 function load() {
   try {
@@ -59,7 +64,41 @@ function setCreditsPerJeanpip(value) {
   return { ok: true, value, previous };
 }
 
+/** Valeur valide = entier dans [MIN, MAX]. */
+function isValidFarmMaxPerHour(value) {
+  return Number.isInteger(value) && value >= FARM_MAX_PER_HOUR_MIN && value <= FARM_MAX_PER_HOUR_MAX;
+}
+
+function getFarmMaxPerHour() {
+  const value = load().farmMaxPerHour;
+  return isValidFarmMaxPerHour(value) ? value : DEFAULT_FARM_MAX_PER_HOUR;
+}
+
+/**
+ * Change la limite anti-farm (Jeanpips max par heure). Effet immédiat,
+ * les pénalités déjà en cours ne sont pas modifiées.
+ * Retourne { ok, value?, previous?, error? } (error = 'invalide' | 'ecriture').
+ */
+function setFarmMaxPerHour(value) {
+  if (!isValidFarmMaxPerHour(value)) return { ok: false, error: 'invalide' };
+  const data = load();
+  const previous = getFarmMaxPerHour();
+  data.farmMaxPerHour = value;
+  try {
+    save(data);
+  } catch (e) {
+    return { ok: false, error: 'ecriture', detail: e.message };
+  }
+  return { ok: true, value, previous };
+}
+
 module.exports = {
+  getFarmMaxPerHour,
+  setFarmMaxPerHour,
+  isValidFarmMaxPerHour,
+  DEFAULT_FARM_MAX_PER_HOUR,
+  FARM_MAX_PER_HOUR_MIN,
+  FARM_MAX_PER_HOUR_MAX,
   getCreditsPerJeanpip,
   setCreditsPerJeanpip,
   isValidCreditsPerJeanpip,
