@@ -96,7 +96,7 @@ process.on('unhandledRejection', (e) => { origLog('❌ unhandledRejection', e); 
   const modalView = opened.at(-1) && opened.at(-1).view;
   check(modalView && modalView.callback_id === 'weekly_gift_submit', 'bouton → modale « Offrir des crédits »');
   const home = require(path.join(TMP, 'src', 'home.js'));
-  const homeView = home.buildHomeView('U1', { isAdmin: false, attackPrice: 50, creditsPerJeanpipLabel: '0,5', targetEmoji: 'jeanpip', farmRemainingMs: 0, formatRemaining: String });
+  const homeView = home.buildHomeView('U1', { isAdmin: false, attackPrice: 50, creditsPerJeanpipLabel: '0,5', targetEmoji: 'jeanpip', farmRemainingMs: 0, farmQuota: { used: 0, max: 10, nextFreeMs: 0 }, formatRemaining: String });
   check(JSON.stringify(homeView).includes('weekly_gift_open'), 'Accueil : bouton « Offrir des crédits » affiché');
 
   // 💸 Soumission
@@ -120,7 +120,7 @@ process.on('unhandledRejection', (e) => { origLog('❌ unhandledRejection', e); 
   check(published.some((p) => p.user_id === 'U1'), 'Accueil du donneur rafraîchi');
 
   await submit('U2', 12);
-  const homeAfter = home.buildHomeView('U1', { isAdmin: false, attackPrice: 50, creditsPerJeanpipLabel: '0,5', targetEmoji: 'jeanpip', farmRemainingMs: 0, formatRemaining: String });
+  const homeAfter = home.buildHomeView('U1', { isAdmin: false, attackPrice: 50, creditsPerJeanpipLabel: '0,5', targetEmoji: 'jeanpip', farmRemainingMs: 0, farmQuota: { used: 0, max: 10, nextFreeMs: 0 }, formatRemaining: String });
   check(!JSON.stringify(homeAfter).includes('weekly_gift_open'), 'plus rien à offrir : section masquée');
   check(!logs.some((l) => l.startsWith('ERR')), 'aucune erreur loguée');
 

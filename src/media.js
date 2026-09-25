@@ -288,9 +288,10 @@ function getNextMediaNumber() {
  * @param {string} opts.url    - Lien du média (http/https)
  * @param {string} opts.rarity - Clé de rareté déjà normalisée (common/rare/epic/legendary)
  * @param {string} [opts.title]- Complément de titre optionnel (le numéro est TOUJOURS attribué)
+ * @param {string} [opts.author] - ID Slack de la personne qui a fourni le média (optionnel)
  * @returns {{ ok, media?, number?, count?, error? }}
  */
-function addMedia({ url, rarity, title }) {
+function addMedia({ url, rarity, title, author }) {
   if (!url || !/^https?:\/\//i.test(url)) return { ok: false, error: 'url_invalide' };
   if (!RARITIES[rarity]) return { ok: false, error: 'rarete_invalide' };
 
@@ -307,6 +308,7 @@ function addMedia({ url, rarity, title }) {
     title: `${info.emoji} Surprise #${number}${extra}`,
     rarity,
   };
+  if (author) media.author = author;
 
   // 1. En mémoire (banque + regroupement par rareté)
   localMediaBank.push(media);

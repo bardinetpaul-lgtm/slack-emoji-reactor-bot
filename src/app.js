@@ -18,7 +18,7 @@ const broadcast = require('./broadcast');
 const { openOnce } = require('./openBooster');
 const web = require('./web');
 const home = require('./home');
-const { createAdminActions, formatCredits } = require('./admin');
+const { createAdminActions, formatCredits, AUTHOR_REWARDS } = require('./admin');
 const settings = require('./settings');
 const weeklyGift = require('./weeklyGift');
 
@@ -875,8 +875,9 @@ app.command('/jeanpip-give-credits', async ({ command, ack, client, logger }) =>
 });
 
 // ─────────────────────────────────────────────
-// 🖼️ Slash command : /jeanpip-addmedia <url> <rareté> [titre]  (admin)
-//    Ajoute un média à la banque (persistant, sans redémarrage)
+// 🖼️ Slash command : /jeanpip-addmedia <url> <rareté> [@auteur] [titre]  (admin)
+//    Ajoute un média à la banque (persistant, sans redémarrage).
+//    @auteur = qui a fourni le média → crédité selon la rareté (AUTHOR_REWARDS).
 // ─────────────────────────────────────────────
 app.command('/jeanpip-addmedia', async ({ command, ack, client, logger }) => {
   await ack();
@@ -889,13 +890,15 @@ app.command('/jeanpip-addmedia', async ({ command, ack, client, logger }) => {
     const parts = (command.text || '').trim().split(/\s+/).filter(Boolean);
     const url = parts[0];
     const rarity = normalizeRarity(parts[1]);
-    const title = parts.slice(2).join(' ');
+    // @auteur optionnel, juste après la rareté (mention <@U…|nom>)
+    const authorId = parts[2] && /^<@[A-Z0-9]+(?:\|[^>]+)?>$/i.test(parts[2]) ? parseUserId(parts[2]) : null;
+    const title = parts.slice(authorId ? 3 : 2).join(' ');
 
     const usageBlocks = [{
       type: 'section',
       text: {
         type: 'mrkdwn',
-        text: `❓ *Usage :* \`/jeanpip-addmedia <lien> <rareté> [titre optionnel]\`\n\n*Raretés acceptées :* \`commun\` ⚪ · \`rare\` 🔵 · \`epique\` 🟣 · \`legendaire\` 🟡\n\nEx : \`/jeanpip-addmedia https://media.giphy.com/media/xxx/giphy.gif rare Super Jeanpip\``,
+        text: `❓ *Usage :* \`/jeanpip-addmedia <lien> <rareté> [@auteur] [titre optionnel]\`\n\n*Raretés acceptées :* \`commun\` ⚪ · \`rare\` 🔵 · \`epique\` 🟣 · \`legendaire\` 🟡\n\n*@auteur* (optionnel) : la personne qui t'a envoyé le média gagne ${AUTHOR_REWARDS.common} ⚪ · ${AUTHOR_REWARDS.rare} 🔵 · ${AUTHOR_REWARDS.epic} 🟣 · ${AUTHOR_REWARDS.legendary} 🟡 crédits selon la rareté.\n\nEx : \`/jeanpip-addmedia https://media.giphy.com/media/xxx/giphy.gif rare @paul Super Jeanpip\``,
       },
     }];
 
@@ -909,8 +912,17 @@ app.command('/jeanpip-addmedia', async ({ command, ack, client, logger }) => {
     }
 
     // Confirmation + aperçu du média ajouté (l'admin vérifie que le lien s'affiche bien)
-    const result = adminActions.addMediaToBank(adminId, { url, rarity, title }, logger);
+    if (authorId && await isBot(client, authorId)) {
+      await safeSendDM(client, adminId, { text: `🤖 Impossible d'attribuer un média à un bot.`, blocks: usageBlocks }, logger);
+      return;
+    }
+
+    const result = adminActions.addMediaToBank(adminId, { url, rarity, title, authorId }, logger);
     await sendAdminResult(client, adminId, result, logger);
+    if (result.ok && authorId) {
+      await adminActions.notifyMediaAuthor(client, result, logger);
+      await refreshHomeIfSeen(client, authorId, logger);
+    }
   } catch (error) {
     logger.error('❌ Erreur dans /jeanpip-addmedia:', error);
   }
@@ -1572,17 +1584,23 @@ app.view('admin_addmedia_submit', async ({ ack, body, view, client, logger }) =>
   const url = (values.url.value.value || '').trim();
   const rarity = values.rarity.value.selected_option && values.rarity.value.selected_option.value;
   const title = (values.title.value.value || '').trim();
+  const authorId = (values.author && values.author.value.selected_user) || null;
 
   if (!/^https?:\/\//i.test(url)) return ack(fieldError('url', 'Le lien doit commencer par http:// ou https://.'));
   if (!rarity) return ack(fieldError('rarity', 'Choisis une rareté.'));
+  if (authorId && await isBot(client, authorId)) return ack(fieldError('author', 'Impossible d\'attribuer un média à un bot.'));
 
-  const result = adminActions.addMediaToBank(adminId, { url, rarity, title }, logger);
+  const result = adminActions.addMediaToBank(adminId, { url, rarity, title, authorId }, logger);
   if (!result.ok) return ack(fieldError('url', plain(result.text.split('\n')[1] || result.text)));
 
   await ack();
   try {
     // Confirmation + aperçu en DM (l'admin vérifie que le lien s'affiche bien)
     await sendAdminResult(client, adminId, result, logger);
+    if (authorId) {
+      await adminActions.notifyMediaAuthor(client, result, logger);
+      await refreshHomeIfSeen(client, authorId, logger);
+    }
   } catch (error) {
     logger.error('❌ Erreur dans admin_addmedia_submit:', error);
   }
@@ -1762,7 +1780,7 @@ app.command('/jeanpip-help', async ({ command, ack, client, logger }) => {
           type: 'section',
           text: {
             type: 'mrkdwn',
-            text: `📋 *Toutes les commandes*\n\`/jeanpip\` → Entrer ou sortir de la liste de diffusion\n\`/jeanpip-help\` → Affiche ce message avec ton score actuel\n\`/jeanpip-attack\` → Lance une Attaque Jeanpip sur le channel (gratuite si débloquée, sinon ${ATTACK_PRICE} crédits)\n\`/jeanpip-credits\` → Affiche ton solde de crédits\n\`/jeanpip-booster\` → Ouvre la boutique de boosters${isAdmin ? '\n`/jeanpip-give @user` → (admin) Offre une Attaque Jeanpip à quelqu\'un\n`/jeanpip-give-credits @user <montant>` → (admin) Crédite le porte-monnaie de quelqu\'un\n`/jeanpip-addmedia <lien> <rareté> [titre]` → (admin) Ajoute un média à la banque\n`/jeanpip-auto add|remove|list` → (admin) Gère les cibles auto-react' : ''}`,
+            text: `📋 *Toutes les commandes*\n\`/jeanpip\` → Entrer ou sortir de la liste de diffusion\n\`/jeanpip-help\` → Affiche ce message avec ton score actuel\n\`/jeanpip-attack\` → Lance une Attaque Jeanpip sur le channel (gratuite si débloquée, sinon ${ATTACK_PRICE} crédits)\n\`/jeanpip-credits\` → Affiche ton solde de crédits\n\`/jeanpip-booster\` → Ouvre la boutique de boosters${isAdmin ? '\n`/jeanpip-give @user` → (admin) Offre une Attaque Jeanpip à quelqu\'un\n`/jeanpip-give-credits @user <montant>` → (admin) Crédite le porte-monnaie de quelqu\'un\n`/jeanpip-addmedia <lien> <rareté> [@auteur] [titre]` → (admin) Ajoute un média à la banque (l\'auteur gagne des crédits)\n`/jeanpip-auto add|remove|list` → (admin) Gère les cibles auto-react' : ''}`,
           },
         },
         {

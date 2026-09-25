@@ -16,7 +16,7 @@ const broadcast = require('./broadcast');
 const { RARITIES } = require('./media');
 const settings = require('./settings');
 const weeklyGift = require('./weeklyGift');
-const { formatCredits } = require('./admin');
+const { formatCredits, AUTHOR_REWARDS } = require('./admin');
 
 // Nombre max de cibles auto-react affichées (limite Slack : 100 blocs par vue)
 const MAX_TARGETS_SHOWN = 40;
@@ -328,6 +328,14 @@ function buildAddMediaModal() {
       label: { type: 'plain_text', text: 'Titre (optionnel)' },
       element: { type: 'plain_text_input', action_id: 'value' },
       hint: { type: 'plain_text', text: 'Le numéro « Surprise #N » est attribué automatiquement.' },
+    },
+    {
+      type: 'input',
+      block_id: 'author',
+      optional: true,
+      label: { type: 'plain_text', text: 'Auteur (optionnel)' },
+      element: { type: 'users_select', action_id: 'value', placeholder: { type: 'plain_text', text: 'Qui t’a envoyé ce média ?' } },
+      hint: { type: 'plain_text', text: `La personne reçoit des crédits selon la rareté : ${Object.entries(AUTHOR_REWARDS).map(([key, n]) => `${RARITIES[key].emoji} ${n}`).join(' · ')}. Elle est notifiée en DM.` },
     },
   ]);
 }
