@@ -13,6 +13,7 @@ const scores = require('./scores');
 const targets = require('./targets');
 const credits = require('./credits');
 const boosters = require('./boosters');
+const collections = require('./collections');
 const broadcast = require('./broadcast');
 
 // ─────────────────────────────────────────────
@@ -1225,6 +1226,10 @@ app.action('open_booster', async ({ ack, body, action, client, logger }) => {
     const cards = boosters.openBooster(pending.type);
     logger.info(`🎁 <@${userId}> ouvre le booster ${pending.type} (${cards.length} cartes)`);
 
+    // 🗂️ Enregistrer les cartes AVANT la révélation (un crash en cours
+    //    de révélation ne fait pas perdre les cartes).
+    const isNew = collections.addCards(userId, cards);
+
     // ⏱️ Révélation progressive : une carte toutes les 5 s, dans la conversation
     //    classique de Jeanpip (pas en réponse/thread au message d'ouverture).
     for (let i = 0; i < cards.length; i++) {
@@ -1234,7 +1239,7 @@ app.action('open_booster', async ({ ack, body, action, client, logger }) => {
           channel: channelId,
           text: `${card.title} (${i + 1}/${cards.length})`,
           blocks: buildMediaBlocks({
-            headerText: `🎴 *${card.title}* — carte ${i + 1}/${cards.length}`,
+            headerText: `🎴 *${card.title}* — carte ${i + 1}/${cards.length}${isNew[i] ? ' · ✨ *Nouvelle !*' : ''}`,
             media: card,
           }),
         });
