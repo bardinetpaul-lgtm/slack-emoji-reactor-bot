@@ -7,8 +7,8 @@
 //       { "<url>": { "archetype": "tank", "specialty": "..." } }
 //    2. sinon tirage STABLE : sha256(url) → [0, 100) → répartition `share`.
 //
-//  Rareté : multiplie les stats (pas la cadence de la Pompe) et
-//  ajoute un surcoût en élixir.
+//  Rareté : multiplie les stats (pas la cadence de la Pompe ; à moitié
+//  pour l'Essaim) et peut ajouter un surcoût en élixir.
 //
 //  Contres : l'attaquant fait ×1,5 à ce qu'il contre, ×0,67 à ce
 //  qui le contre. Tank → Guerrier → Tireur → Essaim → Tank ; Sort → Essaim.
@@ -32,7 +32,7 @@ const ARCHETYPES = {
   tank:     { key: 'tank',     label: 'Tank',     emoji: '🛡', share: 20, cost: 5, hp: 1400, dps: 45, range: 2,  speed: 6,  count: 1, targets: 'buildings' },
   guerrier: { key: 'guerrier', label: 'Guerrier', emoji: '⚔️', share: 27, cost: 3, hp: 500,  dps: 70, range: 2,  speed: 8,  count: 1, targets: 'all' },
   tireur:   { key: 'tireur',   label: 'Tireur',   emoji: '🏹', share: 23, cost: 3, hp: 320,  dps: 80, range: 10, speed: 8,  count: 1, targets: 'all' },
-  essaim:   { key: 'essaim',   label: 'Essaim',   emoji: '🐝', share: 15, cost: 3, hp: 230,  dps: 42, range: 2,  speed: 11, count: 3, targets: 'all' },
+  essaim:   { key: 'essaim',   label: 'Essaim',   emoji: '🐝', share: 15, cost: 3, hp: 230,  dps: 42, range: 2,  speed: 11, count: 3, targets: 'all', rarityWeight: 0.5 },
   sort:     { key: 'sort',     label: 'Sort',     emoji: '💥', share: 10, cost: 4, damage: 350, radius: 6, buildingRatio: 0.4 },
   pompe:    { key: 'pompe',    label: 'Pompe',    emoji: '⚗️', share: 5,  cost: 4, hp: 500, productionMs: 7000, lifetimeMs: 45000 },
 };
@@ -40,8 +40,8 @@ const ARCHETYPES = {
 const RARITY_MODS = {
   common:    { mult: 1,    cost: 0 },
   rare:      { mult: 1.06, cost: 0 },
-  epic:      { mult: 1.5,  cost: 1 },
-  legendary: { mult: 1.6,  cost: 1 },
+  epic:      { mult: 1.13, cost: 0 },
+  legendary: { mult: 1.2, cost: 0 },
 };
 
 // attaquant → archétype qu'il contre
@@ -103,7 +103,10 @@ function getCardStats(card) {
   const archetype = override && ARCHETYPES[override.archetype] ? override.archetype : archetypeFromUrl(card.url);
   const rarity = RARITY_MODS[card.rarity] ? card.rarity : 'common';
   const base = ARCHETYPES[archetype];
-  const mod = RARITY_MODS[rarity];
+  const rarityMod = RARITY_MODS[rarity];
+  // `rarityWeight` atténue le bonus de rareté (l'Essaim en profite ×3)
+  const weight = base.rarityWeight === undefined ? 1 : base.rarityWeight;
+  const mod = { mult: 1 + (rarityMod.mult - 1) * weight, cost: rarityMod.cost };
 
   const stats = {
     url: card.url,
