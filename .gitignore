@@ -25,3 +25,5 @@ data/boosters.json
 data/media-bank-custom.json
 data/subscribers.json
 data/collections.json
+data/web-secret
+data/card-cache/
