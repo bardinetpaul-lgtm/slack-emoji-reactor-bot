@@ -59,6 +59,7 @@ function attackMode(userId, isAdmin) {
  * @param {{used, max, nextFreeMs}} ctx.farmQuota - quota anti-farm sur l'heure glissante
  * @param {Function} ctx.formatRemaining  - ms → « 42 min »
  * @param {Array<{id, fixed}>} [ctx.autoTargets] - cibles auto-react (admins)
+ * @param {string|null} [ctx.collectionUrl] - lien du classeur web (null si page web désactivée)
  */
 function buildHomeView(userId, ctx) {
   const balance = credits.getBalance(userId);
@@ -130,6 +131,15 @@ function buildHomeView(userId, ctx) {
     }],
   });
   blocks.push({ type: 'divider' });
+
+  // 📒 Classeur Panini (page web, bureaux uniquement)
+  if (ctx.collectionUrl) {
+    blocks.push(section(
+      `📒 *Mon classeur* — toutes tes cartes rangées comme un album Panini, mis à jour en direct.`,
+      { ...button('📒 Ouvrir mon classeur', 'open_collection_web'), url: ctx.collectionUrl },
+    ));
+    blocks.push({ type: 'divider' });
+  }
 
   // 📮 Liste de diffusion
   blocks.push(section(

@@ -559,6 +559,11 @@
     if (!Array.isArray(data.cards) || data.cards.length === 0) return showError('network');
 
     state = { booster: data.booster, cards: data.cards, replay: data.status === 'replay' };
+    if (data.collection) {
+      const link = $('#btn-collection');
+      link.href = new URL(data.collection, BASE).href;
+      link.hidden = false;
+    }
     await preload(state.cards);
     preparePack();
   }

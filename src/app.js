@@ -304,6 +304,7 @@ function buildHomeFor(userId) {
     farmQuota: getFarmQuota(userId),
     formatRemaining,
     autoTargets: isAdmin ? adminActions.listAutoTargets() : undefined,
+    collectionUrl: web.buildCollectionUrl(userId),
   });
 }
 
@@ -1227,6 +1228,11 @@ ${collections.copyPhrase(copyCounts[i])}` : ''}`,
 //    il faut l'acquitter (sinon ⚠️ dans Slack). L'ouverture a lieu sur la page.
 // ─────────────────────────────────────────────
 app.action('open_booster_web', async ({ ack }) => {
+  await ack();
+});
+
+// 📒 Bouton-lien « Mon classeur » de l'Accueil : même principe, rien à faire
+app.action('open_collection_web', async ({ ack }) => {
   await ack();
 });
 
