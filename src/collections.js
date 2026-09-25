@@ -1,7 +1,8 @@
 // ═══════════════════════════════════════════════════════════
 //  🗂️  MODULE COLLECTIONS
-//  Cartes possédées par chaque utilisateur (gagnées en ouvrant
-//  des boosters). Permanent, jamais de reset.
+//  Cartes possédées par chaque utilisateur : cartes de boosters ET
+//  Jeanpips reçus en DM (réaction, attaque, auto-react).
+//  Permanent, jamais de reset.
 //
 //  Une carte est identifiée par l'URL du média (stable même si
 //  le titre « Surprise #N » est renuméroté). Titre et rareté
@@ -106,6 +107,16 @@ function copyPhrase(count) {
 // 🗂️  Collection d'un user → [{ url, title, rarity, type, count, ... }]
 // ─────────────────────────────────────────────
 
+// ─────────────────────────────────────────────
+// 🔢 Nombre d'exemplaires d'une carte (0 si pas possédée)
+// ─────────────────────────────────────────────
+
+function getCount(userId, url) {
+  const data = load();
+  const user = data.users[userId];
+  return (user && user.cards[url] && user.cards[url].count) || 0;
+}
+
 function getCollection(userId) {
   const data = load();
   const user = data.users[userId];
@@ -116,5 +127,6 @@ function getCollection(userId) {
 module.exports = {
   addCards,
   copyPhrase,
+  getCount,
   getCollection,
 };
