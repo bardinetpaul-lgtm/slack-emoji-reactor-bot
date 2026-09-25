@@ -126,8 +126,47 @@ slack-emoji-reactor-bot/
     ├── broadcast.js      ← Liste de diffusion opt-in (qui accepte de recevoir)
     ├── openBooster.js    ← Ouverture d'un booster, partagée Slack + web (openOnce)
     ├── web.js            ← Serveur HTTP de la page d'ouverture FIFA
-    └── cardImages.js     ← Proxy + cache des images slack-files pour la page
+    ├── cardImages.js     ← Proxy + cache des images slack-files pour la page
+    ├── home.js           ← Onglet Accueil (vue par user) + modales (fonctions pures)
+    └── admin.js          ← Actions admin partagées (commandes slash + panneau Accueil)
 ```
+
+---
+
+## 🏠 Onglet Accueil (App Home)
+
+Construit **par utilisateur** (`src/home.js`) et publié via `views.publish` à l'ouverture
+(`app_home_opened`) et après chaque changement d'état.
+
+**Config Slack requise (une fois) :** api.slack.com → *App Home* → *Show Tabs* → **Home Tab ON** ;
+*Event Subscriptions* → bot event **`app_home_opened`** ; puis **Reinstall** l'app.
+Aucun nouveau scope OAuth.
+
+**Partie joueur (tout le monde) :** solde (demi-crédits affichés « 12,5 »), score de la semaine,
+⚔️ Attaque (bouton → modale avec sélecteur de channel `conversations_select` ; gratuite si
+débloquée, illimitée pour un admin, sinon `ATTACK_PRICE` crédits ; mêmes règles que
+`/jeanpip-attack` via `launchAttack`), boutons d'achat de boosters (`buy_booster_<type>`,
+le booster s'ouvre ensuite dans l'onglet *Messages*) + compteur de boosters non ouverts,
+bouton liste de diffusion (`broadcast_join/leave`). Pas de vue collection (refusée pour l'instant).
+
+**Panneau 👑 Admin :** construit UNIQUEMENT pour `JEANPIP_ADMINS` (Slack ne permet pas de
+masquer une commande slash, d'où l'Accueil). 4 boutons → modales : offrir une attaque,
+crédits ± (demi-crédits acceptés, positif = notifie, négatif = correction silencieuse),
+ajouter un média (lien + rareté + titre), ajouter une cible auto-react ; liste des cibles
+avec bouton « Retirer » (cibles `.env` marquées fixes). **Chaque action admin revérifie
+`JEANPIP_ADMINS` côté serveur.** Les erreurs de saisie s'affichent dans la modale, les
+confirmations arrivent en DM.
+
+**Logique partagée :** les commandes admin slash (`/jeanpip-give`, `/jeanpip-give-credits`,
+`/jeanpip-addmedia`, `/jeanpip-auto`) et le panneau appellent les mêmes fonctions de
+`src/admin.js`. Les commandes sont gardées en parallèle pour l'instant (suppression plus tard).
+
+**Rafraîchissement :** `refreshHome()` après achat de booster, attaque, liste de diffusion,
+actions admin. Pour les passages « passifs » (crédits gagnés via une réaction, ouverture de
+booster, cadeau d'un admin), `refreshHomeIfSeen()` ne republie que pour les users ayant
+ouvert l'Accueil depuis le démarrage (Set en mémoire) → pas de `views.publish` à chaque
+réaction de tout le workspace. Limite connue : une ouverture FIFA (page web) ne republie pas
+l'Accueil → le compteur « non ouverts » se met à jour à la prochaine ouverture de l'onglet.
 
 ---
 
@@ -222,9 +261,9 @@ d'exemplaires. À la révélation, une phrase indique Nouvelle / Doublon / Tripl
 **Catalogue extensible :** ajouter une entrée dans `BOOSTERS` (`src/boosters.js`)
 avec un `price` et 8 `slots` suffit à créer un nouveau type de booster.
 
-**Commandes admin liées :**
+**Commandes admin liées** (aussi dans le panneau 👑 Admin de l'Accueil) :
 - `/jeanpip-give-credits @user <montant>` → crédite le porte-monnaie de quelqu'un
-  (montant entier positif, notifie la personne).
+  (positif = cadeau notifié, négatif = correction ; demi-crédits acceptés, ex. `2,5`).
 - `/jeanpip-addmedia <lien> <rareté> [titre]` → ajoute un média à la banque **sans
   redémarrage**. Rareté acceptée en FR/EN (`commun/rare/epique/legendaire`). Le type
   (image/vidéo) est déduit de l'URL. Média persisté dans `data/media-bank-custom.json`
