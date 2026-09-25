@@ -15,6 +15,8 @@ const credits = require('./credits');
 const boosters = require('./boosters');
 const collections = require('./collections');
 const broadcast = require('./broadcast');
+const { openOnce } = require('./openBooster');
+const web = require('./web');
 
 // ─────────────────────────────────────────────
 // 🔧 Validation de la configuration
@@ -1131,30 +1133,49 @@ app.action(/^buy_booster_/, async ({ ack, body, action, client, logger }) => {
     const id = boosters.createPending(userId, type);
     const balance = credits.getBalance(userId);
 
-    await sendDM(client, userId, {
-      text: `${booster.emoji} Booster ${booster.label} acheté !`,
-      blocks: [
-        {
-          type: 'section',
-          text: {
-            type: 'mrkdwn',
-            text: `${booster.emoji} *Booster ${booster.label} acheté !* 🎉\n\n💰 Nouveau solde : *${balance}* crédit(s)\n\nClique pour révéler tes 8 cartes 👇`,
-          },
-        },
-        {
-          type: 'actions',
-          elements: [
-            {
-              type: 'button',
-              style: 'primary',
-              text: { type: 'plain_text', text: '🎁 Ouvrir le booster' },
-              action_id: 'open_booster',
-              value: id,
-            },
-          ],
-        },
-      ],
+    // 🎬 Ouverture FIFA (page web, bureaux uniquement) si configurée,
+    //    sinon seulement l'ouverture dans Slack.
+    const openUrl = web.buildOpenUrl(id, userId);
+    const openButtons = [];
+    if (openUrl) {
+      openButtons.push({
+        type: 'button',
+        style: 'primary',
+        text: { type: 'plain_text', text: '🎬 Ouverture FIFA' },
+        action_id: 'open_booster_web',
+        url: openUrl,
+      });
+    }
+    openButtons.push({
+      type: 'button',
+      ...(openUrl ? {} : { style: 'primary' }),
+      text: { type: 'plain_text', text: openUrl ? '💬 Ouvrir dans Slack' : '🎁 Ouvrir le booster' },
+      action_id: 'open_booster',
+      value: id,
     });
+
+    const blocks = [
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: `${booster.emoji} *Booster ${booster.label} acheté !* 🎉\n\n💰 Nouveau solde : *${balance}* crédit(s)\n\nClique pour révéler tes 8 cartes 👇`,
+        },
+      },
+      { type: 'actions', elements: openButtons },
+    ];
+    if (openUrl) {
+      blocks.push({
+        type: 'context',
+        elements: [{ type: 'mrkdwn', text: "🎬 _L'ouverture FIFA ne marche que depuis le bureau de Lorient ou d'Asnières. En télétravail, ouvre-le dans Slack._" }],
+      });
+    }
+
+    const sent = await sendDM(client, userId, {
+      text: `${booster.emoji} Booster ${booster.label} acheté !`,
+      blocks,
+    });
+    boosters.setMessageRef(id, sent.channel, sent.ts);
     logger.info(`🛒 <@${userId}> a acheté un booster ${booster.type} (id ${id}, solde ${balance})`);
   } catch (error) {
     logger.error('❌ Erreur dans buy_booster:', error);
@@ -1164,8 +1185,11 @@ app.action(/^buy_booster_/, async ({ ack, body, action, client, logger }) => {
 // ─────────────────────────────────────────────
 // 🎁 Action : clic sur « Ouvrir le booster »
 //    action_id = open_booster · value = <booster id>
-//    Révèle les 8 cartes, une toutes les 5 s, en thread.
+//    Révèle les 8 cartes, une toutes les 2 s, dans le DM.
+//    (Ouverture partagée avec la page web : src/openBooster.js)
 // ─────────────────────────────────────────────
+const SLACK_REVEAL_INTERVAL_MS = 2000;
+
 app.action('open_booster', async ({ ack, body, action, client, logger }) => {
   await ack();
 
@@ -1175,9 +1199,11 @@ app.action('open_booster', async ({ ack, body, action, client, logger }) => {
   const messageTs = body.message && body.message.ts;
 
   try {
-    const pending = boosters.getPending(id);
+    // 🔒 Tirage + collection + persistance en un seul bloc synchrone :
+    //    un double-clic ou une ouverture web simultanée ne passe qu'une fois.
+    const result = openOnce(id, userId, 'slack');
 
-    if (!pending) {
+    if (result.status === 'not_found') {
       await sendDM(client, userId, {
         text: `❌ Booster introuvable`,
         blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `❌ *Ce booster est introuvable.* Il a peut-être déjà été ouvert.` } }],
@@ -1185,17 +1211,23 @@ app.action('open_booster', async ({ ack, body, action, client, logger }) => {
       return;
     }
 
-    if (pending.owner !== userId) {
-      logger.warn(`⛔ <@${userId}> a tenté d'ouvrir le booster de <@${pending.owner}>`);
+    if (result.status === 'forbidden') {
+      logger.warn(`⛔ <@${userId}> a tenté d'ouvrir le booster de <@${result.pending.owner}>`);
       return;
     }
 
-    // 🔒 Garde anti-double-clic : markOpened ne réussit qu'une fois
-    if (!boosters.markOpened(id)) {
-      logger.info(`ℹ️ Booster ${id} déjà ouvert, clic ignoré`);
+    if (result.status === 'already') {
+      if (result.via === 'web') {
+        await sendDM(client, userId, {
+          text: `🎬 Booster déjà ouvert en mode FIFA`,
+          blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `🎬 *Ce booster a déjà été ouvert en mode FIFA.* Tes cartes sont dans ta collection !` } }],
+        });
+      }
+      logger.info(`ℹ️ Booster ${id} déjà ouvert (${result.via}), clic ignoré`);
       return;
     }
 
+    const { pending, cards, counts: copyCounts } = result;
     const booster = boosters.getBooster(pending.type);
     const emoji = booster ? booster.emoji : '🎁';
     const label = booster ? booster.label : pending.type;
@@ -1212,7 +1244,7 @@ app.action('open_booster', async ({ ack, body, action, client, logger }) => {
               type: 'section',
               text: {
                 type: 'mrkdwn',
-                text: `${emoji} *Booster ${label} — ouvert !* 🎉\n\n_Les 8 cartes se révèlent ci-dessous, une toutes les 5 secondes..._`,
+                text: `${emoji} *Booster ${label} — ouvert !* 🎉\n\n_Les 8 cartes se révèlent ci-dessous, une toutes les 2 secondes..._`,
               },
             },
           ],
@@ -1222,15 +1254,11 @@ app.action('open_booster', async ({ ack, body, action, client, logger }) => {
       }
     }
 
-    // 🎴 Tirage des 8 cartes (au moment de l'ouverture)
-    const cards = boosters.openBooster(pending.type);
-    logger.info(`🎁 <@${userId}> ouvre le booster ${pending.type} (${cards.length} cartes)`);
+    // 🎴 Cartes déjà tirées ET enregistrées en collection par openOnce
+    //    (un crash en cours de révélation ne fait pas perdre les cartes).
+    logger.info(`🎁 <@${userId}> ouvre le booster ${pending.type} dans Slack (${cards.length} cartes)`);
 
-    // 🗂️ Enregistrer les cartes AVANT la révélation (un crash en cours
-    //    de révélation ne fait pas perdre les cartes).
-    const copyCounts = collections.addCards(userId, cards);
-
-    // ⏱️ Révélation progressive : une carte toutes les 5 s, dans la conversation
+    // ⏱️ Révélation progressive : une carte toutes les 2 s, dans la conversation
     //    classique de Jeanpip (pas en réponse/thread au message d'ouverture).
     for (let i = 0; i < cards.length; i++) {
       const card = cards[i];
@@ -1248,7 +1276,7 @@ ${collections.copyPhrase(copyCounts[i])}` : ''}`,
         logger.error(`❌ Erreur révélation carte ${i + 1}:`, revealError.message);
       }
       if (i < cards.length - 1) {
-        await new Promise((resolve) => setTimeout(resolve, 5000));
+        await new Promise((resolve) => setTimeout(resolve, SLACK_REVEAL_INTERVAL_MS));
       }
     }
 
@@ -1256,6 +1284,15 @@ ${collections.copyPhrase(copyCounts[i])}` : ''}`,
   } catch (error) {
     logger.error('❌ Erreur dans open_booster:', error);
   }
+});
+
+// ─────────────────────────────────────────────
+// 🎬 Action : clic sur le bouton-lien « Ouverture FIFA »
+//    Slack ouvre l'URL côté client mais envoie quand même une action :
+//    il faut l'acquitter (sinon ⚠️ dans Slack). L'ouverture a lieu sur la page.
+// ─────────────────────────────────────────────
+app.action('open_booster_web', async ({ ack }) => {
+  await ack();
 });
 
 // ─────────────────────────────────────────────
@@ -1468,13 +1505,15 @@ app.command('/jeanpip-help', async ({ command, ack, client, logger }) => {
 // ─────────────────────────────────────────────
 // 💬 Helpers
 // ─────────────────────────────────────────────
+// Retourne { channel, ts } du message envoyé (pour un éventuel chat.update).
 async function sendDM(client, userId, message) {
   const conversation = await client.conversations.open({ users: userId });
-  await client.chat.postMessage({
+  const result = await client.chat.postMessage({
     channel: conversation.channel.id,
     text: message.text,
     blocks: message.blocks,
   });
+  return { channel: result.channel, ts: result.ts };
 }
 
 // ─────────────────────────────────────────────
@@ -1489,6 +1528,13 @@ async function sendDM(client, userId, message) {
 
   scores.checkAndReset();
   setInterval(() => scores.checkAndReset(), 60 * 60 * 1000);
+
+  // 🎬 Page d'ouverture FIFA (si WEB_PUBLIC_URL est défini)
+  try {
+    web.startWebServer({ client: app.client, logger: console });
+  } catch (webError) {
+    console.error('❌ Serveur web non démarré :', webError.message);
+  }
 
   const currentTargets = targets.getTargets();
 
