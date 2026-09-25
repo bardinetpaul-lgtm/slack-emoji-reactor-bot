@@ -13,7 +13,9 @@
 //  (avec price + slots) suffit à créer un nouveau type de booster.
 //
 //  DB des boosters en attente = data/boosters.json
-//    { boosters: { <id>: { owner, type, opened, createdAt } } }
+//    { boosters: { <id>: { owner, type, opened, createdAt,
+//        openedAt?, openedVia? ('slack'|'web'), cards?, counts?,
+//        message?: { channel, ts } } } }
 // ═══════════════════════════════════════════════════════════
 
 const fs = require('fs');
@@ -192,6 +194,32 @@ function markOpened(id) {
   return true;
 }
 
+/**
+ * Mémorise les cartes tirées à l'ouverture (rejeu de l'animation web
+ * sans nouveau tirage) + par quel canal le booster a été ouvert.
+ */
+function saveOpening(id, { via, cards, counts }) {
+  const data = loadStore();
+  const booster = data.boosters[id];
+  if (!booster) return;
+  booster.openedVia = via;
+  booster.cards = cards;
+  booster.counts = counts;
+  saveStore(data);
+}
+
+/**
+ * Mémorise le message DM « Booster acheté » (pour le mettre à jour
+ * quand le booster est ouvert depuis la page web).
+ */
+function setMessageRef(id, channel, ts) {
+  const data = loadStore();
+  const booster = data.boosters[id];
+  if (!booster) return;
+  booster.message = { channel, ts };
+  saveStore(data);
+}
+
 module.exports = {
   BOOSTERS,
   getBooster,
@@ -200,4 +228,6 @@ module.exports = {
   createPending,
   getPending,
   markOpened,
+  saveOpening,
+  setMessageRef,
 };

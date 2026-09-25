@@ -58,6 +58,7 @@ chat:write           → Envoyer des messages/DM
 im:write             → Ouvrir des conversations DM
 im:history           → Lire l'historique des DM (rattrapage des collections)
 users:read           → Récupérer les infos utilisateurs
+files:read           → Images des cartes sur la page d'ouverture FIFA
 ```
 
 **Optionnels (pour auto-join) :**
@@ -108,7 +109,11 @@ slack-emoji-reactor-bot/
 │   ├── scores.json       ← Scores hebdo (runtime, gitignored)
 │   ├── credits.json      ← Porte-monnaie booster (runtime, gitignored)
 │   ├── boosters.json     ← Boosters achetés non ouverts (runtime, gitignored)
-│   └── collections.json  ← Cartes possédées par user (runtime, gitignored)
+│   ├── collections.json  ← Cartes possédées par user (runtime, gitignored)
+│   ├── web-secret        ← Secret des liens FIFA si WEB_SECRET vide (runtime, gitignored)
+│   └── card-cache/       ← Images des cartes pour la page FIFA (runtime, gitignored)
+├── public/               ← Page d'ouverture FIFA (open.html/css/js + assets/)
+├── scripts/              ← backfill-collections, test-web-open, preview-web-open
 └── src/
     ├── app.js            ← Point d'entrée + listeners + slash commands + boutons
     ├── blocks.js         ← Construction des blocs Slack (gère URLs privées)
@@ -118,7 +123,10 @@ slack-emoji-reactor-bot/
     ├── credits.js        ← Porte-monnaie PERMANENT (jamais de reset)
     ├── boosters.js       ← Catalogue de boosters + tirage + persistance
     ├── collections.js    ← Cartes possédées par user + phrases doublon/triplon
-    └── broadcast.js      ← Liste de diffusion opt-in (qui accepte de recevoir)
+    ├── broadcast.js      ← Liste de diffusion opt-in (qui accepte de recevoir)
+    ├── openBooster.js    ← Ouverture d'un booster, partagée Slack + web (openOnce)
+    ├── web.js            ← Serveur HTTP de la page d'ouverture FIFA
+    └── cardImages.js     ← Proxy + cache des images slack-files pour la page
 ```
 
 ---
@@ -159,13 +167,44 @@ Les soldes peuvent donc contenir des demi-crédits (`CREDITS_PER_JEANPIP` dans `
 les 3 dernières suivent une distribution **par slot** (tables dans `src/boosters.js`,
 chacune totalise 100 %). Ex. booster épique, slot 8 : 50 % épique / 20 % rare / 30 % légendaire.
 
-**Flux d'ouverture :** achat → débit immédiat → DM « Booster acheté » + bouton
-🎁 *Ouvrir*. Les cartes sont tirées au moment de l'ouverture et révélées une toutes
-les **5 s dans le DM** (~35 s au total). Le bouton se désactive après ouverture.
-Le booster acheté est persisté dans `data/boosters.json` (survit à un restart).
+**Flux d'ouverture :** achat → débit immédiat → DM « Booster acheté » avec **2 boutons** :
+- 🎬 **Ouverture FIFA** → lien vers la page web d'animation (voir ci-dessous).
+  N'apparaît que si `WEB_PUBLIC_URL` est défini.
+- 💬 **Ouvrir dans Slack** → cartes révélées une toutes les **2 s dans le DM**
+  (`SLACK_REVEAL_INTERVAL_MS` dans `src/app.js`).
 
-> ⚠️ Limite connue v1 : si le bot redémarre pendant les 35 s de révélation,
-> l'animation s'arrête (le booster reste marqué ouvert). Acceptable en v1.
+Les deux passent par `openOnce()` (`src/openBooster.js`) : bloc **synchrone** qui marque
+ouvert → tire → ajoute en collection → mémorise les cartes dans `boosters.json`. Le
+premier gagne, l'autre répond « déjà ouvert ». Les cartes sont en collection AVANT
+l'animation (un restart ou un onglet fermé ne fait rien perdre).
+
+### 🎬 Page d'ouverture « à la FIFA »
+
+- Servie par le bot lui-même (`src/web.js`, module `http` natif) sur `127.0.0.1:3100`,
+  exposée via le reverse proxy du dashboard : `https://dashboard-lorient.dimsi.cloud/jeanpip/`.
+- ⚠️ **Whitelist IP** : accessible uniquement depuis les bureaux de **Lorient** et
+  **Asnières**. En télétravail → bouton « Ouvrir dans Slack ».
+- Lien = `/open/<boosterId>?t=<HMAC>` (signé avec `WEB_SECRET`, sinon `data/web-secret`).
+  Pas de login : le lien fait office de clé, mais les cartes vont toujours au propriétaire.
+- Rouvrir le lien rejoue la même ouverture (mêmes cartes, pas de nouvel ajout).
+- Après ouverture web, le DM d'achat est mis à jour (`chat.update`) avec le récap des cartes.
+- Images : `src/cardImages.js` récupère les `slack-files.com` via `files.info` (scope
+  **`files:read`**), sinon via la page publique (lien `pub_secret`), cache dans
+  `data/card-cache/` (gitignored). Seuls les fichiers de la banque sont servis.
+- Front : `public/open.html|css|js` (sans build, sans lib). Fond : `public/assets/bg-lorient.jpg`.
+  Sons en Web Audio, coupés par défaut.
+- Tests : `node scripts/test-web-open.js` (page web) + `node scripts/test-app-booster.js`
+  (achat/ouverture Slack avec un faux Slack, ~30 s) · Aperçu local : `node scripts/preview-web-open.js`
+  (copie temporaire, aucune donnée réelle touchée).
+
+**Config nginx** (dans le server block du dashboard) :
+```nginx
+location /jeanpip/ {
+    proxy_pass http://127.0.0.1:3100/;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+}
+```
 
 **Collection :** chaque carte tirée d'un booster ET chaque Jeanpip reçu en DM (réaction,
 attaque, auto-react — via `sendJeanpipDM`) est enregistré dans `data/collections.json`.

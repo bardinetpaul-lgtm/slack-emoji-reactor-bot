@@ -359,8 +359,17 @@ function migrateCustomNumbers() {
 
 migrateCustomNumbers();
 
+/**
+ * Toute la banque (versionnée + custom), telle qu'en mémoire.
+ * Utilisé par le proxy d'images comme liste blanche.
+ */
+function getAllMedia() {
+  return localMediaBank;
+}
+
 module.exports = {
   getRandomMedia,
+  getAllMedia,
   drawCardOfRarity,
   getRarityInfo,
   normalizeRarity,

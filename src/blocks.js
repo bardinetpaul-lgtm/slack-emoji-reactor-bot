@@ -118,4 +118,37 @@ function buildMediaBlocks({ headerText, media }) {
   return blocks;
 }
 
-module.exports = { buildMediaBlocks };
+/**
+ * Message DM « booster ouvert en mode FIFA » : remplace les boutons
+ * du message d'achat par un récap texte des 8 cartes.
+ * @param {Object} booster - entrée du catalogue { emoji, label } (ou null)
+ * @param {Array} cards    - cartes tirées { title, rarity, url, type }
+ * @param {Array} counts   - exemplaires possédés après ajout (1 = nouvelle)
+ */
+function buildWebOpenedBlocks(booster, cards, counts) {
+  const emoji = booster ? booster.emoji : '🎁';
+  const label = booster ? booster.label : '';
+  const lines = cards.map((card, i) => {
+    const info = getRarityInfo(card.rarity);
+    const count = counts && counts[i];
+    const badge = count === 1 ? ' — ✨ _nouvelle_' : count > 1 ? ` — 🔁 _×${count}_` : '';
+    return `${info.emoji} <${card.url}|${card.title}>${badge}`;
+  });
+  const newCount = (counts || []).filter((c) => c === 1).length;
+
+  return [
+    {
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: `${emoji} *Booster ${label} — ✅ ouvert en mode FIFA !* 🎬\n\n${lines.join('\n')}`,
+      },
+    },
+    {
+      type: 'context',
+      elements: [{ type: 'mrkdwn', text: `🗂️ ${newCount} nouvelle(s) carte(s) ajoutée(s) à ta collection` }],
+    },
+  ];
+}
+
+module.exports = { buildMediaBlocks, buildWebOpenedBlocks };
