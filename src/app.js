@@ -220,6 +220,25 @@ async function safeSendDM(client, userId, message, logger) {
 }
 
 /**
+ * Envoie un Jeanpip (média) en DM ET l'ajoute à la collection du
+ * destinataire, avec la phrase Nouvelle / Doublon / Triplon… dans l'en-tête.
+ *   • collect = false → envoi simple, sans collection (ex. anti-farm)
+ * La carte n'est ajoutée que si le DM est vraiment parti.
+ */
+async function sendJeanpipDM(client, userId, { text, headerText, media, collect = true }, logger) {
+  const nextCount = collect && media && media.url ? collections.getCount(userId, media.url) + 1 : 0;
+  const ok = await safeSendDM(client, userId, {
+    text,
+    blocks: buildMediaBlocks({
+      headerText: nextCount ? `${headerText}\n${collections.copyPhrase(nextCount)}` : headerText,
+      media,
+    }),
+  }, logger);
+  if (ok && nextCount) collections.addCards(userId, [media]);
+  return ok;
+}
+
+/**
  * Récupère les N derniers auteurs uniques d'un channel.
  * Pagine dans l'historique jusqu'à trouver assez de personnes,
  * peu importe si ça s'étale sur des semaines/mois.
@@ -320,12 +339,10 @@ app.event('message', async ({ event, client, logger }) => {
     logger.info(`✅ Réaction :${TARGET_EMOJI}: ajoutée`);
 
     const media = await getRandomMedia();
-    const sent = await safeSendDM(client, authorId, {
+    const sent = await sendJeanpipDM(client, authorId, {
       text: `Bonjour jeune, ${botName} t'a envoyé un Jeanpip !`,
-      blocks: buildMediaBlocks({
-        headerText: `Bonjour jeune <@${authorId}>, ${botName} t'a envoyé un Jeanpip ! :${TARGET_EMOJI}:`,
-        media: media,
-      }),
+      headerText: `Bonjour jeune <@${authorId}>, ${botName} t'a envoyé un Jeanpip ! :${TARGET_EMOJI}:`,
+      media,
     }, logger);
     if (sent) logger.info(`📨 DM envoyé à la cible <@${authorId}>`);
   } catch (error) {
@@ -467,12 +484,13 @@ app.event('reaction_added', async ({ event, client, logger }) => {
 
     const mediaForReactor = await getRandomMedia();
 
-    const sentToReactor = await safeSendDM(client, reactingUserId, {
+    // 🗂️ Ta propre image n'entre dans ta collection que si ton Jeanpip « compte »
+    //    (même règle que les crédits) → pas de farm de collection.
+    const sentToReactor = await sendJeanpipDM(client, reactingUserId, {
       text: `Hey @${reactorName} tu as réagi avec jean pip coucou !`,
-      blocks: buildMediaBlocks({
-        headerText: `Hey <@${reactingUserId}> tu as réagi avec jean pip coucou :${TARGET_EMOJI}:`,
-        media: mediaForReactor,
-      }),
+      headerText: `Hey <@${reactingUserId}> tu as réagi avec jean pip coucou :${TARGET_EMOJI}:`,
+      media: mediaForReactor,
+      collect: delivers && !farmBlocked,
     }, logger);
     if (sentToReactor) logger.info(`📨 DM envoyé au réacteur <@${reactingUserId}>`);
 
@@ -485,12 +503,10 @@ app.event('reaction_added', async ({ event, client, logger }) => {
       logger.info(`🚜 Envoi à l'auteur bloqué (anti-farm) pour <@${reactingUserId}>`);
     } else if (originalAuthorId && originalAuthorId !== reactingUserId) {
       const mediaForAuthor = await getRandomMedia();
-      const sentToAuthor = await safeSendDM(client, originalAuthorId, {
+      const sentToAuthor = await sendJeanpipDM(client, originalAuthorId, {
         text: `Bonjour jeune, ${reactorName} t'a envoyé un Jeanpip !`,
-        blocks: buildMediaBlocks({
-          headerText: `Bonjour jeune <@${originalAuthorId}>, <@${reactingUserId}> t'a envoyé un Jeanpip ! :${TARGET_EMOJI}:`,
-          media: mediaForAuthor,
-        }),
+        headerText: `Bonjour jeune <@${originalAuthorId}>, <@${reactingUserId}> t'a envoyé un Jeanpip ! :${TARGET_EMOJI}:`,
+        media: mediaForAuthor,
       }, logger);
       if (sentToAuthor) logger.info(`📨 DM envoyé à l'auteur <@${originalAuthorId}>`);
     }
@@ -679,12 +695,10 @@ async function launchAttack(client, userId, channelId, logger, { consumeFree = f
 
       // 2️⃣ Envoyer le DM avec média aléatoire pondéré (affiche la rareté)
       const media = await getRandomMedia();
-      const ok = await safeSendDM(client, victimId, {
+      const ok = await sendJeanpipDM(client, victimId, {
         text: `🚨 ALERTE ! ${attackerName} a lancé une Attaque Jeanpip !`,
-        blocks: buildMediaBlocks({
-          headerText: `🚨 *ALERTE ATTAQUE JEANPIP !*\n*<@${userId}>* t'a ciblé dans <#${channelId}> ! :${TARGET_EMOJI}:`,
-          media: media,
-        }),
+        headerText: `🚨 *ALERTE ATTAQUE JEANPIP !*\n*<@${userId}>* t'a ciblé dans <#${channelId}> ! :${TARGET_EMOJI}:`,
+        media,
       }, logger);
       if (ok) sent++;
     } catch (error) {

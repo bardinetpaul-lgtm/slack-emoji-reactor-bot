@@ -167,7 +167,11 @@ Le booster acheté est persisté dans `data/boosters.json` (survit à un restart
 > ⚠️ Limite connue v1 : si le bot redémarre pendant les 35 s de révélation,
 > l'animation s'arrête (le booster reste marqué ouvert). Acceptable en v1.
 
-**Collection :** chaque carte tirée est enregistrée dans `data/collections.json`
+**Collection :** chaque carte tirée d'un booster ET chaque Jeanpip reçu en DM (réaction,
+attaque, auto-react — via `sendJeanpipDM`) est enregistré dans `data/collections.json`.
+Ta propre image de réacteur ne compte que si ton Jeanpip compte (destinataire inscrit,
+hors anti-farm). Punitions anti-spam et aperçus `/jeanpip-addmedia` exclus.
+Stockage :
 (gitignored, module `src/collections.js`), indexée par URL du média, avec le nombre
 d'exemplaires. À la révélation, une phrase indique Nouvelle / Doublon / Triplon…
 (`COPY_PHRASES`). Historique d'avant la collection : `node scripts/backfill-collections.js`
