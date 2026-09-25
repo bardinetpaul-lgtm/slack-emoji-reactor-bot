@@ -126,7 +126,8 @@ const qg = (state, side) => state.buildings.find((b) => b.side === side && b.kin
   run(s, 900);
   check('pas encore apparue à 0,9 s', s.units.length === 0);
   run(s, 100);
-  check('apparue à 1 s', s.units.length === 1 && s.units[0].lane === 1);
+  check('apparue à 1 s : un groupe de 3 Guerriers', s.units.length === 3 && s.units.every((u) => u.lane === 1));
+  check('groupe : chaque personnage connaît sa place dans le groupe', JSON.stringify(s.units.map((u) => u.slot)) === '[0,1,2]' && s.units.every((u) => u.packSize === 3));
 }
 
 // ─── 🛡 Tank ignore les unités, 🏰 tours tirent ───
@@ -148,7 +149,7 @@ const qg = (state, side) => state.buildings.find((b) => b.side === side && b.kin
   forceHand(g, 'A', ['guerrier1', 'guerrier2', 'tireur1', 'tireur2']);
   engine.applyAction(g, 'A', { type: 'deploy', url: 'guerrier1', lane: 2 });
   run(g, 40000);
-  check('un Guerrier seul meurt sous la tour sans la raser', g.units.length === 0 && tower(g, 'B', 2).alive);
+  check('un groupe de Guerriers seul meurt sous la tour sans la raser', g.units.length === 0 && tower(g, 'B', 2).alive);
   const pose = g.poses.find((p) => p.url === 'guerrier1');
   check('sa pose est marquée détruite', pose.status === 'destroyed');
 }
@@ -180,7 +181,7 @@ const qg = (state, side) => state.buildings.find((b) => b.side === side && b.kin
   forceHand(s, 'B', ['essaim2', 'guerrier4', 'tireur3', 'tireur4']);
   engine.applyAction(s, 'B', { type: 'deploy', url: 'essaim2', lane: 0 });
   run(s, 1500);
-  check('Essaim : 3 unités', s.units.filter((u) => u.archetype === 'essaim').length === 3);
+  check('Essaim : 6 personnages', s.units.filter((u) => u.archetype === 'essaim').length === 6);
   forceHand(s, 'A', ['sort1', 'guerrier1', 'tireur1', 'tireur2']);
   engine.applyAction(s, 'A', { type: 'deploy', url: 'sort1', lane: 0 });
   run(s, 1000);
@@ -221,6 +222,20 @@ const qg = (state, side) => state.buildings.find((b) => b.side === side && b.kin
   run(s, 10000);
   check('le Guerrier bat le Tireur (contre)', s.poses.find((p) => p.url === 'tireur3').status === 'destroyed'
     && s.poses.find((p) => p.url === 'guerrier1').status !== 'destroyed');
+}
+
+// ─── 👥 Une carte = toujours un groupe ───
+{
+  const s = newMatch();
+  s.players.A.elixir = 10;
+  forceHand(s, 'A', ['tank1', 'tireur1', 'guerrier1', 'guerrier2']);
+  engine.applyAction(s, 'A', { type: 'deploy', url: 'tank1', lane: 0 });
+  engine.applyAction(s, 'A', { type: 'deploy', url: 'tireur1', lane: 2 });
+  run(s, 1000);
+  const count = (a) => s.units.filter((u) => u.archetype === a).length;
+  check('Tank : groupe de 2', count('tank') === 2);
+  check('Tireur : groupe de 3', count('tireur') === 3);
+  check('la pose reste une seule carte engagée', s.poses.filter((p) => p.side === 'A').length === 2);
 }
 
 // ─── 🏁 Fins de combat ───

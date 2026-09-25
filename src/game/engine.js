@@ -211,7 +211,8 @@ function spawn(state, pending, events) {
     const unit = {
       id: state.nextId++, side, lane, poseId: pose.id, url,
       archetype: stats.archetype, specialty: stats.specialty,
-      y: baseY - dir(side) * i,     // l'essaim se tient en file indienne
+      y: baseY - dir(side) * i * 0.8,   // le groupe arrive en paquet serré
+      slot: i, packSize: stats.count,
       hp: stats.hp, maxHp: stats.hp, dps: stats.dps,
       range: stats.range, speed: stats.speed, targets: stats.targets,
     };
@@ -478,8 +479,8 @@ function publicState(state, viewer) {
     doubleElixir: state.durationMs - state.timeMs <= DOUBLE_ELIXIR_MS,
     players,
     buildings: state.buildings.map(({ id, side, kind, lane, y, hp, maxHp, alive, expiresAt, url }) => ({ id, side, kind, lane, y, hp, maxHp, alive, expiresAt, url })),
-    units: state.units.map(({ id, side, lane, y, hp, maxHp, archetype, url, poseId }) => ({ id, side, lane, y, hp, maxHp, archetype, url, poseId })),
-    pending: state.pending.map(({ side, url, lane, readyAt }) => ({ side, url, lane, readyAt, archetype: cardStats(state, side, url).archetype })),
+    units: state.units.map(({ id, side, lane, y, hp, maxHp, archetype, url, poseId, slot, packSize }) => ({ id, side, lane, y, hp, maxHp, archetype, url, poseId, slot, packSize })),
+    pending: state.pending.map(({ side, url, lane, forward, readyAt }) => ({ side, url, lane, forward, readyAt, archetype: cardStats(state, side, url).archetype })),
     result: state.result,
   };
 }

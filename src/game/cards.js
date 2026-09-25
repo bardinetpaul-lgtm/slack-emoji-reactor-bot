@@ -13,6 +13,9 @@
 //  Contres : l'attaquant fait ×1,5 à ce qu'il contre, ×0,67 à ce
 //  qui le contre. Tank → Guerrier → Tireur → Essaim → Tank ; Sort → Essaim.
 //
+//  Une carte de combattants pose TOUJOURS un groupe (`count`) : hp et dps
+//  sont PAR personnage (total de la carte = count × valeur).
+//
 //  Unités du terrain : distance en « cases » (couloir de 0 à 100),
 //  vitesse en cases/s, durées en ms.
 // ═══════════════════════════════════════════════════════════
@@ -24,15 +27,15 @@ const crypto = require('crypto');
 const OVERRIDES_PATH = path.join(__dirname, '..', '..', 'data', 'card-overrides.json');
 
 // ─────────────────────────────────────────────
-// 🎭 Archétypes (valeurs d'une carte COMMUNE)
+// 🎭 Archétypes (valeurs d'une carte COMMUNE, par personnage du groupe)
 //    `share` = part des cartes (total 100)
 // ─────────────────────────────────────────────
 
 const ARCHETYPES = {
-  tank:     { key: 'tank',     label: 'Tank',     emoji: '🛡', share: 20, cost: 5, hp: 1400, dps: 45, range: 2,  speed: 6,  count: 1, targets: 'buildings' },
-  guerrier: { key: 'guerrier', label: 'Guerrier', emoji: '⚔️', share: 27, cost: 3, hp: 500,  dps: 70, range: 2,  speed: 8,  count: 1, targets: 'all' },
-  tireur:   { key: 'tireur',   label: 'Tireur',   emoji: '🏹', share: 23, cost: 3, hp: 320,  dps: 80, range: 10, speed: 8,  count: 1, targets: 'all' },
-  essaim:   { key: 'essaim',   label: 'Essaim',   emoji: '🐝', share: 15, cost: 3, hp: 230,  dps: 42, range: 2,  speed: 11, count: 3, targets: 'all', rarityWeight: 0.5 },
+  tank:     { key: 'tank',     label: 'Tank',     emoji: '🛡', share: 20, cost: 5, hp: 700, dps: 22.5, range: 2,  speed: 6,  count: 2, targets: 'buildings' },
+  guerrier: { key: 'guerrier', label: 'Guerrier', emoji: '⚔️', share: 27, cost: 3, hp: 170, dps: 24,   range: 2,  speed: 8,  count: 3, targets: 'all' },
+  tireur:   { key: 'tireur',   label: 'Tireur',   emoji: '🏹', share: 23, cost: 3, hp: 115, dps: 29,   range: 10, speed: 8,  count: 3, targets: 'all' },
+  essaim:   { key: 'essaim',   label: 'Essaim',   emoji: '🐝', share: 15, cost: 3, hp: 105, dps: 20,   range: 2,  speed: 11, count: 6, targets: 'all', rarityWeight: 0.5 },
   sort:     { key: 'sort',     label: 'Sort',     emoji: '💥', share: 10, cost: 4, damage: 350, radius: 6, buildingRatio: 0.4 },
   pompe:    { key: 'pompe',    label: 'Pompe',    emoji: '⚗️', share: 5,  cost: 4, hp: 500, productionMs: 7000, lifetimeMs: 45000 },
 };

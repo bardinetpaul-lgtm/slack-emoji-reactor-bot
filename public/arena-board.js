@@ -186,11 +186,17 @@
 
     // ⏳ Poses en train d'apparaître : cercle pointillé au point d'apparition
     for (const p of view.pending || []) {
-      const at = toBoard(p.lane, p.side === 'A' ? 20 : 80, viewer);
+      if (p.archetype === 'sort') continue;   // un Sort frappe, il n'apparaît pas
+      const at = toBoard(p.lane, p.side === 'A' ? (p.forward ? 60 : 20) : (p.forward ? 40 : 80), viewer);
       under.push(pathTag(F(C(at.x, at.y - 6, 16), 'none', teamColor(p.side, viewer), 1.5, '3 5')));
     }
     // 💥 Sorts : cercle rose + pointillé (sous les unités)
     for (const f of fx) {
+      if (f.type === 'ring') {
+        const k = Math.min(1, f.age / 800);
+        under.push(`<g opacity="${(1 - k).toFixed(2)}">${pathTag(F(C(f.x, f.y, 10 + k * 18), 'none', f.color || BLUE, 2))}</g>`);
+        continue;
+      }
       if (f.type !== 'spell') continue;
       const o = Math.max(0, 1 - f.age / 700).toFixed(2);
       under.push(`<g opacity="${o}">${pathTag(F(C(f.x, f.y, 30), 'none', PINK, 3))}${pathTag(F(C(f.x, f.y, 22), 'none', f.color || BLUE, 1.5, '3 5'))}</g>`);
@@ -249,6 +255,46 @@
     return out.join('');
   }
 
+  // ─────────────────────────────────────────────
+  // 👆 Menu de pose : zones autorisées + point touché → couloir
+  //    Ma moitié (sous la rivière) partout ; chez l'adversaire, seulement
+  //    dans un couloir dont la tour adverse est tombée (pose avancée).
+  // ─────────────────────────────────────────────
+  const HOME_ZONE = { x: 6, y: 348, w: 348, h: 288 };
+  const FORWARD_Y = [176, 296];
+  const LANE_SPAN = [[6, 124], [121, 239], [236, 354]];   // bandes de pose, vues de mon camp
+
+  // Couloir du moteur affiché à l'écran en position `screen` (0 = gauche)
+  const laneAt = (screen, viewer) => (viewer === 'B' ? 2 - screen : screen);
+
+  function breaches(view) {
+    const foe = view.you === 'A' ? 'B' : 'A';
+    return [0, 1, 2].filter((lane) => (view.buildings || []).some((b) => b.side === foe && b.kind === 'tower' && b.lane === lane && !b.alive));
+  }
+
+  /** Point du plan (x, y) → { ok, lane, forward } ou { ok: false, reason: 'zone' } */
+  function pointToDeploy(x, y, view) {
+    let screen = 0;
+    for (let i = 1; i < 3; i += 1) if (Math.abs(LANE_X[i] - x) < Math.abs(LANE_X[screen] - x)) screen = i;
+    const lane = laneAt(screen, view.you);
+    if (y >= HOME_ZONE.y && y <= HOME_ZONE.y + HOME_ZONE.h) return { ok: true, lane, forward: false };
+    if (y >= FORWARD_Y[0] && y <= FORWARD_Y[1] && x >= LANE_SPAN[screen][0] && x <= LANE_SPAN[screen][1] && breaches(view).includes(lane)) {
+      return { ok: true, lane, forward: true };
+    }
+    return { ok: false, reason: 'zone' };
+  }
+
+  function renderZones(view) {
+    const zone = (x, y, w, h) => pathTag(F(R(x, y, w, h, 14), 'none', BLUE, 1.8, '6 5'));
+    const out = [zone(HOME_ZONE.x, HOME_ZONE.y, HOME_ZONE.w, HOME_ZONE.h)];
+    for (const lane of breaches(view)) {
+      const screen = laneAt(lane, view.you);
+      const [x0, x1] = LANE_SPAN[screen];
+      out.push(zone(x0, FORWARD_Y[0], x1 - x0, FORWARD_Y[1] - FORWARD_Y[0]));
+    }
+    return out.join('');
+  }
+
   function renderGround(arena) {
     return groundPaths(arena).map(pathTag).join('');
   }
@@ -271,6 +317,7 @@
     let fx = [];
     let chips = [];
     let raf = null;
+    let showZones = false;
     const lastHp = new Map();
     const STEP = 100;
 
@@ -289,6 +336,11 @@
       curr = view;
       currAt = now;
       for (const e of view.events || []) {
+        if (e.type === 'deploy' && e.archetype !== 'sort') {
+          const spawnY = e.side === 'A' ? (e.forward ? 60 : 20) : (e.forward ? 40 : 80);
+          const at = toBoard(e.lane, spawnY, view.you);
+          fx.push({ type: 'ring', x: at.x, y: at.y - 6, born: now, color: e.side === view.you ? BLUE : ORANGE });
+        }
         if (e.type === 'spell') {
           const at = toBoard(e.lane, e.y, view.you);
           fx.push({ type: 'spell', x: at.x, y: at.y - 10, born: now, color: e.side === view.you ? BLUE : ORANGE });
@@ -326,9 +378,9 @@
           return p ? { ...u, y: p.y + (u.y - p.y) * t } : u;
         }) };
       }
-      fx = fx.filter((f) => now - f.born < 700);
+      fx = fx.filter((f) => now - f.born < (f.type === 'ring' ? 800 : 700));
       chips = chips.filter((c) => now - c.born < 900);
-      live.innerHTML = renderDynamic(view, {
+      live.innerHTML = (showZones ? renderZones(view) : '') + renderDynamic(view, {
         arena,
         sprites,
         fx: fx.map((f) => ({ ...f, age: now - f.born })),
@@ -336,15 +388,20 @@
       });
     }
 
+    /** Affiche / masque les zones de pose (carte sélectionnée). */
+    function setZones(on) { showZones = Boolean(on); }
+    const current = () => curr;
+
     function start() { if (!raf) raf = requestAnimationFrame(frame); }
     function stop() { if (raf) cancelAnimationFrame(raf); raf = null; }
     start();
-    return { push, setArena, start, stop };
+    return { push, setArena, setZones, current, start, stop };
   }
 
   return {
     W, H, LANE_X, ARENAS, COLORS: { INK, CREAM, PINK, BLUE, ORANGE, I7, I8 },
     TOWER_SYMBOLS, GRADIENT_DEF,
     toBoard, groundPaths, renderGround, renderDynamic, renderScene, createRenderer,
+    pointToDeploy, renderZones,
   };
 }));

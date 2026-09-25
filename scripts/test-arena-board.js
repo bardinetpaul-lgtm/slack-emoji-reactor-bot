@@ -70,5 +70,20 @@ check('scène : pose en cours d\'apparition visible', svg.includes('stroke-dasha
 check('scène : barre de vie de la tour abîmée', svg.includes('#FF6229') && svg.includes('#2F3733'));
 check('scène : aucune valeur cassée', !/NaN|undefined/.test(svg));
 
+// 👆 Menu de pose : point touché → couloir (DA « Combat - Menu de pose »)
+const noBreach = { you: 'A', buildings: [0, 1, 2].map((lane) => ({ side: 'B', kind: 'tower', lane, alive: true })) };
+check('pose : moitié basse, couloir gauche', JSON.stringify(board.pointToDeploy(50, 500, noBreach)) === JSON.stringify({ ok: true, lane: 0, forward: false }));
+check('pose : couloir le plus proche du point', board.pointToDeploy(200, 400, noBreach).lane === 1 && board.pointToDeploy(340, 620, noBreach).lane === 2);
+check('refus : rivière', board.pointToDeploy(180, 320, noBreach).reason === 'zone');
+check('refus : moitié adverse sans brèche', board.pointToDeploy(60, 240, noBreach).reason === 'zone');
+const breach = { you: 'A', buildings: [{ side: 'B', kind: 'tower', lane: 0, alive: false }, { side: 'B', kind: 'tower', lane: 1, alive: true }, { side: 'B', kind: 'tower', lane: 2, alive: true }] };
+check('brèche : pose avancée dans le couloir ouvert', JSON.stringify(board.pointToDeploy(60, 240, breach)) === JSON.stringify({ ok: true, lane: 0, forward: true }));
+check('brèche : pas ailleurs', board.pointToDeploy(300, 240, breach).reason === 'zone');
+const breachB = { you: 'B', buildings: [{ side: 'A', kind: 'tower', lane: 0, alive: false }, { side: 'A', kind: 'tower', lane: 1, alive: true }, { side: 'A', kind: 'tower', lane: 2, alive: true }] };
+check('joueur B : couloirs en miroir pour la pose', board.pointToDeploy(300, 500, breachB).lane === 0 && board.pointToDeploy(300, 240, breachB).forward === true);
+const zones = board.renderZones(breach);
+check('zones : moitié + brèche en pointillé bleu', (zones.match(/<path/g) || []).length === 2 && zones.includes('#1C72F1') && zones.includes('6 5'));
+check('zones : sans brèche, seulement ma moitié', (board.renderZones(noBreach).match(/<path/g) || []).length === 1);
+
 console.log(failures ? `\n❌ ${failures} échec(s)` : '\n✅ Tout est bon');
 process.exit(failures ? 1 : 0);
