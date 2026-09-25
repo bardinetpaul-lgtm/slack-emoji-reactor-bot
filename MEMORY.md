@@ -56,6 +56,7 @@ channels:history     → Lire les messages des channels publics
 groups:history       → Lire les messages des channels privés
 chat:write           → Envoyer des messages/DM
 im:write             → Ouvrir des conversations DM
+im:history           → Lire l'historique des DM (rattrapage des collections)
 users:read           → Récupérer les infos utilisateurs
 ```
 
@@ -106,7 +107,8 @@ slack-emoji-reactor-bot/
 │   ├── media-bank.json   ← Banque de médias (avec rareté)
 │   ├── scores.json       ← Scores hebdo (runtime, gitignored)
 │   ├── credits.json      ← Porte-monnaie booster (runtime, gitignored)
-│   └── boosters.json     ← Boosters achetés non ouverts (runtime, gitignored)
+│   ├── boosters.json     ← Boosters achetés non ouverts (runtime, gitignored)
+│   └── collections.json  ← Cartes possédées par user (runtime, gitignored)
 └── src/
     ├── app.js            ← Point d'entrée + listeners + slash commands + boutons
     ├── blocks.js         ← Construction des blocs Slack (gère URLs privées)
@@ -115,6 +117,7 @@ slack-emoji-reactor-bot/
     ├── targets.js        ← Cibles auto-react persistantes
     ├── credits.js        ← Porte-monnaie PERMANENT (jamais de reset)
     ├── boosters.js       ← Catalogue de boosters + tirage + persistance
+    ├── collections.js    ← Cartes possédées par user + phrases doublon/triplon
     └── broadcast.js      ← Liste de diffusion opt-in (qui accepte de recevoir)
 ```
 
@@ -128,7 +131,7 @@ Stockage : `data/subscribers.json` (runtime, gitignored).
 
 | Situation | Comportement |
 |---|---|
-| Tu réagis au message d'un **inscrit** | Il reçoit son Jeanpip ✅ · tu reçois le tien ✅ · tu gagnes 1 crédit ✅ |
+| Tu réagis au message d'un **inscrit** | Il reçoit son Jeanpip ✅ · tu reçois le tien ✅ · tu gagnes 0,5 crédit ✅ |
 | Tu réagis au message d'un **non-inscrit** | Il ne reçoit **rien** ❌ · tu reçois quand même le tien ✅ · **aucun crédit** ❌ |
 
 La liste est respectée **partout** : réactions, `/jeanpip-attack` (ne cible que les
@@ -139,11 +142,18 @@ tu réagis, tes boosters, et les punitions anti-spam.
 
 ## 🎁 Mode Booster JeanPip
 
-**Gagner des crédits :** +1 crédit permanent à chaque réaction `:jeanpip:` que TU poses
+**Gagner des crédits :** +0,5 crédit permanent à chaque réaction `:jeanpip:` que TU poses
 (spam exclu ; l'attaque et l'auto-react ne créditent pas — anti-farming). Jamais de reset.
+Les soldes peuvent donc contenir des demi-crédits (`CREDITS_PER_JEANPIP` dans `src/app.js`).
 
-**Dépenser :** `/jeanpip-booster` → boutique DM avec 3 boutons :
-⚪ Commun (10) · 🔵 Rare (20) · 🟣 Épique (30). `/jeanpip-credits` affiche le solde.
+**Dépenser :**
+- `/jeanpip-booster` → boutique DM avec 3 boutons :
+  ⚪ Commun (20) · 🔵 Rare (45) · 🟣 Épique (60).
+- `/jeanpip-attack` sans attaque gratuite débloquée → DM avec un bouton
+  « Lancer l'attaque (25 crédits) » (`ATTACK_PRICE` dans `src/app.js`). Débit seulement
+  si l'attaque part vraiment (personne à cibler / channel illisible → rien n'est débité).
+  Anti-farm respecté, anti-double-clic.
+- `/jeanpip-credits` affiche le solde.
 
 **Contenu d'un booster :** toujours **8 cartes**. Les 5 premières sont communes ;
 les 3 dernières suivent une distribution **par slot** (tables dans `src/boosters.js`,
@@ -151,11 +161,17 @@ chacune totalise 100 %). Ex. booster épique, slot 8 : 50 % épique / 20 % rare 
 
 **Flux d'ouverture :** achat → débit immédiat → DM « Booster acheté » + bouton
 🎁 *Ouvrir*. Les cartes sont tirées au moment de l'ouverture et révélées une toutes
-les **5 s en thread** (~35 s au total). Le bouton se désactive après ouverture.
+les **5 s dans le DM** (~35 s au total). Le bouton se désactive après ouverture.
 Le booster acheté est persisté dans `data/boosters.json` (survit à un restart).
 
 > ⚠️ Limite connue v1 : si le bot redémarre pendant les 35 s de révélation,
 > l'animation s'arrête (le booster reste marqué ouvert). Acceptable en v1.
+
+**Collection :** chaque carte tirée est enregistrée dans `data/collections.json`
+(gitignored, module `src/collections.js`), indexée par URL du média, avec le nombre
+d'exemplaires. À la révélation, une phrase indique Nouvelle / Doublon / Triplon…
+(`COPY_PHRASES`). Historique d'avant la collection : `node scripts/backfill-collections.js`
+(simulation) puis `--apply` — nécessite le scope `im:history`.
 
 **Catalogue extensible :** ajouter une entrée dans `BOOSTERS` (`src/boosters.js`)
 avec un `price` et 8 `slots` suffit à créer un nouveau type de booster.

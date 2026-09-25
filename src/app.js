@@ -1039,7 +1039,8 @@ app.command('/jeanpip-credits', async ({ command, ack, client, logger }) => {
           type: 'section',
           text: {
             type: 'mrkdwn',
-            text: `💰 *Tu as ${balance} crédit(s) JeanPip !*\n\nTu gagnes *+${CREDITS_PER_JEANPIP_LABEL} crédit* à chaque fois que tu poses une réaction :${TARGET_EMOJI}: sur un message.\n\n🎁 Dépense-les en boosters avec \`/jeanpip-booster\` !`,
+            text: `💰 *Tu as ${balance} crédit(s) JeanPip !*\n\nTu gagnes *+${CREDITS_PER_JEANPIP_LABEL} crédit* à chaque fois que tu poses une réaction :${TARGET_EMOJI}: sur un message.\n\n🎁 Dépense-les en boosters avec \`/jeanpip-booster\`
+⚔️ ou achète une Attaque Jeanpip (*${ATTACK_PRICE}* crédits) avec \`/jeanpip-attack\` !`,
           },
         },
       ],
