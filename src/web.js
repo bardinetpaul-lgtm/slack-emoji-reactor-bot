@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════
-//  🎬 MODULE WEB — page d'ouverture de booster « à la FIFA »
+//  🎬 MODULE WEB — page d'ouverture de booster animée
 //
 //  Petit serveur HTTP (module natif, aucune dépendance) lancé dans
 //  le même process que le bot. Écoute sur 127.0.0.1:${WEB_PORT} :
@@ -61,7 +61,10 @@ function getSecret() {
   try {
     if (fs.existsSync(SECRET_PATH)) {
       secret = fs.readFileSync(SECRET_PATH, 'utf-8').trim();
-      if (secret) return secret;
+      if (secret) {
+        restrictSecretFile(); // fichier créé avant ce correctif → droits resserrés
+        return secret;
+      }
     }
   } catch {
     // illisible → on régénère
@@ -69,11 +72,25 @@ function getSecret() {
   secret = crypto.randomBytes(32).toString('hex');
   try {
     fs.mkdirSync(path.dirname(SECRET_PATH), { recursive: true });
-    fs.writeFileSync(SECRET_PATH, secret, 'utf-8');
+    fs.writeFileSync(SECRET_PATH, secret, { encoding: 'utf-8', mode: 0o600 });
+    restrictSecretFile(); // `mode` ne s'applique qu'à la création
   } catch (e) {
     console.error('[web] écriture du secret:', e.message);
   }
   return secret;
+}
+
+/**
+ * 🔒 Le secret signe les liens d'ouverture : lisible/modifiable par le seul
+ * propriétaire (600), sinon un autre compte de la machine pourrait forger
+ * des liens. Sans effet réel sous Windows ; ne fait jamais tomber le bot.
+ */
+function restrictSecretFile() {
+  try {
+    fs.chmodSync(SECRET_PATH, 0o600);
+  } catch (e) {
+    console.error('[web] droits du secret:', e.message);
+  }
 }
 
 function signToken(boosterId, ownerId) {
@@ -86,7 +103,7 @@ function verifyToken(boosterId, ownerId, token) {
   return crypto.timingSafeEqual(expected, Buffer.from(token, 'hex'));
 }
 
-/** Lien d'ouverture FIFA d'un booster (null si la page web est désactivée). */
+/** Lien d'ouverture animée d'un booster (null si la page web est désactivée). */
 function buildOpenUrl(boosterId, ownerId) {
   if (!isEnabled()) return null;
   return `${WEB_PUBLIC_URL}/open/${encodeURIComponent(boosterId)}?t=${signToken(boosterId, ownerId)}`;
@@ -186,7 +203,7 @@ async function updatePurchaseMessage(client, pending, cards, counts, logger) {
     await client.chat.update({
       channel: pending.message.channel,
       ts: pending.message.ts,
-      text: `${booster ? booster.emoji : '🎁'} Booster ouvert en mode FIFA !`,
+      text: `${booster ? booster.emoji : '🎁'} Booster ouvert avec l'animation !`,
       blocks: buildWebOpenedBlocks(booster, cards, counts),
     });
   } catch (e) {
@@ -194,7 +211,7 @@ async function updatePurchaseMessage(client, pending, cards, counts, logger) {
   }
 }
 
-function handleOpen(res, id, token, { client, logger }) {
+function handleOpen(res, id, token, { client, logger, onOpened }) {
   const pending = boosters.getPending(id);
   if (!pending) return sendJson(res, 404, { status: 'not_found' });
   if (!verifyToken(id, pending.owner, token)) return sendJson(res, 403, { status: 'invalid' });
@@ -215,8 +232,14 @@ function handleOpen(res, id, token, { client, logger }) {
   }
 
   if (result.status === 'opened') {
-    logger.info(`🎬 <@${pending.owner}> ouvre le booster ${pending.type} en mode FIFA (id ${id})`);
+    logger.info(`🎬 <@${pending.owner}> ouvre le booster ${pending.type} avec l'animation (id ${id})`);
     updatePurchaseMessage(client, pending, result.cards, result.counts, logger);
+    // 🏠 Prévient le bot (ex. rafraîchir l'onglet Accueil) — jamais bloquant
+    if (onOpened) {
+      Promise.resolve()
+        .then(() => onOpened(pending.owner))
+        .catch((e) => logger.error('[web] onOpened:', e.message));
+    }
   }
 
   return sendJson(res, 200, {
@@ -271,18 +294,20 @@ function createHandler(deps) {
 /**
  * Démarre le serveur web (si WEB_PUBLIC_URL est défini).
  * Une erreur ici ne fait jamais tomber le bot.
+ * @param {Function} [opts.onOpened] - (userId) appelé après une PREMIÈRE ouverture
+ *                                      animée (pas lors d'un rejeu du lien)
  * @returns {http.Server|null}
  */
-function startWebServer({ client, logger = console, port = WEB_PORT, host = '127.0.0.1', force = false }) {
+function startWebServer({ client, logger = console, port = WEB_PORT, host = '127.0.0.1', force = false, onOpened }) {
   if (!isEnabled() && !force) {
-    logger.info('🎬 Page d\'ouverture FIFA désactivée (WEB_PUBLIC_URL vide)');
+    logger.info('🎬 Page d\'ouverture animée désactivée (WEB_PUBLIC_URL vide)');
     return null;
   }
   getSecret();
-  const server = http.createServer(createHandler({ client, logger }));
+  const server = http.createServer(createHandler({ client, logger, onOpened }));
   server.on('error', (err) => logger.error('[web] serveur:', err.message));
   server.listen(port, host, () => {
-    logger.info(`🎬 Page d'ouverture FIFA : http://${host}:${port} → ${WEB_PUBLIC_URL || '(test)'}`);
+    logger.info(`🎬 Page d'ouverture animée : http://${host}:${port} → ${WEB_PUBLIC_URL || '(test)'}`);
   });
   return server;
 }

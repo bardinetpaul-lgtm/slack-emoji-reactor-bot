@@ -6,7 +6,7 @@
 //  client, dans une COPIE temporaire du projet (aucune donnée réelle
 //  touchée). Joue : démarrage, achat, DM à 2 boutons, ouverture Slack
 //  (rythme 2 s), double clic, intrus, booster inconnu, ancien booster.
-//  Lancé 2 fois : page FIFA activée puis désactivée (WEB_PUBLIC_URL vide).
+//  Lancé 2 fois : page d'ouverture animée activée puis désactivée (WEB_PUBLIC_URL vide).
 //
 //  Usage : node scripts/test-app-booster.js   (~30 s)
 // ═══════════════════════════════════════════════════════════
@@ -48,12 +48,13 @@ const fakeClient = {
     update: async (m) => { updated.push(m); return { ok: true }; },
   },
   auth: { test: async () => ({ user_id: 'B_BOT', user: 'jeanpip' }) },
+  views: { publish: async () => ({ ok: true }) }, // onglet Accueil rafraîchi après achat
   files: { info: async () => { throw new Error('fake'); } },
 };
 const actions = [];
 class FakeApp {
   constructor() { this.client = fakeClient; }
-  event() {} message() {} command() {}
+  event() {} message() {} command() {} view() {}
   action(id, fn) { actions.push({ id, fn }); }
   error() {}
   async start() {}
@@ -97,7 +98,7 @@ process.on('unhandledRejection', (e) => { origLog('❌ unhandledRejection', e); 
   const btns = buyMsg.blocks.find((b) => b.type === 'actions').elements;
   check(buyMsg.text.includes('acheté'), 'achat OK');
   if (MODE === 'web') {
-    check(btns.length === 2 && /\/open\/b_.+\?t=[a-f0-9]{64}$/.test(btns[0].url), 'DM : bouton FIFA (lien signé) + bouton Slack');
+    check(btns.length === 2 && /\/open\/b_.+\?t=[a-f0-9]{64}$/.test(btns[0].url), 'DM : bouton ouverture animée (lien signé) + bouton Slack');
   } else {
     check(btns.length === 1 && btns[0].action_id === 'open_booster', 'DM : seulement le bouton Slack (web désactivé)');
   }

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // ═══════════════════════════════════════════════════════════
-//  👀 Prévisualisation locale de la page d'ouverture FIFA (sans Slack)
+//  👀 Prévisualisation locale de la page d'ouverture animée (sans Slack)
 //
 //  Démarre le serveur web sur une COPIE temporaire du projet
 //  (aucune donnée réelle touchée) et affiche 2 liens :

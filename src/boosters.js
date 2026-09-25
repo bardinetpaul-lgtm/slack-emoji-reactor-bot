@@ -220,6 +220,15 @@ function setMessageRef(id, channel, ts) {
   saveStore(data);
 }
 
+/**
+ * Nombre de boosters achetés mais pas encore ouverts par un user
+ * (affiché dans l'onglet Accueil).
+ */
+function countPending(userId) {
+  const data = loadStore();
+  return Object.values(data.boosters).filter((b) => b.owner === userId && !b.opened).length;
+}
+
 module.exports = {
   BOOSTERS,
   getBooster,
@@ -230,4 +239,5 @@ module.exports = {
   markOpened,
   saveOpening,
   setMessageRef,
+  countPending,
 };

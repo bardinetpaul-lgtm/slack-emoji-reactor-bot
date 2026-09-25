@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // ═══════════════════════════════════════════════════════════
-//  🧪 Test de la page d'ouverture FIFA (sans Slack)
+//  🧪 Test de la page d'ouverture animée (sans Slack)
 //
 //  Copie src/, public/ et la banque de médias dans un dossier
 //  temporaire → aucun fichier runtime réel (boosters, collections…)
@@ -54,14 +54,15 @@ async function test(name, fn) {
 }
 
 (async () => {
-  const server = web.startWebServer({ client: fakeClient, logger: quiet, port: 0 });
+  const openedFor = []; // appels du hook onOpened (rafraîchissement de l'Accueil)
+  const server = web.startWebServer({ client: fakeClient, logger: quiet, port: 0, onOpened: (u) => openedFor.push(u) });
   await new Promise((r) => server.once('listening', r));
   const base = `http://127.0.0.1:${server.address().port}`;
   const tokenOf = (id, owner) => new URL(web.buildOpenUrl(id, owner)).searchParams.get('t');
   const post = (id, t) => fetch(`${base}/api/open/${id}?t=${t}`, { method: 'POST' });
   const totalCards = (u) => collections.getCollection(u).reduce((s, c) => s + c.count, 0);
 
-  console.log('\n🧪 Page d\'ouverture FIFA\n');
+  console.log('\n🧪 Page d\'ouverture animée\n');
 
   await test('buildOpenUrl pointe vers WEB_PUBLIC_URL/open/<id>?t=<hex64>', () => {
     const url = web.buildOpenUrl('b_x', 'U1');
@@ -118,6 +119,7 @@ async function test(name, fn) {
     await new Promise((r) => setTimeout(r, 20));
     assert.strictEqual(updates.length, 1);
     assert.strictEqual(updates[0].channel, 'D_A');
+    assert.deepStrictEqual(openedFor, ['U_A'], 'onOpened appelé une fois pour le propriétaire');
     firstCards = data.cards;
   });
 
@@ -127,6 +129,8 @@ async function test(name, fn) {
     assert.deepStrictEqual(data.cards, firstCards);
     assert.strictEqual(totalCards('U_A'), 8);
     assert.strictEqual(updates.length, 1);
+    await new Promise((r) => setTimeout(r, 20));
+    assert.deepStrictEqual(openedFor, ['U_A'], 'onOpened rappelé sur un rejeu');
   });
 
   await test('ouvert en web → le bouton Slack répond « déjà ouvert (web) »', () => {
@@ -152,6 +156,20 @@ async function test(name, fn) {
     assert.strictEqual(totalCards('U_C'), 8);
   });
 
+  await test('onOpened : seulement les vraies ouvertures web (pas token invalide, rejeu, déjà ouvert Slack)', async () => {
+    await new Promise((r) => setTimeout(r, 20));
+    assert.deepStrictEqual(openedFor, ['U_A', 'U_C']);
+  });
+
+  await test('onOpened qui plante → la page répond quand même', async () => {
+    const idE = boosters.createPending('U_E', 'common');
+    const s2 = web.startWebServer({ client: fakeClient, logger: quiet, port: 0, onOpened: () => { throw new Error('boum'); } });
+    await new Promise((r) => s2.once('listening', r));
+    const res = await fetch(`http://127.0.0.1:${s2.address().port}/api/open/${idE}?t=${tokenOf(idE, 'U_E')}`, { method: 'POST' });
+    assert.strictEqual((await res.json()).status, 'opened');
+    s2.close();
+  });
+
   await test('mauvais propriétaire côté Slack → forbidden', () => {
     const idF = boosters.createPending('U_F', 'common');
     assert.strictEqual(openOnce(idF, 'U_INTRUS', 'slack').status, 'forbidden');
@@ -167,6 +185,21 @@ async function test(name, fn) {
 
   await test('image hors banque → 404 (liste blanche)', async () => {
     assert.strictEqual((await fetch(`${base}/api/card-image/FNOTINBANK1`)).status, 404);
+  });
+
+  // Droits Unix : vérifiés sur la VM (Linux), sautés sous Windows
+  if (process.platform === 'win32') console.log('  ⏭️  secret en 600 : sauté sous Windows (à lancer sur la VM)');
+  else await test('secret généré → fichier data/web-secret en 600 (resserré si déjà là)', () => {
+    const { execFileSync } = require('child_process');
+    const secretFile = path.join(TMP, 'data', 'web-secret');
+    const run = () => execFileSync(process.execPath, ['-e', `require(${JSON.stringify(path.join(TMP, 'src', 'web.js'))}).signToken('b', 'U')`], {
+      env: { ...process.env, WEB_SECRET: '' }, stdio: 'ignore',
+    });
+    run();
+    assert.strictEqual(fs.statSync(secretFile).mode & 0o777, 0o600, 'création');
+    fs.chmodSync(secretFile, 0o644);
+    run();
+    assert.strictEqual(fs.statSync(secretFile).mode & 0o777, 0o600, 'fichier existant');
   });
 
   await test('GET sur /api/open → 405', async () => {

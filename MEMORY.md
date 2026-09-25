@@ -58,7 +58,7 @@ chat:write           → Envoyer des messages/DM
 im:write             → Ouvrir des conversations DM
 im:history           → Lire l'historique des DM (rattrapage des collections)
 users:read           → Récupérer les infos utilisateurs
-files:read           → Images des cartes sur la page d'ouverture FIFA
+files:read           → Images des cartes sur la page d'ouverture animée
 ```
 
 **Optionnels (pour auto-join) :**
@@ -110,9 +110,10 @@ slack-emoji-reactor-bot/
 │   ├── credits.json      ← Porte-monnaie booster (runtime, gitignored)
 │   ├── boosters.json     ← Boosters achetés non ouverts (runtime, gitignored)
 │   ├── collections.json  ← Cartes possédées par user (runtime, gitignored)
-│   ├── web-secret        ← Secret des liens FIFA si WEB_SECRET vide (runtime, gitignored)
-│   └── card-cache/       ← Images des cartes pour la page FIFA (runtime, gitignored)
-├── public/               ← Page d'ouverture FIFA (open.html/css/js + assets/)
+│   ├── settings.json     ← Réglages admin (crédits par Jeanpip) (runtime, gitignored)
+│   ├── web-secret        ← Secret des liens d'ouverture animée si WEB_SECRET vide (runtime, gitignored)
+│   └── card-cache/       ← Images des cartes pour la page d'ouverture animée (runtime, gitignored)
+├── public/               ← Page d'ouverture animée (open.html/css/js + assets/)
 ├── scripts/              ← backfill-collections, test-web-open, preview-web-open
 └── src/
     ├── app.js            ← Point d'entrée + listeners + slash commands + boutons
@@ -125,9 +126,51 @@ slack-emoji-reactor-bot/
     ├── collections.js    ← Cartes possédées par user + phrases doublon/triplon
     ├── broadcast.js      ← Liste de diffusion opt-in (qui accepte de recevoir)
     ├── openBooster.js    ← Ouverture d'un booster, partagée Slack + web (openOnce)
-    ├── web.js            ← Serveur HTTP de la page d'ouverture FIFA
-    └── cardImages.js     ← Proxy + cache des images slack-files pour la page
+    ├── web.js            ← Serveur HTTP de la page d'ouverture animée
+    ├── cardImages.js     ← Proxy + cache des images slack-files pour la page
+    ├── settings.js       ← Réglages live (crédits par Jeanpip), data/settings.json
+    ├── home.js           ← Onglet Accueil (vue par user) + modales (fonctions pures)
+    └── admin.js          ← Actions admin partagées (commandes slash + panneau Accueil)
 ```
+
+---
+
+## 🏠 Onglet Accueil (App Home)
+
+Construit **par utilisateur** (`src/home.js`) et publié via `views.publish` à l'ouverture
+(`app_home_opened`) et après chaque changement d'état.
+
+**Config Slack requise (une fois) :** api.slack.com → *App Home* → *Show Tabs* → **Home Tab ON** ;
+*Event Subscriptions* → bot event **`app_home_opened`** ; puis **Reinstall** l'app.
+Aucun nouveau scope OAuth.
+
+**Partie joueur (tout le monde) :** solde (demi-crédits affichés « 12,5 »), score de la semaine,
+⚔️ Attaque (bouton → modale avec sélecteur de channel `conversations_select` ; gratuite si
+débloquée, illimitée pour un admin, sinon `ATTACK_PRICE` crédits ; mêmes règles que
+`/jeanpip-attack` via `launchAttack`), boutons d'achat de boosters (`buy_booster_<type>`,
+le booster s'ouvre ensuite dans l'onglet *Messages*) + compteur de boosters non ouverts,
+bouton liste de diffusion (`broadcast_join/leave`). Pas de vue collection (refusée pour l'instant).
+
+**Panneau 👑 Admin :** construit UNIQUEMENT pour `JEANPIP_ADMINS` (Slack ne permet pas de
+masquer une commande slash, d'où l'Accueil). 4 boutons → modales : offrir une attaque,
+crédits ± (demi-crédits acceptés, positif = notifie, négatif = correction silencieuse),
+ajouter un média (lien + rareté + titre), ajouter une cible auto-react, ⚙️ crédits par Jeanpip
+(valeur d'un Jeanpip envoyé : multiple de 0,5 entre 0,5 et 10, sans rétroactivité, persistée dans
+`data/settings.json` via `src/settings.js`) ; liste des cibles
+avec bouton « Retirer » (cibles `.env` marquées fixes). **Chaque action admin revérifie
+`JEANPIP_ADMINS` côté serveur.** Les erreurs de saisie s'affichent dans la modale, les
+confirmations arrivent en DM.
+
+**Logique partagée :** les commandes admin slash (`/jeanpip-give`, `/jeanpip-give-credits`,
+`/jeanpip-addmedia`, `/jeanpip-auto`) et le panneau appellent les mêmes fonctions de
+`src/admin.js`. Les commandes sont gardées en parallèle pour l'instant (suppression plus tard).
+
+**Rafraîchissement :** `refreshHome()` après achat de booster, attaque, liste de diffusion,
+actions admin. Pour les passages « passifs » (crédits gagnés via une réaction, ouverture de
+booster, cadeau d'un admin), `refreshHomeIfSeen()` ne republie que pour les users ayant
+ouvert l'Accueil depuis le démarrage (Set en mémoire) → pas de `views.publish` à chaque
+réaction de tout le workspace. Une ouverture animée (page web) prévient
+le bot via le hook `onOpened` de `startWebServer` → l'Accueil est rafraîchi aussi (1re ouverture seulement).
 
 ---
 
@@ -139,7 +182,7 @@ Stockage : `data/subscribers.json` (runtime, gitignored).
 
 | Situation | Comportement |
 |---|---|
-| Tu réagis au message d'un **inscrit** | Il reçoit son Jeanpip ✅ · tu reçois le tien ✅ · tu gagnes 0,5 crédit ✅ |
+| Tu réagis au message d'un **inscrit** | Il reçoit son Jeanpip ✅ · tu reçois le tien ✅ · tu gagnes des crédits (0,5 par défaut) ✅ |
 | Tu réagis au message d'un **non-inscrit** | Il ne reçoit **rien** ❌ · tu reçois quand même le tien ✅ · **aucun crédit** ❌ |
 
 La liste est respectée **partout** : réactions, `/jeanpip-attack` (ne cible que les
@@ -150,9 +193,9 @@ tu réagis, tes boosters, et les punitions anti-spam.
 
 ## 🎁 Mode Booster JeanPip
 
-**Gagner des crédits :** +0,5 crédit permanent à chaque réaction `:jeanpip:` que TU poses
+**Gagner des crédits :** +0,5 crédit (par défaut, réglable par un admin depuis l'Accueil) permanent à chaque réaction `:jeanpip:` que TU poses
 (spam exclu ; l'attaque et l'auto-react ne créditent pas — anti-farming). Jamais de reset.
-Les soldes peuvent donc contenir des demi-crédits (`CREDITS_PER_JEANPIP` dans `src/app.js`).
+Les soldes peuvent donc contenir des demi-crédits (réglage `creditsPerJeanpip` dans `data/settings.json`, module `src/settings.js`).
 
 **Dépenser :**
 - `/jeanpip-booster` → boutique DM avec 3 boutons :
@@ -168,7 +211,7 @@ les 3 dernières suivent une distribution **par slot** (tables dans `src/booster
 chacune totalise 100 %). Ex. booster épique, slot 8 : 50 % épique / 20 % rare / 30 % légendaire.
 
 **Flux d'ouverture :** achat → débit immédiat → DM « Booster acheté » avec **2 boutons** :
-- 🎬 **Ouverture FIFA** → lien vers la page web d'animation (voir ci-dessous).
+- 🎬 **Ouverture animée** → lien vers la page web d'animation (voir ci-dessous).
   N'apparaît que si `WEB_PUBLIC_URL` est défini.
 - 💬 **Ouvrir dans Slack** → cartes révélées une toutes les **2 s dans le DM**
   (`SLACK_REVEAL_INTERVAL_MS` dans `src/app.js`).
@@ -178,7 +221,7 @@ ouvert → tire → ajoute en collection → mémorise les cartes dans `boosters
 premier gagne, l'autre répond « déjà ouvert ». Les cartes sont en collection AVANT
 l'animation (un restart ou un onglet fermé ne fait rien perdre).
 
-### 🎬 Page d'ouverture « à la FIFA »
+### 🎬 Page d'ouverture animée
 
 - Servie par le bot lui-même (`src/web.js`, module `http` natif) sur `127.0.0.1:3100`,
   exposée via le reverse proxy du dashboard : `https://dashboard-lorient.dimsi.cloud/jeanpip/`.
@@ -222,9 +265,9 @@ d'exemplaires. À la révélation, une phrase indique Nouvelle / Doublon / Tripl
 **Catalogue extensible :** ajouter une entrée dans `BOOSTERS` (`src/boosters.js`)
 avec un `price` et 8 `slots` suffit à créer un nouveau type de booster.
 
-**Commandes admin liées :**
+**Commandes admin liées** (aussi dans le panneau 👑 Admin de l'Accueil) :
 - `/jeanpip-give-credits @user <montant>` → crédite le porte-monnaie de quelqu'un
-  (montant entier positif, notifie la personne).
+  (positif = cadeau notifié, négatif = correction ; demi-crédits acceptés, ex. `2,5`).
 - `/jeanpip-addmedia <lien> <rareté> [titre]` → ajoute un média à la banque **sans
   redémarrage**. Rareté acceptée en FR/EN (`commun/rare/epique/legendaire`). Le type
   (image/vidéo) est déduit de l'URL. Média persisté dans `data/media-bank-custom.json`
