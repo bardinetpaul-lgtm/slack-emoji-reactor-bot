@@ -193,7 +193,8 @@ l'animation (un restart ou un onglet fermé ne fait rien perdre).
   `data/card-cache/` (gitignored). Seuls les fichiers de la banque sont servis.
 - Front : `public/open.html|css|js` (sans build, sans lib). Fond : `public/assets/bg-lorient.jpg`.
   Sons en Web Audio, coupés par défaut.
-- Tests : `node scripts/test-web-open.js` · Aperçu local : `node scripts/preview-web-open.js`
+- Tests : `node scripts/test-web-open.js` (page web) + `node scripts/test-app-booster.js`
+  (achat/ouverture Slack avec un faux Slack, ~30 s) · Aperçu local : `node scripts/preview-web-open.js`
   (copie temporaire, aucune donnée réelle touchée).
 
 **Config nginx** (dans le server block du dashboard) :
