@@ -34,7 +34,11 @@ const JEANPIP_ADMINS = process.env.JEANPIP_ADMINS
   : [];
 
 // ⚔️ Prix d'une Attaque Jeanpip achetée en crédits (si pas d'attaque gratuite)
-const ATTACK_PRICE = 50;
+const ATTACK_PRICE = 25;
+
+// 💰 Crédits gagnés par Jeanpip envoyé (demi-crédits autorisés)
+const CREDITS_PER_JEANPIP = 0.5;
+const CREDITS_PER_JEANPIP_LABEL = String(CREDITS_PER_JEANPIP).replace('.', ',');
 
 // ─────────────────────────────────────────────
 // 🚨 Anti-spam config
@@ -433,10 +437,10 @@ app.event('reaction_added', async ({ event, client, logger }) => {
       // 📈 Compteur durable pour le classement JeanPip du dashboard (all-time + semaine)
       scores.recordHit(reactingUserId);
 
-      // 💰 +1 crédit permanent (porte-monnaie booster). Spam déjà exclu ci-dessus,
+      // 💰 +CREDITS_PER_JEANPIP crédit permanent (porte-monnaie booster). Spam déjà exclu ci-dessus,
       //    et présence du bot dans la conversation vérifiée juste au-dessus.
       //    Seule TA réaction crédite : l'attaque et l'auto-react ne créditent pas.
-      const newBalance = credits.addCredit(reactingUserId);
+      const newBalance = credits.addCredit(reactingUserId, CREDITS_PER_JEANPIP);
       logger.info(`💰 Crédits de <@${reactingUserId}> : ${newBalance}`);
     }
 
@@ -1034,7 +1038,7 @@ app.command('/jeanpip-credits', async ({ command, ack, client, logger }) => {
           type: 'section',
           text: {
             type: 'mrkdwn',
-            text: `💰 *Tu as ${balance} crédit(s) JeanPip !*\n\nTu gagnes *+1 crédit* à chaque fois que tu poses une réaction :${TARGET_EMOJI}: sur un message.\n\n🎁 Dépense-les en boosters avec \`/jeanpip-booster\` !`,
+            text: `💰 *Tu as ${balance} crédit(s) JeanPip !*\n\nTu gagnes *+${CREDITS_PER_JEANPIP_LABEL} crédit* à chaque fois que tu poses une réaction :${TARGET_EMOJI}: sur un message.\n\n🎁 Dépense-les en boosters avec \`/jeanpip-booster\` !`,
           },
         },
       ],
@@ -1415,7 +1419,7 @@ app.command('/jeanpip-help', async ({ command, ack, client, logger }) => {
           type: 'section',
           text: {
             type: 'mrkdwn',
-            text: `🎁 *Boosters JeanPip — \`/jeanpip-booster\`*\nTu as *${creditBalance}* crédit(s) 💰\n\n*Comment gagner des crédits :*\n• *+1 crédit* à chaque réaction :${TARGET_EMOJI}: que TU poses (spam exclu)\n\n*Comment les dépenser :*\n• \`/jeanpip-booster\` → achète un booster (${boosters.listBoosters().map((b) => `${b.emoji} ${b.price}`).join(' · ')})\n• \`/jeanpip-attack\` → achète une Attaque Jeanpip (${ATTACK_PRICE}) si tu n'en as pas de gratuite\n• Chaque booster = *8 cartes* révélées une par une\n• Plus le booster est cher, plus les cartes rares sont probables !\n\n_Tape \`/jeanpip-credits\` pour voir ton solde à tout moment._`,
+            text: `🎁 *Boosters JeanPip — \`/jeanpip-booster\`*\nTu as *${creditBalance}* crédit(s) 💰\n\n*Comment gagner des crédits :*\n• *+${CREDITS_PER_JEANPIP_LABEL} crédit* à chaque réaction :${TARGET_EMOJI}: que TU poses (spam exclu)\n\n*Comment les dépenser :*\n• \`/jeanpip-booster\` → achète un booster (${boosters.listBoosters().map((b) => `${b.emoji} ${b.price}`).join(' · ')})\n• \`/jeanpip-attack\` → achète une Attaque Jeanpip (${ATTACK_PRICE}) si tu n'en as pas de gratuite\n• Chaque booster = *8 cartes* révélées une par une\n• Plus le booster est cher, plus les cartes rares sont probables !\n\n_Tape \`/jeanpip-credits\` pour voir ton solde à tout moment._`,
           },
         },
         { type: 'divider' },
