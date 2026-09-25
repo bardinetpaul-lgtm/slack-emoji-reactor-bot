@@ -16,6 +16,9 @@ const targets = require('./targets');
 const { addMedia, getRarityInfo } = require('./media');
 const { buildMediaBlocks } = require('./blocks');
 
+// 🎨 Crédits offerts à l'auteur d'un média, selon sa rareté
+const AUTHOR_REWARDS = { common: 10, rare: 15, epic: 20, legendary: 30 };
+
 /** Formate un nombre de crédits à la française (12.5 → « 12,5 »). */
 function formatCredits(n) {
   return String(n).replace('.', ',');
@@ -93,10 +96,14 @@ function createAdminActions({ safeSendDM, isBot, targetEmoji }) {
 
   // ─────────────────────────────────────────────
   // 🖼️ Ajouter un média à la banque (rareté déjà normalisée)
+  //    `authorId` (optionnel, jamais un bot : à vérifier AVANT) = la personne
+  //    qui a fourni l'image : elle est créditée de AUTHOR_REWARDS[rareté].
+  //    Synchrone (utilisable avant l'ack d'une modale) : le DM à l'auteur
+  //    se fait ensuite avec notifyMediaAuthor().
   //    Renvoie un aperçu du média dans `blocks`.
   // ─────────────────────────────────────────────
-  function addMediaToBank(adminId, { url, rarity, title }, logger) {
-    const result = addMedia({ url, rarity, title });
+  function addMediaToBank(adminId, { url, rarity, title, authorId }, logger) {
+    const result = addMedia({ url, rarity, title, author: authorId });
 
     if (!result.ok) {
       const reason = {
@@ -108,9 +115,21 @@ function createAdminActions({ safeSendDM, isBot, targetEmoji }) {
     }
 
     const info = getRarityInfo(rarity);
-    const text = `✅ *Média ajouté à la banque !*\n\n🔢 Numéro attribué : *Surprise #${result.number}*\n${info.emoji} Rareté : *${info.label}* · Type : *${result.media.type}*\n📊 Il y a maintenant *${result.count}* média(s) en ${info.label}.\n\n👇 Aperçu :`;
+    logger.info(`🖼️ <@${adminId}> a ajouté un média ${rarity} (${result.media.type}) : ${url}${authorId ? ` — auteur <@${authorId}>` : ''}`);
 
-    logger.info(`🖼️ <@${adminId}> a ajouté un média ${rarity} (${result.media.type}) : ${url}`);
+    // 🎨 Récompense de l'auteur
+    let author = null;
+    let authorLine = '';
+    if (authorId) {
+      const reward = AUTHOR_REWARDS[rarity];
+      const newBalance = credits.addCredit(authorId, reward);
+      author = { id: authorId, reward, newBalance };
+      logger.info(`🎨 <@${authorId}> a reçu +${reward} pour son média ${rarity} (solde ${newBalance})`);
+      authorLine = `\n🎨 Attribué à <@${authorId}> : *+${formatCredits(reward)} crédit(s)* (nouveau solde : *${formatCredits(newBalance)}*). La personne a été notifiée.`;
+    }
+
+    const text = `✅ *Média ajouté à la banque !*\n\n🔢 Numéro attribué : *Surprise #${result.number}*\n${info.emoji} Rareté : *${info.label}* · Type : *${result.media.type}*\n📊 Il y a maintenant *${result.count}* média(s) en ${info.label}.${authorLine}\n\n👇 Aperçu :`;
+
     return {
       ok: true,
       text,
@@ -118,7 +137,25 @@ function createAdminActions({ safeSendDM, isBot, targetEmoji }) {
         section(text),
         ...buildMediaBlocks({ headerText: `🖼️ *Nouveau Jeanpip ${info.label}*`, media: result.media }),
       ],
+      media: result.media,
+      number: result.number,
+      author,
     };
+  }
+
+  /** 🎨 DM à l'auteur d'un média ajouté (résultat ok de addMediaToBank). Ne fait rien sans auteur. */
+  async function notifyMediaAuthor(client, result, logger) {
+    if (!result.ok || !result.author) return;
+    const { id, reward, newBalance } = result.author;
+    const info = getRarityInfo(result.media.rarity);
+
+    await safeSendDM(client, id, {
+      text: `🎨 Ton image est entrée dans la banque JeanPip : +${formatCredits(reward)} crédits !`,
+      blocks: [
+        section(`🎨 *Ton image est entrée dans la banque JeanPip !* :${targetEmoji}:\n\nMerci pour ta contribution 🙏 Elle a été ajoutée en ${info.emoji} *${info.label}* (*Surprise #${result.number}*).\n\n💰 *+${formatCredits(reward)} crédit(s)* — nouveau solde : *${formatCredits(newBalance)}*\n\nDépense-les avec \`/jeanpip-booster\` ou depuis l'onglet *Accueil* du bot ! 🎁`),
+        ...buildMediaBlocks({ headerText: `🖼️ *Ta carte ${info.label}*`, media: result.media }),
+      ],
+    }, logger);
   }
 
   // ─────────────────────────────────────────────
@@ -162,10 +199,11 @@ function createAdminActions({ safeSendDM, isBot, targetEmoji }) {
     giveAttack,
     adjustCredits,
     addMediaToBank,
+    notifyMediaAuthor,
     addAutoTarget,
     removeAutoTarget,
     listAutoTargets,
   };
 }
 
-module.exports = { createAdminActions, formatCredits };
+module.exports = { createAdminActions, formatCredits, AUTHOR_REWARDS };
