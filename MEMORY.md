@@ -192,19 +192,22 @@ l'animation (un restart ou un onglet fermé ne fait rien perdre).
   **`files:read`**), sinon via la page publique (lien `pub_secret`), cache dans
   `data/card-cache/` (gitignored). Seuls les fichiers de la banque sont servis.
 - Front : `public/open.html|css|js` (sans build, sans lib). Fond : `public/assets/bg-lorient.jpg`.
+- ⚠️ **Cloudflare impose un cache navigateur de 4 h** sur les .css/.js (`max-age=14400`, il écrase
+  notre `no-cache`). D'où `open.css?v=<hash>` / `open.js?v=<hash>` : le serveur remplace
+  `__ASSET_VERSION__` dans `open.html` par un hash du contenu → une mise à jour est vue tout de
+  suite. Si tu renommes/ajoutes un asset chargé par la page, versionne-le de la même façon.
+- En prod, la page passe par le **dashboard MagicDIMSI** (seul port exposé, 8080) qui relaie
+  `/jeanpip/*` vers `127.0.0.1:3100` (`jeanpip-web.js` dans le repo exagyde/MagicDIMSI).
+  Caddy (port 80) ne reçoit PAS le trafic extérieur : la config nginx/Caddy ci-dessous est inutile.
   Sons en Web Audio, coupés par défaut.
 - Tests : `node scripts/test-web-open.js` (page web) + `node scripts/test-app-booster.js`
   (achat/ouverture Slack avec un faux Slack, ~30 s) · Aperçu local : `node scripts/preview-web-open.js`
   (copie temporaire, aucune donnée réelle touchée).
 
-**Config nginx** (dans le server block du dashboard) :
-```nginx
-location /jeanpip/ {
-    proxy_pass http://127.0.0.1:3100/;
-    proxy_set_header Host $host;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-}
-```
+**Chemin réseau réel (constaté le 2026-09-25)** : navigateur → Cloudflare (whitelist) →
+redirection de port DIMSI → VM `10.0.13.250:8080` = dashboard MagicDIMSI → relais `/jeanpip/*`
+→ bot `127.0.0.1:3100`. Il n'y a **pas de nginx** sur la VM, et Caddy (port 80) est hors circuit.
+`.env` de prod : `WEB_PUBLIC_URL=https://dashboard-lorient.dimsi.cloud/jeanpip` + `WEB_PORT=3100`.
 
 **Collection :** chaque carte tirée d'un booster ET chaque Jeanpip reçu en DM (réaction,
 attaque, auto-react — via `sendJeanpipDM`) est enregistré dans `data/collections.json`.

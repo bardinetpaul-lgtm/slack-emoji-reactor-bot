@@ -74,6 +74,15 @@ async function test(name, fn) {
     assert.match(res.headers.get('content-type'), /text\/html/);
   });
 
+  await test('open.css / open.js sont versionnés (?v=<hash>) contre le cache Cloudflare', async () => {
+    const html = await (await fetch(`${base}/open/b_x`)).text();
+    assert.ok(!html.includes('__ASSET_VERSION__'), 'placeholder remplacé');
+    const css = /href="\.\.\/open\.css\?v=([a-f0-9]{10})"/.exec(html);
+    const js = /src="\.\.\/open\.js\?v=([a-f0-9]{10})"/.exec(html);
+    assert.ok(css && js && css[1] === js[1], 'même version sur le CSS et le JS');
+    assert.strictEqual((await fetch(`${base}/open.css?v=${css[1]}`)).status, 200);
+  });
+
   await test('les statiques sont servis (open.js, fond)', async () => {
     assert.strictEqual((await fetch(`${base}/open.js`)).status, 200);
     assert.strictEqual((await fetch(`${base}/assets/bg-lorient.jpg`)).status, 200);
