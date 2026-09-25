@@ -102,7 +102,8 @@ async function test(name, fn) {
     assert.strictEqual(data.owner.name, 'Nom-U_A');
     assert.strictEqual(data.stats.total, bank.length);
     assert.strictEqual(data.stats.owned, 0);
-    assert.deepStrictEqual(data.sections.map((s) => s.key), ['common', 'rare', 'epic', 'legendary']);
+    assert.deepStrictEqual(data.sections.map((s) => s.key), ['common', 'rare', 'epic', 'legendary', 'extra']);
+    assert.strictEqual(data.sections[4].stickers.length, 10, '10 emplacements anti-spam en Hors série');
   });
 
   const cards = [...pick('common', 3), ...pick('rare', 1), ...pick('legendary', 1)];
@@ -126,7 +127,7 @@ async function test(name, fn) {
   await test('cartes manquantes : seulement numéro + rareté (ni image, ni titre, ni lien)', async () => {
     const data = await (await api('U_A', tokenOf('U_A'))).json();
     const missing = data.sections.flatMap((s) => s.stickers).filter((s) => !s.owned);
-    assert.strictEqual(missing.length, bank.length - 5);
+    assert.strictEqual(missing.length, bank.length - 5 + 10); // + 10 anti-spam
     for (const st of missing) assert.deepStrictEqual(Object.keys(st).sort(), ['n', 'owned', 'rarity']);
     const raw = JSON.stringify(data);
     const hidden = bank.filter((m) => !cards.includes(m));
@@ -158,8 +159,8 @@ async function test(name, fn) {
     collections.addCards('U_A', [{ url: 'https://example.test/vieille.gif', title: '👻 Surprise #999', rarity: 'rare', type: 'image' }]);
     const album = buildAlbum('U_A');
     const extra = album.sections.find((s) => s.key === 'extra');
-    assert.ok(extra && extra.stickers.length === 1);
-    assert.strictEqual(extra.stickers[0].n, 999);
+    assert.ok(extra && extra.stickers.length === 11, '10 anti-spam + 1 ancienne');
+    assert.strictEqual(extra.stickers[10].n, 999);
     assert.strictEqual(album.stats.total, bank.length);
     assert.strictEqual(album.stats.owned, 6);
   });

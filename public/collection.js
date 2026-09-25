@@ -34,7 +34,7 @@
     legendary: { label: 'Légendaires', short: 'LÉGENDAIRE' },
     extra:     { label: 'Hors série',  short: 'HORS SÉRIE' },
   };
-  const RARITY_LABEL = { common: 'Commune', rare: 'Rare', epic: 'Épique', legendary: 'Légendaire' };
+  const RARITY_LABEL = { common: 'Commune', rare: 'Rare', epic: 'Épique', legendary: 'Légendaire', extra: 'Hors série' };
 
   const $ = (sel) => document.querySelector(sel);
   const el = (tag, cls, text) => {
@@ -163,10 +163,9 @@
 
     const rows = el('div', 'cover-rows');
     for (const s of data.sections) {
-      if (s.key === 'extra') continue;
       const r = stats.byRarity[s.key] || { owned: 0, total: 0 };
       const row = el('div', `cover-row r-${s.key}`);
-      row.appendChild(el('span', null, SECTION[s.key].label));
+      row.appendChild(el('span', null, s.key === 'extra' ? `${SECTION.extra.label} (bonus)` : SECTION[s.key].label));
       const bar = el('div', 'bar');
       const fill = el('i');
       fill.style.width = `${r.total ? (r.owned / r.total) * 100 : 0}%`;

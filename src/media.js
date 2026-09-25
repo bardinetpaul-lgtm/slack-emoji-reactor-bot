@@ -261,7 +261,7 @@ function inferType(url) {
 //    Le numéro est l'IDENTIFIANT d'une photo : il ne doit JAMAIS être
 //    réattribué ni modifié.
 //    ⚠️ Les numéros #62 → #71 sont utilisés par les photos anti-spam
-//    (SPAM_PHOTO_START dans src/app.js). Elles ne sont pas dans la banque,
+//    (src/spamCards.js). Elles ne sont pas dans la banque,
 //    donc on plancher le calcul à 71 pour ne jamais les réutiliser.
 // ─────────────────────────────────────────────
 const RESERVED_NUMBER_MAX = 71;
