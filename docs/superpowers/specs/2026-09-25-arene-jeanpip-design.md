@@ -101,8 +101,11 @@ hors de [35 %, 65 %].
 - **Brèche :** une tour détruite ouvre le couloir jusqu'au QG. Le vainqueur de la tour peut
   alors poser ses cartes **plus loin dans ce couloir** (jusqu'à la rivière adverse).
 - **QG : 2000 PV, 100 DPS**, ne tire que sur les unités entrées par une brèche.
-- **Pose :** dans sa moitié de terrain, dans le couloir choisi. L'unité apparaît **1 s après**
-  la pose (visible par l'adversaire pendant cette seconde).
+- **Pose au point exact :** on touche (ou on glisse la carte sur) le point voulu. Le couloir est le plus
+  proche du point, la profondeur est celle du point : dans sa moitié, du pied de sa tour jusqu'au pont
+  (rivière interdite) ; chez l'adversaire seulement si la tour de ce couloir est tombée. Un **Sort se vise
+  n'importe où**. Un fantôme montre où le groupe apparaîtra (rouge si interdit). L'unité apparaît
+  **1 s après** (visible par l'adversaire pendant cette seconde).
 
 ### Deck, main, élixir
 
