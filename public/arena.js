@@ -37,7 +37,7 @@
   let setup = null;
   let renderer = null;
   let view = null;
-  let selected = null;      // url de la carte choisie
+  let selected = null;      // { index, url } de l'emplacement choisi en main
   let handKey = '';
   let pillTimer = null;
   let editor = null;
@@ -128,24 +128,25 @@
   function renderHand(v) {
     const me = v.players[v.you];
     const hand = me.hand || [];
-    if (selected && !hand.some((c) => c.url === selected)) selectCard(null);
+    if (selected && (!hand[selected.index] || hand[selected.index].url !== selected.url)) selectCard(null);
     const key = JSON.stringify([hand.map((c) => [c.url, c.copies, c.cost <= me.elixir]), selected, me.next && me.next.url]);
     if (key === handKey) return;
     handKey = key;
 
     const box = $('hand');
-    box.replaceChildren(...hand.map((c) => {
+    box.replaceChildren(...hand.map((c, index) => {
       const b = el('button', 'card');
       b.type = 'button';
+      const on = Boolean(selected) && selected.index === index;
       if (c.cost > me.elixir) b.classList.add('poor');
-      if (c.url === selected) b.classList.add('selected');
-      b.setAttribute('aria-pressed', String(c.url === selected));
-      b.setAttribute('aria-label', `${c.title || 'Carte'}, coût ${c.cost}, ${c.copies} exemplaire(s)`);
+      if (on) b.classList.add('selected');
+      b.setAttribute('aria-pressed', String(on));
+      b.setAttribute('aria-label', `${c.title || 'Carte'}, coût ${c.cost}, ${c.copies} pose(s) restante(s)`);
       b.append(cardFace(c), costBadge(c.cost));
       if (c.copies > 1) b.append(el('span', 'copies', `×${c.copies}`));
       b.addEventListener('click', (e) => {
         e.stopPropagation();
-        selectCard(selected === c.url ? null : c.url);
+        selectCard(on ? null : { index, url: c.url });
       });
       return b;
     }));
@@ -155,11 +156,11 @@
     if (me.next) next.append(cardFace(me.next), costBadge(me.next.cost));
   }
 
-  function selectCard(url) {
-    selected = url;
+  function selectCard(slot) {
+    selected = slot;
     handKey = '';
-    $('board-wrap').classList.toggle('selecting', Boolean(url));
-    if (renderer) renderer.setZones(Boolean(url));
+    $('board-wrap').classList.toggle('selecting', Boolean(slot));
+    if (renderer) renderer.setZones(Boolean(slot));
     if (view && view.phase === 'running') renderHand(view);
   }
 
@@ -197,14 +198,14 @@
     const y = ((e.clientY - r.top) / r.height) * ArenaBoard.H;
     const yPct = (y / ArenaBoard.H) * 100;
     const me = view.players[view.you];
-    const card = (me.hand || []).find((c) => c.url === selected);
-    if (!card) return selectCard(null);
+    const card = selected && (me.hand || [])[selected.index];
+    if (!card || card.url !== selected.url) return selectCard(null);
 
     const spot = ArenaBoard.pointToDeploy(x, y, renderer.current() || view);
     if (!spot.ok) return flash(spot.reason, yPct);
     if (card.cost > me.elixir) return flash('elixir', yPct);
 
-    const url = selected;
+    const { url } = selected;
     selectCard(null);
     const res = await send({ type: 'deploy', url, lane: spot.lane, forward: spot.forward });
     if (!res.ok) flash(res.reason, yPct);
@@ -215,7 +216,7 @@
     if (!view || view.phase !== 'running') return;
     const hand = view.players[view.you].hand || [];
     const n = Number(e.key);
-    if (n >= 1 && n <= hand.length) selectCard(hand[n - 1].url);
+    if (n >= 1 && n <= hand.length) selectCard({ index: n - 1, url: hand[n - 1].url });
     if (e.key === 'Escape') selectCard(null);
   });
 

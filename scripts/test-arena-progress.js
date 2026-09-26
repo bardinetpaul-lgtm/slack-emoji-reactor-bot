@@ -71,9 +71,9 @@ check('3 decks par défaut, vides, le 1er actif', d0.decks.length === 3 && d0.ac
 arenaStore.setDecks('UZ', { active: 1, decks: [{ name: 'Rush', cards: ['a', 'b'] }, { name: 'Contrôle', cards: ['c', 'c', 'd'] }, { name: '', cards: [] }] });
 const d1 = arenaStore.getDecks('UZ');
 check('decks enregistrés (nom, cartes, deck actif)', d1.active === 1 && d1.decks[0].name === 'Rush' && d1.decks[1].name === 'Contrôle');
-check('doublons retirés d\'un deck', d1.decks[1].cards.join() === 'c,d');
+check('doublons conservés (une carte peut occuper plusieurs emplacements)', d1.decks[1].cards.join() === 'c,c,d');
 check('nom vide → nom par défaut', d1.decks[2].name === 'Deck 3');
-check('getDeck = le deck actif', arenaStore.getDeck('UZ').join() === 'c,d');
+check('getDeck = le deck actif', arenaStore.getDeck('UZ').join() === 'c,c,d');
 arenaStore.setDecks('UZ', { active: 9, decks: [{ name: 'x'.repeat(80), cards: Array.from({ length: 12 }, (_, i) => `k${i}`) }] });
 const d2 = arenaStore.getDecks('UZ');
 check('garde-fous : 8 cartes max, nom court, index valide, toujours 3 decks', d2.decks[0].cards.length === 8 && d2.decks[0].name.length <= 24 && d2.active === 0 && d2.decks.length === 3);

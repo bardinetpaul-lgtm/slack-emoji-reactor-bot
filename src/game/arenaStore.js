@@ -5,7 +5,7 @@
 //  Persistant : survit aux redémarrages du bot.
 //
 //  DB = fichier JSON local (data/arena.json)
-//    { decks: { U123: { active: 0, decks: [{ name, cards: [url ≤ 8] }] × 3 } },
+//    { decks: { U123: { active: 0, decks: [{ name, cards: [url ≤ 8, doublons permis] }] × 3 } },
 //      (ancien format accepté : { U123: [url × 8] } → repris en « Deck 1 »)
 //      stats: { U123: { wins, losses, draws, streak, bestStreak, bestLoot } },
 //      rewards: { U123: { day: 'YYYY-MM-DD', total, vs: { U456: n } } },
@@ -69,7 +69,8 @@ function normalizeDecks(raw) {
   const decks = Array.from({ length: DECK_SLOTS }, (_, i) => {
     const d = list[i] || {};
     const name = typeof d.name === 'string' && d.name.trim() ? d.name.trim().slice(0, DECK_NAME_MAX) : `Deck ${i + 1}`;
-    const cards = [...new Set((Array.isArray(d.cards) ? d.cards : []).filter((u) => typeof u === 'string' && u))].slice(0, DECK_MAX_CARDS);
+    // une même carte peut occuper plusieurs emplacements (vérifié contre la collection au combat)
+    const cards = (Array.isArray(d.cards) ? d.cards : []).filter((u) => typeof u === 'string' && u).slice(0, DECK_MAX_CARDS);
     return { name, cards };
   });
   const active = !legacy && raw && Number.isInteger(raw.active) && raw.active >= 0 && raw.active < DECK_SLOTS ? raw.active : 0;

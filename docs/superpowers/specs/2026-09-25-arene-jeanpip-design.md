@@ -106,13 +106,13 @@ hors de [35 %, 65 %].
 
 ### Deck, main, élixir
 
-- **Deck = 8 cartes différentes** choisies dans sa collection. Il faut **au moins 8 cartes
-  différentes** en collection pour combattre.
-- **Chaque pose engage un exemplaire.** Une carte peut être posée autant de fois qu'on en possède
-  d'exemplaires : les doublons sont des munitions. Une carte sans exemplaire restant sort du cycle.
-- **Main de 4**, cycle façon Clash Royale : la carte posée repart en fin de file.
+- **Deck = 8 emplacements.** Une carte peut occuper autant d'emplacements qu'on en possède
+  d'exemplaires (×3 possédée → jusqu'à 3). Il faut **au moins 8 exemplaires** en collection pour combattre.
+- **Chaque emplacement se joue UNE seule fois par combat** : une carte mise ×1 dans le deck, une fois
+  dépensée, n'est plus disponible ; ×3 dans le deck = 3 poses. **Au maximum 8 poses par combat.**
+- **Main de 4** + la carte suivante visible : la carte posée quitte le jeu, la suivante prend sa place.
 - **Élixir :** départ 5, max 10, +1 toutes les 2,8 s ; **double élixir la dernière minute**.
-- **Pas de plafond de poses** : l'élixir régule. L'élixir des deux joueurs est visible.
+- L'élixir des deux joueurs est visible.
 - **Une seule Pompe active** à la fois par joueur.
 
 ### Fin du combat
@@ -150,7 +150,7 @@ Une pose encore en train d'apparaître (délai de 1 s) à la fin compte aussi co
 
 ## 🃏 Decks (éditeur, DA « Editeur de deck »)
 
-- **3 decks enregistrés** par joueur (renommables), un actif ; chaque deck = 8 cartes différentes.
+- **3 decks enregistrés** par joueur (renommables), un actif ; chaque deck = 8 emplacements (doublons permis dans la limite des exemplaires).
 - L'éditeur sert d'écran de **préparation** : « Prêt » (exige 8 cartes) / « Prêt · annuler » ; sans action,
   le combat démarre à 0:00 avec le deck actif (complété automatiquement s'il lui manque des cartes).
 - Alertes : cartes manquantes, pas de mêlée ni de Tank, coût moyen > 4,2, pas de sort.
@@ -197,8 +197,8 @@ le deck est complété automatiquement au prochain combat, avec un message.
 2. Refus / expiration → DM au challenger.
 3. Acceptation → chaque joueur reçoit son lien signé vers la **préparation**.
 
-Refusé d'emblée si : un des deux est déjà en combat ou en file, un des deux a moins de 8 cartes
-différentes, défi à soi-même.
+Refusé d'emblée si : un des deux est déjà en combat ou en file, un des deux a moins de 8 exemplaires
+en collection, défi à soi-même.
 
 ### Combat rapide
 

@@ -5,7 +5,9 @@
 //  deck actif (vraies images des cartes), coût moyen, archétypes,
 //  alerte, « Vider » et « Prêt » (préparation) ou enregistrement auto.
 //  À droite : toute la collection (vraies images), filtres par
-//  archétype, tri coût / nom, exemplaires possédés, badge « Deck ».
+//  archétype, tri coût / nom, exemplaires possédés, badge « Deck ×n ».
+//  Une carte ×3 possédée peut occuper jusqu'à 3 emplacements ; chaque
+//  emplacement se joue UNE fois par combat.
 //
 //  DeckEditor.mount(root, {
 //    catalogue: [{ url, title, rarity, archetype, cost, copies, image }],
@@ -57,7 +59,11 @@
   function mount(rootEl, opts) {
     const byUrl = Object.fromEntries(opts.catalogue.map((c) => [c.url, c]));
     const state = {
-      decks: opts.decks.map((d) => ({ name: d.name, cards: d.cards.filter((u) => byUrl[u] && byUrl[u].copies > 0) })),
+      decks: opts.decks.map((d) => {
+        const used = {};
+        // garde un emplacement tant qu'il reste un exemplaire pour le couvrir
+        return { name: d.name, cards: d.cards.filter((u) => byUrl[u] && (used[u] = (used[u] || 0) + 1) <= byUrl[u].copies) };
+      }),
       active: opts.active || 0,
       filter: 'all',
       sort: 'cost',
@@ -112,7 +118,7 @@
           b.append(cardArt(c), el('span', 'de-cost', String(c.cost)));
           b.setAttribute('aria-label', `Retirer ${c.title}`);
           b.addEventListener('click', () => {
-            state.decks[state.active].cards = state.decks[state.active].cards.filter((u) => u !== c.url);
+            state.decks[state.active].cards = state.decks[state.active].cards.filter((_, j) => j !== i);
             changed();
           });
         } else {
@@ -168,8 +174,9 @@
 
     // ── Panneau collection ──
     function renderCollection() {
-      const inDeck = new Set(state.decks[state.active].cards);
-      const deckFull = inDeck.size >= DECK_SIZE;
+      const inDeckCount = {};
+      state.decks[state.active].cards.forEach((u) => { inDeckCount[u] = (inDeckCount[u] || 0) + 1; });
+      const deckFull = state.decks[state.active].cards.length >= DECK_SIZE;
       const owned = opts.catalogue.filter((c) => c.copies > 0).length;
 
       const head = el('div', 'de-coll-head');
@@ -195,20 +202,24 @@
 
       const grid = el('div', 'de-grid');
       list.forEach((c) => {
-        const on = inDeck.has(c.url);
-        const can = c.copies > 0 && !on && !deckFull;
+        const n = inDeckCount[c.url] || 0;
+        const on = n > 0;
+        const can = n < c.copies && !deckFull;
         const b = el('button', `de-card${on ? ' in-deck' : ''}${c.copies > 0 ? '' : ' unowned'}`);
         b.type = 'button';
         b.disabled = !(can || on);
         b.setAttribute('aria-pressed', String(on));
-        b.setAttribute('aria-label', `${c.title}, ${ARCH_LABELS[c.archetype]}, coût ${c.cost}, ${c.copies} exemplaire(s)`);
+        b.setAttribute('aria-label', `${c.title}, ${ARCH_LABELS[c.archetype]}, coût ${c.cost}, ${c.copies} exemplaire(s), ${n} dans le deck`);
+        b.title = can ? 'Ajouter un emplacement' : on ? 'Retirer un emplacement' : '';
         b.append(cardArt(c), el('span', 'de-cost', String(c.cost)), el('span', 'de-copies', c.copies > 0 ? `×${c.copies}` : '0'));
-        if (on) b.append(el('span', 'de-badge', 'Deck'));
+        if (on) b.append(el('span', 'de-badge', n > 1 ? `Deck ×${n}` : 'Deck'));
         b.addEventListener('click', () => {
           const cards = state.decks[state.active].cards;
-          if (on) state.decks[state.active].cards = cards.filter((u) => u !== c.url);
-          else if (can) state.decks[state.active].cards = [...cards, c.url];
-          else return;
+          if (can) state.decks[state.active].cards = [...cards, c.url];          // un emplacement de plus
+          else if (on) {                                                          // plus d'exemplaire libre : on en retire un
+            const i = cards.lastIndexOf(c.url);
+            state.decks[state.active].cards = cards.filter((_, j) => j !== i);
+          } else return;
           changed();
         });
         grid.append(b);

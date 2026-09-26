@@ -97,8 +97,37 @@ const qg = (state, side) => state.buildings.find((b) => b.side === side && b.kin
   forceHand(c, 'A', ['guerrier1', 'guerrier2', 'tireur1', 'tireur2']);
   c.players.A.queue = ['tank1', 'essaim1', 'sort1', 'pompe1'];
   engine.applyAction(c, 'A', { type: 'deploy', url: 'guerrier1', lane: 0 });
-  check('doublon : la carte repart en fin de file', c.players.A.queue[c.players.A.queue.length - 1] === 'guerrier1');
-  check('doublon : 1 exemplaire restant', c.players.A.copies.guerrier1 === 1);
+  check('×1 dans le deck : une fois dépensée, elle ne revient pas (même avec 2 exemplaires possédés)', !c.players.A.queue.includes('guerrier1') && !c.players.A.hand.includes('guerrier1'));
+  check('×1 dans le deck : 0 pose restante', c.players.A.copies.guerrier1 === 0);
+  let poses = 1;
+  for (let i = 0; i < 20; i += 1) {
+    c.players.A.elixir = 10;
+    const u = c.players.A.hand[0];
+    if (!u) break;
+    if (engine.applyAction(c, 'A', { type: 'deploy', url: u, lane: i % 3 }).ok) poses += 1;
+    run(c, 1500);
+  }
+  check('au maximum 8 poses par combat (une par emplacement)', poses === 8 && c.players.A.hand.length === 0);
+}
+
+// ─── 👥 Une carte ×3 sur 3 emplacements : 3 poses ───
+{
+  const deck3 = ['guerrier1', 'guerrier1', 'guerrier1', 'tireur1', 'tireur2', 'tank1', 'essaim1', 'sort1'];
+  const s = engine.createMatch({ id: 'd3', seed: 5, players: { A: player('UA', deck3.map((u) => ({ url: u, title: u, rarity: 'common' })), { guerrier1: 3 }), B: player('UB', DECK_B) } });
+  check('×3 sur 3 emplacements : 8 cartes dans le cycle', s.players.A.hand.length + s.players.A.queue.length === 8);
+  let uses = 0;
+  for (let i = 0; i < 30; i += 1) {
+    s.players.A.elixir = 10;
+    const u = s.players.A.hand.includes('guerrier1') ? 'guerrier1' : s.players.A.hand[0];
+    if (!u) break;
+    if (engine.applyAction(s, 'A', { type: 'deploy', url: u, lane: 0 }).ok && u === 'guerrier1') uses += 1;
+    run(s, 500);
+  }
+  check('×3 sur 3 emplacements : posée exactement 3 fois', uses === 3 && s.players.A.copies.guerrier1 === 0);
+  check('plus d\'exemplaire : la carte a quitté main et file', !s.players.A.hand.includes('guerrier1') && !s.players.A.queue.includes('guerrier1'));
+  const deck2 = ['guerrier1', 'guerrier1', 'tireur1', 'tireur2', 'tank1', 'essaim1', 'sort1', 'pompe1'];
+  const s2 = engine.createMatch({ id: 'd2', seed: 5, players: { A: player('UA', deck2.map((u) => ({ url: u, title: u, rarity: 'common' })), { guerrier1: 1 }), B: player('UB', DECK_B) } });
+  check('2 emplacements mais 1 seul exemplaire : 1 seul emplacement jouable', s2.players.A.hand.concat(s2.players.A.queue).filter((u) => u === 'guerrier1').length === 1);
 }
 
 // ─── 🚫 Refus ───

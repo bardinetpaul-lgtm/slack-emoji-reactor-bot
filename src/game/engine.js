@@ -82,13 +82,23 @@ function createMatch({ id, seed = 1, players }) {
 
   for (const side of SIDES) {
     const p = players[side];
+    // Deck = 8 emplacements ; une carte en occupe au plus autant qu'on en
+    // possède d'exemplaires. Chaque emplacement se joue UNE fois par combat :
+    // copies[url] = poses restantes de cette carte.
     const cards = {};
     const copies = {};
+    const slots = [];
     for (const card of p.deck) {
-      cards[card.url] = getCardStats(card);
-      copies[card.url] = Math.max(0, (p.copies && p.copies[card.url]) || 0);
+      if (!cards[card.url]) cards[card.url] = getCardStats(card);
+      const owned = Math.max(0, (p.copies && p.copies[card.url]) || 0);
+      if ((copies[card.url] || 0) < owned) {
+        copies[card.url] = (copies[card.url] || 0) + 1;
+        slots.push(card.url);
+      } else if (copies[card.url] === undefined) {
+        copies[card.url] = 0;
+      }
     }
-    const order = shuffle(state, p.deck.map((c) => c.url).filter((u) => copies[u] > 0));
+    const order = shuffle(state, slots);
     state.players[side] = {
       userId: p.userId,
       elixir: ELIXIR_START,
@@ -160,9 +170,8 @@ function applyAction(state, side, action) {
   player.elixir -= stats.cost;
   player.copies[url] -= 1;
 
-  // 🔁 Cycle : la carte repart en fin de file s'il reste des exemplaires
+  // 🃏 L'emplacement est dépensé pour tout le combat ; la suivante entre en main
   player.hand.splice(player.hand.indexOf(url), 1);
-  if (player.copies[url] > 0) player.queue.push(url);
   if (player.queue.length && player.hand.length < HAND_SIZE) player.hand.push(player.queue.shift());
 
   const pose = {

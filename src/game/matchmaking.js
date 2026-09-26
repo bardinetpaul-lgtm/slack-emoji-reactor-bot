@@ -9,7 +9,7 @@
 //
 //  configure({ isBusy(userId), cardCount(userId), winsOf(userId) }) :
 //    isBusy     → déjà dans un combat (src/game/matches.js)
-//    cardCount  → nombre de cartes DIFFÉRENTES possédées
+//    cardCount  → nombre d'exemplaires possédés (deck.totalCopies)
 //    winsOf     → victoires (arènes débloquées, src/game/arenas.js)
 //
 //  Arène : choisie par le challenger parmi SES arènes débloquées

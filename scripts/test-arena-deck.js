@@ -2,7 +2,8 @@
 // ═══════════════════════════════════════════════════════════
 //  🧪 Test des decks de l'Arène (src/game/deck.js)
 //
-//  Deck = 8 cartes différentes possédées ; deck auto équilibré ;
+//  Deck = 8 emplacements ; une carte y figure au plus autant de fois
+//  qu'on en possède d'exemplaires ; deck auto équilibré ;
 //  complétion quand une carte a disparu de la collection.
 //
 //  Usage : node scripts/test-arena-deck.js
@@ -38,7 +39,8 @@ for (const a of ARCHS) for (let i = 1; i <= 3; i += 1) collection.push(c(`${a}${
 collection.find((x) => x.url === 'guerrier1').rarity = 'legendary';               // unique → à protéger
 Object.assign(collection.find((x) => x.url === 'tireur1'), { rarity: 'legendary', count: 2 }); // doublée → OK
 
-check('8 cartes différentes minimum', deck.DECK_SIZE === 8);
+check('deck de 8 emplacements', deck.DECK_SIZE === 8);
+check('totalCopies : somme des exemplaires', deck.totalCopies([c('a', 3), c('b', 0), c('c', 2)]) === 5);
 check('distinctCount', deck.distinctCount(collection) === 18);
 check('distinctCount ignore les cartes à 0', deck.distinctCount([c('a', 0), c('b', 1)]) === 1);
 
@@ -46,7 +48,9 @@ check('distinctCount ignore les cartes à 0', deck.distinctCount([c('a', 0), c('
 const valid = ['tank1', 'guerrier2', 'guerrier3', 'tireur2', 'tireur3', 'essaim1', 'sort1', 'pompe1'];
 check('deck valide', deck.validateDeck(collection, valid).ok);
 check('refus : taille', deck.validateDeck(collection, valid.slice(0, 7)).reason === 'size');
-check('refus : doublon', deck.validateDeck(collection, [...valid.slice(0, 7), 'tank1']).reason === 'duplicate');
+check('refus : plus d’emplacements que d’exemplaires', deck.validateDeck(collection, [...valid.slice(0, 7), 'tank1']).reason === 'copies');
+check('×2 possédée → 2 emplacements autorisés', deck.validateDeck(collection, [...valid.slice(0, 7), 'tireur1', 'tireur1'].slice(1)).ok);
+check('×2 possédée → pas 3', deck.validateDeck(collection, ['tireur1', 'tireur1', 'tireur1', ...valid.slice(0, 5)]).reason === 'copies');
 check('refus : carte non possédée', deck.validateDeck(collection, [...valid.slice(0, 7), 'tank5']).reason === 'not_owned');
 
 // 🤖 Deck auto
@@ -75,6 +79,14 @@ check('carte disparue : les 7 autres gardées', valid.filter((u) => u !== 'sort1
 const r3 = deck.resolveDeck(null, collection);
 check('pas de deck sauvegardé → deck auto', JSON.stringify(r3.urls) === JSON.stringify(auto));
 check('collection trop petite → null', deck.resolveDeck(valid, small.slice(0, 7)) === null);
+
+// 👥 Peu de cartes différentes mais des doublons : on joue quand même
+const dupes = ['tank1', 'guerrier1', 'tireur1', 'essaim1', 'sort1'].map((u) => c(u, 2));
+const autoDupes = deck.buildAutoDeck(dupes);
+check('5 cartes ×2 → deck auto de 8 avec des doublons', autoDupes && autoDupes.length === 8 && deck.validateDeck(dupes, autoDupes).ok);
+check('deck auto : d’abord des cartes différentes', new Set(autoDupes.slice(0, 5)).size === 5);
+const kept = deck.resolveDeck(['tank1', 'tank1', 'tank1', 'sort1'], dupes);
+check('deck sauvegardé : le 3e tank1 (non possédé) est remplacé', kept.urls.filter((u) => u === 'tank1').length === 2 && kept.replaced.join() === 'tank1' && deck.validateDeck(dupes, kept.urls).ok);
 
 fs.rmSync(TMP, { recursive: true, force: true });
 console.log(failures ? `\n❌ ${failures} échec(s)` : '\n✅ Tout est bon');
