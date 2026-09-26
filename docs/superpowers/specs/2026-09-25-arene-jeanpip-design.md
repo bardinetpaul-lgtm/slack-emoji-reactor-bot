@@ -135,6 +135,26 @@ Une pose encore en train d'apparaître (délai de 1 s) à la fin compte aussi co
 - **Animations** : groupes en formation, marche (jambes qui alternent, corps qui se balance ; Tank et
   robes longues se dandinent sans pas visible), respiration à l'arrêt, anneau de pose, Sorts, chips de dégâts.
 
+## 🏟️ Progression des arènes
+
+| Niveau | Arène | Débloquée à |
+|---|---|---|
+| 1 | Le jardin | premier combat |
+| 2 | Le port | 10 victoires |
+| 3 | La salle serveur | 25 victoires |
+
+- **Défi :** le challenger choisit une arène qu'il a débloquée (sa meilleure par défaut), quel que soit
+  le niveau de l'adversaire.
+- **Combat rapide :** la meilleure arène du joueur arrivé le premier dans la file.
+- L'arène ne change que le décor, jamais les règles.
+
+## 🃏 Decks (éditeur, DA « Editeur de deck »)
+
+- **3 decks enregistrés** par joueur (renommables), un actif ; chaque deck = 8 cartes différentes.
+- L'éditeur sert d'écran de **préparation** : « Prêt » (exige 8 cartes) / « Prêt · annuler » ; sans action,
+  le combat démarre à 0:00 avec le deck actif (complété automatiquement s'il lui manque des cartes).
+- Alertes : cartes manquantes, pas de mêlée ni de Tank, coût moyen > 4,2, pas de sort.
+
 ## 💰 Économie et butin
 
 | | Vainqueur | Perdant | Match nul |
