@@ -7,8 +7,11 @@
 //       { "<url>": { "archetype": "tank", "specialty": "..." } }
 //    2. sinon tirage STABLE : sha256(url) → [0, 100) → répartition `share`.
 //
-//  Rareté : multiplie les stats (pas la cadence de la Pompe ; à moitié
-//  pour l'Essaim) et peut ajouter un surcoût en élixir.
+//  Rareté : renforce les PV (et les dégâts d'un Sort, les PV / la durée
+//  d'une Pompe), jamais les dégâts des unités ; à moitié pour l'Essaim.
+//  Les épiques / légendaires reçoivent en plus une spécialité.
+//  Réglé par la simulation : à stratégie égale un deck riche gagne ~64 %,
+//  mais un bon joueur 100 % commun bat un mauvais joueur au deck riche ~63 %.
 //
 //  Contres : l'attaquant fait ×1,5 à ce qu'il contre, ×0,67 à ce
 //  qui le contre. Tank → Guerrier → Tireur → Essaim → Tank ; Sort → Essaim.
@@ -42,9 +45,9 @@ const ARCHETYPES = {
 
 const RARITY_MODS = {
   common:    { mult: 1,    cost: 0 },
-  rare:      { mult: 1.06, cost: 0 },
-  epic:      { mult: 1.13, cost: 0 },
-  legendary: { mult: 1.2, cost: 0 },
+  rare:      { mult: 1.04, cost: 0 },
+  epic:      { mult: 1.07, cost: 0 },
+  legendary: { mult: 1.1, cost: 0 },
 };
 
 // attaquant → archétype qu'il contre
@@ -146,7 +149,7 @@ function getCardStats(card) {
   } else {
     Object.assign(stats, {
       hp: base.hp * mod.mult,
-      dps: base.dps * mod.mult,
+      dps: base.dps,   // la rareté renforce les PV, pas les dégâts (la stratégie garde le dernier mot)
       range: base.range,
       speed: base.speed,
       count: base.count,

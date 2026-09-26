@@ -124,7 +124,9 @@ function createMatch({ id, seed = 1, players }) {
     const arch = captain && captain.archetype;
     if (arch === 'sort') {
       for (const url of Object.keys(cards)) {
-        if (cards[url].archetype === 'sort') cards[url] = { ...cards[url], cost: Math.max(1, cards[url].cost - TUNING.spellDiscount) };
+        if (cards[url].archetype === 'sort') {
+          cards[url] = { ...cards[url], cost: Math.max(1, cards[url].cost - TUNING.spellDiscount), damage: cards[url].damage * TUNING.spellDamage };
+        }
       }
     }
 
@@ -138,7 +140,11 @@ function createMatch({ id, seed = 1, players }) {
       cards,
       captain,
       effects: { overheatUntil: 0, rageUntil: 0, charge: null },
+      echo: {},   // 🎖 Magie : url → nombre de relances gratuites restantes
     };
+    if (arch === 'sort') {
+      for (const url of order) if (cards[url].archetype === 'sort') state.players[side].echo[url] = (state.players[side].echo[url] || 0) + 1;
+    }
 
     for (let lane = 0; lane < LANES; lane += 1) {
       state.buildings.push({
@@ -163,6 +169,7 @@ function createMatch({ id, seed = 1, players }) {
 const cardStats = (state, side, url) => state.players[side].cards[url];
 const towerOf = (state, side, lane) => state.buildings.find((b) => b.side === side && b.kind === 'tower' && b.lane === lane);
 const qgOf = (state, side) => state.buildings.find((b) => b.side === side && b.kind === 'qg');
+const elixirMax = (player) => (player.captain && player.captain.archetype === 'pompe' ? TUNING.elixirMax : ELIXIR_MAX);
 const captainArch = (state, side) => (state.players[side].captain ? state.players[side].captain.archetype : null);
 const poseOf = (state, id) => state.poses.find((p) => p.id === id);
 
@@ -221,17 +228,26 @@ function applyAction(state, side, action) {
   if (forward && towerOf(state, other(side), lane).alive) return { ok: false, reason: 'no_breach', events };
   if (stats.archetype === 'pompe' && hasPump(state, side)) return { ok: false, reason: 'pump_active', events };
 
-  // 💧 Paiement + engagement d'un exemplaire
+  // 💧 Paiement ; 🎖 Écho (Magie) : la relance d'un Sort n'engage aucune carte
   player.elixir -= stats.cost;
-  player.copies[url] -= 1;
+  const echoed = player.echoPending && player.echoPending[url] > 0;
+  if (echoed) player.echoPending[url] -= 1;
+  else player.copies[url] -= 1;
 
   // 🃏 L'emplacement est dépensé pour tout le combat ; la suivante entre en main
   player.hand.splice(player.hand.indexOf(url), 1);
+  if (!echoed && player.echo[url] > 0) {
+    // première fois : l'emplacement revient en fin de file pour un Écho
+    player.echo[url] -= 1;
+    player.echoPending = player.echoPending || {};
+    player.echoPending[url] = (player.echoPending[url] || 0) + 1;
+    player.queue.push(url);
+  }
   if (player.queue.length && player.hand.length < HAND_SIZE) player.hand.push(player.queue.shift());
 
   const pose = {
     id: state.nextId++, side, url, title: stats.title, rarity: stats.rarity,
-    archetype: stats.archetype, status: 'pending',
+    archetype: stats.archetype, status: 'pending', free: echoed,
   };
   state.poses.push(pose);
   state.pending.push({ poseId: pose.id, side, url, lane, forward, readyAt: state.timeMs + DEPLOY_DELAY_MS });
@@ -343,15 +359,16 @@ function spawn(state, pending, events) {
   }
 
   const arch = captainArch(state, side);
-  const count = stats.count + (arch === 'essaim' ? TUNING.extraUnit : 0);
+  const count = stats.count + (arch === 'essaim' && stats.archetype === 'essaim' ? TUNING.extraSwarm : 0);
   const hp = stats.hp * (arch === 'tank' && stats.archetype === 'tank' ? TUNING.tankHp : 1);
   const speed = stats.speed * (arch === 'guerrier' ? TUNING.rushSpeed : 1);
+  const dps = stats.dps * (arch === 'guerrier' ? TUNING.rushDps : 1);
   const baseY = pos(side, forward ? 60 : 20);
   for (let i = 0; i < count; i += 1) {
     const unit = makeUnit(state, side, lane, baseY - dir(side) * i * 0.8, {   // le groupe arrive en paquet serré
       poseId: pose.id, url, archetype: stats.archetype, specialty: stats.specialty,
       slot: i, packSize: count,
-      hp, maxHp: hp, dps: stats.dps, range: stats.range, speed, targets: stats.targets,
+      hp, maxHp: hp, dps, range: stats.range, speed, targets: stats.targets,
     });
     callHook(state, unit, 'onDeploy', {}, events);
   }
@@ -509,7 +526,7 @@ function applyDamage(state, hits, events) {
     // 🔥 Rage : le camp qui perd une tour se déchaîne
     if (b.kind === 'tower') {
       const p = state.players[b.side];
-      p.elixir = Math.min(ELIXIR_MAX, p.elixir + RAGE.elixir);
+      p.elixir = Math.min(elixirMax(p), p.elixir + RAGE.elixir);
       p.effects.rageUntil = state.timeMs + RAGE.ms;
       events.push({ type: 'rage', side: b.side });
     }
@@ -528,7 +545,8 @@ function step(state, events) {
     const p = state.players[side];
     let regenMs = remaining <= DOUBLE_ELIXIR_MS ? ELIXIR_REGEN_MS / 2 : ELIXIR_REGEN_MS;
     if (p.effects.overheatUntil > now) regenMs /= 2;   // 🎖 Surchauffe
-    p.elixir = Math.min(ELIXIR_MAX, p.elixir + STEP_MS / regenMs);
+    if (p.captain && p.captain.archetype === 'pompe') regenMs /= TUNING.ecoRegen;   // 🎖 Économie
+    p.elixir = Math.min(elixirMax(p), p.elixir + STEP_MS / regenMs);
   }
 
   // ✨ Poses arrivées à échéance
@@ -541,7 +559,7 @@ function step(state, events) {
     if (b.kind !== 'pompe' || !b.alive) continue;
     if (now >= b.nextProductionAt) {
       const p = state.players[b.side];
-      p.elixir = Math.min(ELIXIR_MAX, p.elixir + 1);
+      p.elixir = Math.min(elixirMax(p), p.elixir + 1);
       b.nextProductionAt += b.productionMs;
       events.push({ type: 'pump', side: b.side });
     }
@@ -645,7 +663,8 @@ function endMatch(state, winner, reason, events = []) {
   state.result = {
     winner,
     reason,
-    poses: state.poses.map(({ side, url, title, rarity, archetype, status }) => ({ side, url, title, rarity, archetype, status })),
+    // les poses « free » (Écho) n'engagent aucune carte : exclues du bilan
+    poses: state.poses.filter((p) => !p.free).map(({ side, url, title, rarity, archetype, status }) => ({ side, url, title, rarity, archetype, status })),
   };
   events.push({ type: 'end', winner, reason });
   return events;
@@ -680,11 +699,12 @@ function publicState(state, viewer) {
       handCount: p.hand.length,
       towersDestroyed: towersDestroyed(state, other(side)),
       captain: p.captain ? { ...p.captain } : null,
+      elixirMax: elixirMax(p),
       rage: p.effects.rageUntil > now,
       overheat: p.effects.overheatUntil > now,
     };
     if (side === viewer) {
-      view.hand = p.hand.map((url) => ({ ...p.cards[url], copies: p.copies[url] }));
+      view.hand = p.hand.map((url) => ({ ...p.cards[url], copies: p.copies[url], echo: Boolean(p.echoPending && p.echoPending[url] > 0) }));
       view.next = p.queue[0] ? { ...p.cards[p.queue[0]] } : null;
     }
     players[side] = view;

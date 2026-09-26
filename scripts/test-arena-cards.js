@@ -60,7 +60,7 @@ const gC = cards.getCardStats({ url: 'u-guerrier', rarity: 'common' });
 const gL = cards.getCardStats({ url: 'u-guerrier', rarity: 'legendary' });
 const L = cards.RARITY_MODS.legendary;
 check('légendaire : PV multipliés', Math.abs(gL.hp - gC.hp * L.mult) < 1e-9);
-check('légendaire : DPS multiplié', Math.abs(gL.dps - gC.dps * L.mult) < 1e-9);
+check('légendaire : dégâts inchangés (la rareté ne renforce que les PV)', gL.dps === gC.dps);
 check('légendaire : coût +1', gL.cost === gC.cost + L.cost);
 check('rareté inconnue → commune', cards.getCardStats({ url: 'u-guerrier', rarity: 'bidon' }).hp === gC.hp);
 

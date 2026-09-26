@@ -65,21 +65,37 @@ const give = (s, side, urls) => { s.players[side].hand = urls.slice(); s.players
 
   // Passifs
   const pompe = match(player('UA', DECK_A, { captain: 'pompe1' }));
-  check('Économie (Pompe) : +1 élixir au départ', pompe.players.A.elixir === 6);
+  check('Économie (Pompe) : +2 élixir au départ', pompe.players.A.elixir === 7);
+  run(pompe, 20000);
+  check('Économie (Pompe) : élixir jusqu’à 12', pompe.players.A.elixir === 12 && engine.publicState(pompe, 'A').players.A.elixirMax === 12);
   const sortC = match(player('UA', DECK_A, { captain: 'sort1' }));
   check('Magie (Sort) : Sorts à −1 élixir', engine.cardStats(sortC, 'A', 'sort1').cost === cards.getCardStats(card('sort1')).cost - 1);
+  const echo = match(player('UA', ['sort1', 'sort2', 'guerrier1', 'guerrier2', 'tireur1', 'tireur2', 'tank1', 'essaim1'], { captain: 'sort1' }));
+  let casts = 0;
+  for (let i = 0; i < 12; i += 1) {
+    echo.players.A.elixir = 10;
+    const u = echo.players.A.hand.includes('sort2') ? 'sort2' : echo.players.A.hand[0];
+    if (!u) break;
+    if (engine.applyAction(echo, 'A', { type: 'deploy', url: u, lane: i % 3 }).ok && u === 'sort2') casts += 1;
+    run(echo, 500);
+  }
+  check('Écho (Magie) : un Sort se lance deux fois', casts === 2);
+  engine.applyAction(echo, 'A', { type: 'forfeit' });
+  check('Écho (Magie) : la relance n\'engage aucune carte (une seule pose au bilan)', echo.result.poses.filter((p) => p.url === 'sort2').length === 1);
   const tir = match(player('UA', DECK_A, { captain: 'tireur1' }));
   check('Contrôle (Tireur) : portée des tours +20 %', Math.abs(tower(tir, 'A', 0).range - tower(match(), 'A', 0).range * 1.2) < 1e-9);
-  const ess = match(player('UA', DECK_A, { captain: 'essaim1' }));
-  give(ess, 'A', ['guerrier1']);
-  engine.applyAction(ess, 'A', { type: 'deploy', url: 'guerrier1', lane: 1 });
+  const ess = match(player('UA', ['essaim1', 'essaim2', 'guerrier2', 'tireur1', 'tireur2', 'tank1', 'sort1', 'pompe1'], { captain: 'essaim1' }));
+  give(ess, 'A', ['essaim2', 'guerrier2']);
+  engine.applyAction(ess, 'A', { type: 'deploy', url: 'essaim2', lane: 1 });
+  engine.applyAction(ess, 'A', { type: 'deploy', url: 'guerrier2', lane: 2 });
   run(ess, 1000);
-  check('Nuée (Essaim) : les groupes +1 personnage', ess.units.filter((u) => u.archetype === 'guerrier').length === 4);
+  check('Nuée (Essaim) : tes Essaims +2 abeilles', ess.units.filter((u) => u.archetype === 'essaim').length === 8);
+  check('Nuée (Essaim) : les autres groupes inchangés', ess.units.filter((u) => u.archetype === 'guerrier').length === 3);
   const rush = match(player('UA', DECK_A, { captain: 'guerrier1' }));
   give(rush, 'A', ['guerrier2']);
   engine.applyAction(rush, 'A', { type: 'deploy', url: 'guerrier2', lane: 1 });
   run(rush, 1000);
-  check('Rush (Guerrier) : unités +15 % vitesse', Math.abs(rush.units[0].speed - cards.getCardStats(card('guerrier2')).speed * 1.15) < 1e-9);
+  check('Rush (Guerrier) : unités +25 % vitesse, +15 % dégâts', Math.abs(rush.units[0].speed - cards.getCardStats(card('guerrier2')).speed * 1.25) < 1e-9 && Math.abs(rush.units[0].dps - cards.getCardStats(card('guerrier2')).dps * 1.15) < 1e-9);
   const siege = match(player('UA', DECK_A, { captain: 'guerrier1' }), player('UB', DECK_B, { captain: 'tank2' }));
   give(siege, 'B', ['tank2', 'tank2']);
   siege.players.B.cards.tank2 = siege.players.B.cards.tank2;
@@ -109,8 +125,8 @@ const give = (s, side, urls) => { s.players[side].hand = urls.slice(); s.players
   const y0 = gel.units[0].y;
   run(gel, 1500);
   check('Gel : les unités du couloir sont figées', gel.units[0].y === y0);
-  run(gel, 1000);
-  check('Gel : 2 s puis ça repart', gel.units[0].y !== y0);
+  run(gel, 2000);
+  check('Gel : 3 s puis ça repart', gel.units[0].y !== y0);
 
   const rem = match(player('UA', DECK_A, { captain: 'tank1' }));
   engine.applyAction(rem, 'A', { type: 'power', lane: 1 });
@@ -125,12 +141,12 @@ const give = (s, side, urls) => { s.players[side].hand = urls.slice(); s.players
   surch.players.B.elixir = 0;
   engine.applyAction(surch, 'A', { type: 'power' });
   run(surch, 2800);
-  check('Surchauffe : élixir ×2', Math.abs(surch.players.A.elixir - 2 * surch.players.B.elixir) < 0.01);
+  check('Surchauffe : élixir ×2 (×2,2 avec la recharge Économie)', Math.abs(surch.players.A.elixir - 2.2 * surch.players.B.elixir) < 0.02);
 
   const renf = match(player('UA', DECK_A, { captain: 'essaim1' }));
   engine.applyAction(renf, 'A', { type: 'power', lane: 1 });
   run(renf, 1000);
-  check('Renforts : 3 abeilles gratuites', renf.units.filter((u) => u.side === 'A' && u.archetype === 'essaim').length === 3);
+  check('Renforts : 4 abeilles gratuites', renf.units.filter((u) => u.side === 'A' && u.archetype === 'essaim').length === 4);
   check('Renforts : aucune carte engagée (rien à perdre)', renf.poses.length === 0);
 
   const chg = match(player('UA', DECK_A, { captain: 'guerrier1' }));
