@@ -23,7 +23,7 @@ fs.copyFileSync(path.join(ROOT, 'data', 'media-bank.json'), path.join(TMP, 'data
 
 process.env.WEB_PUBLIC_URL = 'http://jeanpip.test';
 process.env.WEB_SECRET = 'test-secret';
-const PORT = 3190 + Math.floor(Math.random() * 9);
+let PORT = 0;   // port libre attribué par le système (évite les collisions)
 
 const origLog = console.log;
 console.log = () => {};
@@ -109,8 +109,9 @@ const pathOf = (url) => url.replace('http://jeanpip.test/', '');
   collections.addCards('UA', bank.slice(0, 10));
   collections.addCards('UB', bank.slice(10, 20));
 
-  const server = web.startWebServer({ client, logger: quiet, port: PORT, force: true });
-  await wait(150);
+  const server = web.startWebServer({ client, logger: quiet, port: 0, force: true });
+  await until(() => server.address());
+  PORT = server.address().port;
 
   const m = matches.createMatchFor('UA', 'UB', Date.now(), { arena: 'port' });
   const urlA = arenaWeb.buildArenaUrl(m.id, 'UA');
