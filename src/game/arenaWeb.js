@@ -257,7 +257,7 @@ async function handleAction(req, res, matchId, userId) {
     result = { ok: true };
   } else if (action.type === 'ready') {
     if (action.ready) {
-      result = matches.setDeck(matchId, userId, Array.isArray(action.urls) ? action.urls : []);
+      result = matches.setDeck(matchId, userId, Array.isArray(action.urls) ? action.urls : [], typeof action.captain === 'string' ? action.captain : null);
       if (result.ok) result = matches.setReady(matchId, userId, true);
     } else {
       result = matches.setReady(matchId, userId, false);

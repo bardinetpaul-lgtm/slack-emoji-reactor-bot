@@ -76,7 +76,7 @@ function createMatchFor(userA, userB, now = Date.now(), { arena } = {}) {
   seq += 1;
   const id = `a_${now.toString(36)}_${seq}`;
   const player = (userId, deck) => ({
-    userId, deckUrls: deck.urls, replaced: deck.replaced,
+    userId, deckUrls: deck.urls, replaced: deck.replaced, captain: arenaStore.getCaptain(userId),
     ready: false, connections: 0, everConnected: false, disconnectedAt: null,
   });
   const match = {
@@ -99,7 +99,7 @@ function createMatchFor(userA, userB, now = Date.now(), { arena } = {}) {
 // 🃏 Préparation
 // ─────────────────────────────────────────────
 
-function setDeck(id, userId, urls) {
+function setDeck(id, userId, urls, captain = null) {
   const match = getMatch(id);
   const side = match && sideOf(match, userId);
   if (!side) return { ok: false, reason: 'not_player' };
@@ -107,8 +107,9 @@ function setDeck(id, userId, urls) {
   const check = deckRules.validateDeck(collections.getCollection(userId), urls);
   if (!check.ok) return check;
   match.players[side].deckUrls = urls.slice();
+  match.players[side].captain = captain && urls.includes(captain) ? captain : null;
   match.players[side].replaced = [];
-  arenaStore.setDeck(userId, urls);   // devient le deck par défaut
+  arenaStore.setDeck(userId, urls, match.players[side].captain);   // devient le deck par défaut
   broadcast(match);
   return { ok: true };
 }
@@ -186,7 +187,8 @@ function startMatch(match, now) {
     const byUrl = Object.fromEntries(collection.map((c) => [c.url, c]));
     const deck = resolved.urls.map((u) => ({ url: u, title: byUrl[u].title, rarity: byUrl[u].rarity }));
     const copies = Object.fromEntries(resolved.urls.map((u) => [u, byUrl[u].count]));
-    players[side] = { userId: p.userId, deck, copies };
+    const captain = p.captain && resolved.urls.includes(p.captain) ? p.captain : null;
+    players[side] = { userId: p.userId, deck, copies, captain };
   }
   match.engine = engine.createMatch({ id: match.id, seed: crypto.randomInt(0, 2 ** 31), players });
   match.status = 'running';

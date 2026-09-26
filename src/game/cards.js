@@ -48,6 +48,22 @@ const RARITY_MODS = {
 };
 
 // attaquant → archétype qu'il contre
+// ✨ Spécialités tirées automatiquement pour les épiques / légendaires
+const SPECIAL_RARITIES = ['epic', 'legendary'];
+const SPECIALTIES_BY_ARCH = {
+  tank: ['bouclier', 'invocation'],
+  guerrier: ['charge', 'vampire', 'explosion'],
+  tireur: ['ralenti', 'soin'],
+  essaim: ['explosion', 'charge'],
+};
+
+function autoSpecialty(url, archetype, rarity) {
+  const pool = SPECIALTIES_BY_ARCH[archetype];
+  if (!pool || !SPECIAL_RARITIES.includes(rarity)) return null;
+  const hash = crypto.createHash('sha256').update(String(url)).digest();
+  return pool[hash.readUInt32BE(4) % pool.length];
+}
+
 const COUNTERS = {
   tank: 'guerrier',
   guerrier: 'tireur',
@@ -117,7 +133,10 @@ function getCardStats(card) {
     rarity,
     archetype,
     cost: base.cost + mod.cost,
-    specialty: (override && override.specialty) || null,
+    // surcharge : un nom impose la spécialité, « none » la retire
+    specialty: override && override.specialty !== undefined
+      ? (override.specialty === 'none' ? null : override.specialty)
+      : autoSpecialty(card.url, archetype, rarity),
   };
 
   if (archetype === 'sort') {
@@ -151,6 +170,7 @@ module.exports = {
   ARCHETYPES,
   RARITY_MODS,
   COUNTERS,
+  SPECIALTIES_BY_ARCH,
   archetypeFromUrl,
   getCardStats,
   damageMultiplier,

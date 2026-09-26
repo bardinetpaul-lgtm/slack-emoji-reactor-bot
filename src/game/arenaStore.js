@@ -71,7 +71,9 @@ function normalizeDecks(raw) {
     const name = typeof d.name === 'string' && d.name.trim() ? d.name.trim().slice(0, DECK_NAME_MAX) : `Deck ${i + 1}`;
     // une même carte peut occuper plusieurs emplacements (vérifié contre la collection au combat)
     const cards = (Array.isArray(d.cards) ? d.cards : []).filter((u) => typeof u === 'string' && u).slice(0, DECK_MAX_CARDS);
-    return { name, cards };
+    // 🎖 Capitaine : une des cartes du deck (sinon aucun)
+    const captain = typeof d.captain === 'string' && cards.includes(d.captain) ? d.captain : null;
+    return { name, cards, captain };
   });
   const active = !legacy && raw && Number.isInteger(raw.active) && raw.active >= 0 && raw.active < DECK_SLOTS ? raw.active : 0;
   return { active, decks };
@@ -89,6 +91,12 @@ function setDecks(userId, value) {
   return data.decks[userId];
 }
 
+/** Capitaine du deck actif (URL) ou null. */
+function getCaptain(userId) {
+  const { active, decks } = getDecks(userId);
+  return decks[active].captain;
+}
+
 /** Cartes du deck actif (null s'il est vide). */
 function getDeck(userId) {
   const { active, decks } = getDecks(userId);
@@ -96,9 +104,10 @@ function getDeck(userId) {
 }
 
 /** Remplace les cartes du deck actif. */
-function setDeck(userId, urls) {
+function setDeck(userId, urls, captain) {
   const value = getDecks(userId);
   value.decks[value.active].cards = urls.slice();
+  if (captain !== undefined) value.decks[value.active].captain = captain;
   setDecks(userId, value);
 }
 
@@ -200,6 +209,7 @@ module.exports = {
   DECK_SLOTS,
   getDecks,
   setDecks,
+  getCaptain,
   MAX_REWARDED_PER_DAY,
   MAX_REWARDED_VS_SAME,
   getDeck,

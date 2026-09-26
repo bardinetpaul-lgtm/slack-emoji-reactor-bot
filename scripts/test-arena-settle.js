@@ -111,6 +111,18 @@ check('2 premières victoires récompensées', results[0].A.boosterId && results
 check('3e contre le même adversaire : pas de pack ni crédits', !results[2].A.boosterId && results[2].A.credits === 0 && results[2].A.rewarded === false);
 check('3e : le butin s\'applique quand même', results[2].A.loot && collections.getCount('UG', 'h2') === 1);
 
+// ─── 🏳 Rappel : carte sauvée même en cas de défaite, hors butin ───
+give('UK', ['k1', 'k2']);
+give('UL', ['l1']);
+const rc = settleMatch({
+  matchId: 'recall',
+  players: { A: 'UK', B: 'UL' },
+  result: { winner: 'B', reason: 'qg', poses: [pose('A', 'k1', 'recalled'), pose('A', 'k2', 'alive')] },
+}, { random: () => 0, now: T0 });
+check('rappel : la carte rappelée est sauvée malgré la défaite', collections.getCount('UK', 'k1') === 1);
+check('rappel : l’autre pose du perdant est perdue', collections.getCount('UK', 'k2') === 0);
+check('rappel : jamais prise en butin', rc.B.loot && rc.B.loot.url === 'k2');
+
 // ─── Perdant qui n'a rien posé ───
 const empty = settleMatch({ matchId: 'm4', players: { A: 'UI', B: 'UJ' }, result: { winner: 'B', reason: 'forfeit', poses: [] } }, { now: T0 });
 check('perdant sans pose : pas de butin, récompense quand même', !empty.B.loot && empty.B.boosterId);

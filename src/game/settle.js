@@ -10,6 +10,8 @@
 //    • butin : 1 pose du perdant tirée au hasard → au vainqueur ;
 //    • vainqueur : booster Commun + 10 crédits, dans les plafonds
 //      du jour (arenaStore.consumeReward) ; le butin n'est pas plafonné ;
+//    • pose rappelée (🏳 Rappel, sortie du terrain) → toujours sauvée,
+//      jamais prise en butin ;
 //    • combat annulé → rien.
 // ═══════════════════════════════════════════════════════════
 
@@ -42,7 +44,7 @@ function settleMatch({ matchId, players, result, cancelled }, { random = Math.ra
   let loot = null;
   let lootType = 'image';
   if (loser) {
-    const loserPoses = result.poses.filter((p) => p.side === loser);
+    const loserPoses = result.poses.filter((p) => p.side === loser && p.status !== 'recalled');   // 🏳 rappelée = hors butin
     if (loserPoses.length) loot = loserPoses[Math.floor(random() * loserPoses.length)];
     const owned = loot && collections.getCollection(players[loser]).find((c) => c.url === loot.url);
     if (owned && owned.type) lootType = owned.type;   // image ou vidéo, comme l'original
@@ -52,7 +54,7 @@ function settleMatch({ matchId, players, result, cancelled }, { random = Math.ra
   for (const side of ['A', 'B']) {
     const s = summary[side];
     for (const p of result.poses.filter((x) => x.side === side)) {
-      const lost = side === loser || p.status === 'destroyed';
+      const lost = p.status !== 'recalled' && (side === loser || p.status === 'destroyed');   // 🏳 rappelée = sauvée
       (lost ? s.lost : s.kept).push(brief(p));
     }
     if (s.lost.length) collections.removeCards(s.userId, s.lost.map((p) => p.url));
