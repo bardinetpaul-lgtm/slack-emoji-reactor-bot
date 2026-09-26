@@ -9,9 +9,14 @@
 //  des événements produits (pour l'affichage / les logs).
 //
 //  Terrain : 3 couloirs, axe y de 0 (camp A) à 100 (camp B).
-//    QG A y=5   · tours A y=15 · pose A y=20 (avancée y=60 si brèche)
-//    QG B y=95  · tours B y=85 · pose B y=80 (avancée y=40 si brèche)
-//    Pompe posée devant sa tour (A y=18, B y=82).
+//    QG A y=5   · tours A y=15 · QG B y=95 · tours B y=85
+//  Placement libre : une pose a une profondeur `depth` vue de son camp
+//  (0 = sa base, 100 = base adverse) :
+//    • ma moitié : 8 à 45 ; rivière (45-55) interdite ;
+//    • chez l'adversaire : 55 à 80, seulement si la tour du couloir est tombée ;
+//    • un Sort se vise n'importe où (3 à 97).
+//  Sans profondeur : devant sa tour (20), ou 60 en pose avancée.
+//  Pompe sans profondeur : devant sa tour (18).
 //
 //  Mécaniques de style de jeu :
 //    🎖 Capitaine  : une carte du deck jamais posée → passif + pouvoir 1×
@@ -41,6 +46,7 @@ const TOWER = { hp: 600, dps: 80, range: 12 };
 const QG = { hp: 2000, dps: 100, range: 10 };
 
 const RAGE = { elixir: 2, ms: 10000, dps: 1.1 };
+const ZONE = { homeMin: 8, homeMax: 45, foeMin: 55, foeMax: 80, spellMin: 3, spellMax: 97 };
 const RECALL_SPEED = 1.5;   // un groupe rappelé recule 50 % plus vite
 const SLOW = 0.6;           // Ralenti : vitesse ×0,6
 
@@ -220,12 +226,27 @@ function applyAction(state, side, action) {
 
   const player = state.players[side];
   const { url, lane } = action;
-  const forward = Boolean(action.forward);
   if (!Number.isInteger(lane) || lane < 0 || lane >= LANES) return { ok: false, reason: 'lane', events };
   if (!player.hand.includes(url)) return { ok: false, reason: 'not_in_hand', events };
   const stats = cardStats(state, side, url);
   if (player.elixir < stats.cost) return { ok: false, reason: 'elixir', events };
-  if (forward && towerOf(state, other(side), lane).alive) return { ok: false, reason: 'no_breach', events };
+
+  // 📍 Placement : profondeur choisie (ou positions par défaut)
+  const hasDepth = typeof action.depth === 'number' && Number.isFinite(action.depth);
+  let depth;
+  if (stats.archetype === 'sort') {
+    depth = hasDepth ? action.depth : null;   // sans cible : 1re unité ennemie du couloir
+    if (hasDepth && (depth < ZONE.spellMin || depth > ZONE.spellMax)) return { ok: false, reason: 'zone', events };
+  } else if (hasDepth) {
+    depth = action.depth;
+    if (depth > ZONE.homeMax && depth < ZONE.foeMin) return { ok: false, reason: 'zone', events };   // rivière
+    if (depth < ZONE.homeMin || depth > ZONE.foeMax) return { ok: false, reason: 'zone', events };
+    if (depth >= ZONE.foeMin && towerOf(state, other(side), lane).alive) return { ok: false, reason: 'no_breach', events };
+  } else {
+    depth = stats.archetype === 'pompe' ? 18 : (action.forward ? 60 : 20);
+    if (action.forward && towerOf(state, other(side), lane).alive) return { ok: false, reason: 'no_breach', events };
+  }
+  const forward = depth !== null && depth >= ZONE.foeMin;
   if (stats.archetype === 'pompe' && hasPump(state, side)) return { ok: false, reason: 'pump_active', events };
 
   // 💧 Paiement ; 🎖 Écho (Magie) : la relance d'un Sort n'engage aucune carte
@@ -250,7 +271,7 @@ function applyAction(state, side, action) {
     archetype: stats.archetype, status: 'pending', free: echoed || stats.rented,   // 🛒 achetée : hors bilan
   };
   state.poses.push(pose);
-  state.pending.push({ poseId: pose.id, side, url, lane, forward, readyAt: state.timeMs + DEPLOY_DELAY_MS });
+  state.pending.push({ poseId: pose.id, side, url, lane, forward, y: depth === null ? null : pos(side, depth), readyAt: state.timeMs + DEPLOY_DELAY_MS });
 
   events.push({ type: 'deploy', side, url, lane, forward, poseId: pose.id, archetype: stats.archetype });
   return { ok: true, events };
@@ -333,12 +354,12 @@ function recall(state, side, { poseId }, events) {
 // ─────────────────────────────────────────────
 
 function spawn(state, pending, events) {
-  const { side, url, lane, forward } = pending;
+  const { side, url, lane } = pending;
   const stats = cardStats(state, side, url);
   const pose = poseOf(state, pending.poseId);
 
   if (stats.archetype === 'sort') {
-    castSpell(state, side, lane, stats, events);
+    castSpell(state, side, lane, stats, events, pending.y);
     pose.status = 'destroyed';   // un Sort est toujours consommé
     return;
   }
@@ -347,7 +368,7 @@ function spawn(state, pending, events) {
 
   if (stats.archetype === 'pompe') {
     state.buildings.push({
-      id: state.nextId++, side, kind: 'pompe', lane, y: pos(side, 18),
+      id: state.nextId++, side, kind: 'pompe', lane, y: pending.y,
       hp: stats.hp, maxHp: stats.hp, dps: 0, range: 0, alive: true, poseId: pose.id,
       archetype: 'pompe', url, invulnerableUntil: 0,
       nextProductionAt: state.timeMs + stats.productionMs,
@@ -363,7 +384,7 @@ function spawn(state, pending, events) {
   const hp = stats.hp * (arch === 'tank' && stats.archetype === 'tank' ? TUNING.tankHp : 1);
   const speed = stats.speed * (arch === 'guerrier' ? TUNING.rushSpeed : 1);
   const dps = stats.dps * (arch === 'guerrier' ? TUNING.rushDps : 1);
-  const baseY = pos(side, forward ? 60 : 20);
+  const baseY = pending.y;
   for (let i = 0; i < count; i += 1) {
     const unit = makeUnit(state, side, lane, baseY - dir(side) * i * 0.8, {   // le groupe arrive en paquet serré
       poseId: pose.id, url, archetype: stats.archetype, specialty: stats.specialty,
@@ -380,12 +401,14 @@ function spawn(state, pending, events) {
 //    tour ou QG), dégâts de zone, 40 % sur les bâtiments.
 // ─────────────────────────────────────────────
 
-function castSpell(state, side, lane, stats, events) {
+function castSpell(state, side, lane, stats, events, aimY = null) {
   const foe = other(side);
   const d = dir(side);
   const foeUnits = state.units.filter((u) => u.side === foe && u.lane === lane);
   let centerY;
-  if (foeUnits.length) {
+  if (aimY !== null && aimY !== undefined) {
+    centerY = aimY;   // 🎯 Sort visé : frappe au point choisi
+  } else if (foeUnits.length) {
     // la plus avancée vers moi = la plus petite distance à mon camp
     centerY = foeUnits.reduce((best, u) => (d * u.y < d * best.y ? u : best)).y;
   } else {
@@ -725,7 +748,7 @@ function publicState(state, viewer) {
       poseId: u.poseId, slot: u.slot, packSize: u.packSize, specialty: u.specialty || null,
       recalling: u.recalling || false, frozen: u.frozenUntil > now, slowed: u.slowUntil > now, shield: u.shield > 0,
     })),
-    pending: state.pending.map(({ side, url, lane, forward, readyAt }) => ({ side, url, lane, forward, readyAt, archetype: cardStats(state, side, url).archetype })),
+    pending: state.pending.map(({ side, url, lane, forward, y, readyAt }) => ({ side, url, lane, forward, y, readyAt, archetype: cardStats(state, side, url).archetype })),
     result: state.result,
   };
 }

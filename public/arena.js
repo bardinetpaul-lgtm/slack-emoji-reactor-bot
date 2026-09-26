@@ -1,8 +1,10 @@
 // ═══════════════════════════════════════════════════════════
 //  ⚔️ Arène Jeanpip — client de l'écran de combat
 //  DA « Combat - Menu de pose » : toucher une carte (elle monte de
-//  10 px, cernée de crème, zones de pose en pointillé bleu), puis un
-//  point de sa moitié d'arène. Refus → pastille explicative.
+//  10 px, cernée de crème, zones de pose en pointillé bleu), puis le
+//  point EXACT où poser le groupe (ou glisser la carte sur le terrain).
+//  Un fantôme montre où il apparaîtra (rouge si interdit) ; un Sort se
+//  vise n'importe où. Refus → pastille explicative.
 //
 //  Contrat serveur (chemins relatifs, page servie sur …/arena/<id>?t=) :
 //    GET  ../api/arena/<id>/stream?t=  (SSE)
@@ -26,7 +28,7 @@
   const REFUSALS = {
     elixir: 'Pas assez d’élixir',
     zone: 'Hors de votre zone de pose',
-    no_breach: 'Hors de votre zone de pose',
+    no_breach: 'La tour adverse de ce couloir tient encore : pose dans ta moitié',
     lane: 'Hors de votre zone de pose',
     pump_active: 'Une seule Pompe à la fois',
     not_in_hand: 'Cette carte n’est plus en main',
@@ -156,6 +158,7 @@
       else if (c.rented) b.append(el('span', 'tag rented', 'Achetée'));
       b.addEventListener('click', (e) => {
         e.stopPropagation();
+        if (swallowClick) return;
         selectCard(on ? null : { index, url: c.url });
       });
       return b;
@@ -169,6 +172,7 @@
   function selectCard(slot) {
     selected = slot;
     if (slot) armPower(false);
+    if (!slot && renderer) renderer.setGhost(null);
     handKey = '';
     $('board-wrap').classList.toggle('selecting', Boolean(slot));
     if (renderer) renderer.setZones(Boolean(slot));
@@ -275,15 +279,87 @@
     const card = selected && (me.hand || [])[selected.index];
     if (!card || card.url !== selected.url) return selectCard(null);
 
-    const spot = ArenaBoard.pointToDeploy(x, y, live);
+    return deployAt(x, y);
+  });
+
+  /** Pose la carte choisie au point (x, y) du plan : couloir + profondeur exacts. */
+  async function deployAt(x, y) {
+    const yPct = (y / ArenaBoard.H) * 100;
+    const live = (renderer && renderer.current()) || view;
+    const me = view.players[view.you];
+    const card = selected && (me.hand || [])[selected.index];
+    if (!card || card.url !== selected.url) return selectCard(null);
+    const spot = ArenaBoard.pointToDeploy(x, y, live, { spell: card.archetype === 'sort' });
     if (!spot.ok) return flash(spot.reason, yPct);
     if (card.cost > me.elixir) return flash('elixir', yPct);
 
     const { url } = selected;
     selectCard(null);
-    const res = await send({ type: 'deploy', url, lane: spot.lane, forward: spot.forward });
+    const res = await send({ type: 'deploy', url, lane: spot.lane, depth: spot.depth });
     if (!res.ok) flash(res.reason, yPct);
     return undefined;
+  }
+
+  // ─────────────────────────────────────────────
+  // 👻 Fantôme de placement + ✋ glisser-déposer depuis la main
+  // ─────────────────────────────────────────────
+
+  function boardPoint(clientX, clientY) {
+    const r = $('board').getBoundingClientRect();
+    if (clientX < r.left || clientX > r.right || clientY < r.top || clientY > r.bottom) return null;
+    return { x: ((clientX - r.left) / r.width) * ArenaBoard.W, y: ((clientY - r.top) / r.height) * ArenaBoard.H };
+  }
+
+  function showGhost(pt) {
+    if (!renderer) return;
+    const me = view && view.players[view.you];
+    const card = selected && me && (me.hand || [])[selected.index];
+    if (!pt || !card) { renderer.setGhost(null); return; }
+    const live = renderer.current() || view;
+    const spot = ArenaBoard.pointToDeploy(pt.x, pt.y, live, { spell: card.archetype === 'sort' });
+    const laneX = ArenaBoard.toBoard(spot.lane, 50, view.you).x;   // le groupe apparaît au centre du couloir
+    const sprite = setup && setup.sprites && setup.sprites[card.url];
+    renderer.setGhost({
+      x: laneX, y: pt.y, ok: spot.ok && card.cost <= me.elixir, archetype: card.archetype,
+      sprite: sprite && (typeof sprite === 'string' ? sprite : sprite.id),
+    });
+  }
+
+  $('board').addEventListener('pointermove', (e) => { if (selected && !drag) showGhost(boardPoint(e.clientX, e.clientY)); });
+  $('board').addEventListener('pointerleave', () => { if (!drag && renderer) renderer.setGhost(null); });
+
+  let drag = null;           // { index, url, x0, y0, moved }
+  let swallowClick = false;  // le « click » qui suit un glisser ne sélectionne rien
+
+  $('hand').addEventListener('pointerdown', (e) => {
+    const btn = e.target.closest('.card');
+    if (!btn || !view || view.phase !== 'running') return;
+    const index = [...$('hand').children].indexOf(btn);
+    const card = (view.players[view.you].hand || [])[index];
+    if (!card) return;
+    drag = { index, url: card.url, x0: e.clientX, y0: e.clientY, moved: false };
+  });
+
+  document.addEventListener('pointermove', (e) => {
+    if (!drag) return;
+    if (!drag.moved && Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) > 8) {
+      drag.moved = true;
+      selectCard({ index: drag.index, url: drag.url });
+    }
+    if (drag.moved) showGhost(boardPoint(e.clientX, e.clientY));
+  });
+
+  document.addEventListener('pointerup', (e) => {
+    if (!drag) return;
+    const d = drag;
+    drag = null;
+    if (!d.moved) return;   // simple toucher : géré par le « click »
+    swallowClick = true;
+    setTimeout(() => { swallowClick = false; }, 0);
+    const pt = boardPoint(e.clientX, e.clientY);
+    if (renderer) renderer.setGhost(null);
+    if (pt) deployAt(pt.x, pt.y);
+    else selectCard(null);
   });
 
   document.addEventListener('keydown', (e) => {

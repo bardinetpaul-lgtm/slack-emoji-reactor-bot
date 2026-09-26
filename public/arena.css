@@ -235,3 +235,7 @@ body.wide .top { display: none; }
 .de-shop-row { display: flex; flex-wrap: wrap; gap: 8px; }
 .de-btn.shop { padding: 10px 12px; font-size: 13px; background: var(--i7); color: var(--cream); }
 .de-btn.shop:disabled { color: var(--grey); }
+
+/* ✋ Glisser une carte sur le terrain */
+#hand .card { touch-action: none; }
+#board { touch-action: none; }

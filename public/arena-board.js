@@ -38,6 +38,16 @@
     return 320;
   }
 
+  /** Inverse de mapY : ordonnée du plan → profondeur vue de mon camp (0 = ma base). */
+  function unmapY(by) {
+    for (let i = 1; i < ANCHORS.length; i += 1) {
+      const [y0, b0] = ANCHORS[i - 1];
+      const [y1, b1] = ANCHORS[i];
+      if (by >= b1 || i === ANCHORS.length - 1) return y0 + ((by - b0) * (y1 - y0)) / (b1 - b0);
+    }
+    return 50;
+  }
+
   /** Position d'un élément du moteur sur le plan, vu par `viewer` ('A' | 'B'). */
   function toBoard(lane, y, viewer) {
     const mine = viewer === 'B' ? 100 - y : y;
@@ -245,7 +255,7 @@
     // ⏳ Poses en train d'apparaître : cercle pointillé au point d'apparition
     for (const p of view.pending || []) {
       if (p.archetype === 'sort') continue;   // un Sort frappe, il n'apparaît pas
-      const at = toBoard(p.lane, p.side === 'A' ? (p.forward ? 60 : 20) : (p.forward ? 40 : 80), viewer);
+      const at = toBoard(p.lane, typeof p.y === 'number' ? p.y : (p.side === 'A' ? (p.forward ? 60 : 20) : (p.forward ? 40 : 80)), viewer);
       under.push(pathTag(F(C(at.x, at.y - 6, 16), 'none', teamColor(p.side, viewer), 1.5, '3 5')));
     }
     // 💥 Sorts : cercle rose + pointillé (sous les unités)
@@ -313,8 +323,10 @@
   //    Ma moitié (sous la rivière) partout ; chez l'adversaire, seulement
   //    dans un couloir dont la tour adverse est tombée (pose avancée).
   // ─────────────────────────────────────────────
-  const HOME_ZONE = { x: 6, y: 348, w: 348, h: 288 };
-  const FORWARD_Y = [176, 296];
+  // Règles de placement (identiques au moteur, en profondeur vue de mon camp)
+  const ZONE = { homeMin: 8, homeMax: 45, foeMin: 55, foeMax: 80, spellMin: 3, spellMax: 97 };
+  const HOME_ZONE = { x: 6, y: mapY(ZONE.homeMax), w: 348, h: mapY(ZONE.homeMin) - mapY(ZONE.homeMax) };
+  const FORWARD_Y = [mapY(ZONE.foeMax), mapY(ZONE.foeMin)];
   const LANE_SPAN = [[6, 124], [121, 239], [236, 354]];   // bandes de pose, vues de mon camp
 
   // Couloir du moteur affiché à l'écran en position `screen` (0 = gauche)
@@ -325,16 +337,40 @@
     return [0, 1, 2].filter((lane) => (view.buildings || []).some((b) => b.side === foe && b.kind === 'tower' && b.lane === lane && !b.alive));
   }
 
-  /** Point du plan (x, y) → { ok, lane, forward } ou { ok: false, reason: 'zone' } */
-  function pointToDeploy(x, y, view) {
+  /**
+   * Point du plan (x, y) → { ok, lane, depth, forward } (ou { ok: false, reason, lane, depth }).
+   * depth = profondeur vue de mon camp (0 = ma base, 100 = base adverse), envoyée au moteur.
+   * { spell: true } : un Sort se vise n'importe où.
+   */
+  function pointToDeploy(x, y, view, { spell = false } = {}) {
     let screen = 0;
     for (let i = 1; i < 3; i += 1) if (Math.abs(LANE_X[i] - x) < Math.abs(LANE_X[screen] - x)) screen = i;
     const lane = laneAt(screen, view.you);
-    if (y >= HOME_ZONE.y && y <= HOME_ZONE.y + HOME_ZONE.h) return { ok: true, lane, forward: false };
-    if (y >= FORWARD_Y[0] && y <= FORWARD_Y[1] && x >= LANE_SPAN[screen][0] && x <= LANE_SPAN[screen][1] && breaches(view).includes(lane)) {
-      return { ok: true, lane, forward: true };
+    const depth = Math.round(unmapY(y) * 10) / 10;
+    const out = (ok, reason) => (ok ? { ok: true, lane, depth, forward: depth >= ZONE.foeMin } : { ok: false, reason, lane, depth });
+    if (spell) return out(depth >= ZONE.spellMin && depth <= ZONE.spellMax, 'zone');
+    if (depth >= ZONE.homeMin && depth <= ZONE.homeMax) return out(true);
+    if (depth >= ZONE.foeMin && depth <= ZONE.foeMax && x >= LANE_SPAN[screen][0] && x <= LANE_SPAN[screen][1]) {
+      return breaches(view).includes(lane) ? out(true) : out(false, 'no_breach');
     }
-    return { ok: false, reason: 'zone' };
+    return out(false, 'zone');
+  }
+
+  /**
+   * 👻 Fantôme de placement : où le groupe va apparaître (ou zone d'impact d'un Sort).
+   * { x, y, ok, archetype, sprite }  (rouge si interdit)
+   */
+  function renderGhost(g) {
+    if (!g) return '';
+    const color = g.ok ? WHITE : ORANGE;
+    if (g.archetype === 'sort') {
+      return `<g data-fx="ghost-spell" opacity="0.9">${pathTag(F(C(g.x, g.y, 32), g.ok ? 'rgba(255,115,192,.18)' : 'rgba(255,98,41,.18)', g.ok ? PINK : ORANGE, 2.5, '5 4'))}${pathTag(F(C(g.x, g.y, 3), g.ok ? PINK : ORANGE))}</g>`;
+    }
+    const s = UNIT_SCALE[g.archetype] || 0.42;
+    const figure = g.sprite
+      ? `<g opacity="0.55" transform="translate(${g.x} ${g.y}) scale(${s})" style="color:${g.ok ? BLUE : ORANGE}"><use href="#${g.sprite}" x="-45" y="-85" width="90" height="95"/></g>`
+      : '';
+    return `<g data-fx="ghost">${pathTag(F(C(g.x, g.y - 8, 20), 'none', color, 2, '4 4'))}${figure}</g>`;
   }
 
   /** 🎖 Pouvoir : couloir du moteur le plus proche de x (vu par view.you). */
@@ -392,6 +428,7 @@
     let chips = [];
     let raf = null;
     let showZones = false;
+    let ghost = null;
     const lastHp = new Map();
     const STEP = 100;
 
@@ -461,7 +498,7 @@
       }
       fx = fx.filter((f) => now - f.born < (f.type === 'ring' ? 800 : f.type === 'lane' ? 900 : 700));
       chips = chips.filter((c) => now - c.born < 900);
-      live.innerHTML = (showZones ? renderZones(view) : '') + renderDynamic(view, {
+      live.innerHTML = (showZones ? renderZones(view) : '') + renderGhost(ghost) + renderDynamic(view, {
         arena,
         sprites,
         fx: fx.map((f) => ({ ...f, age: now - f.born })),
@@ -472,18 +509,20 @@
 
     /** Affiche / masque les zones de pose (carte sélectionnée). */
     function setZones(on) { showZones = Boolean(on); }
+    /** Fantôme de placement (null pour l'effacer). */
+    function setGhost(g) { ghost = g; }
     const current = () => curr;
 
     function start() { if (!raf) raf = requestAnimationFrame(frame); }
     function stop() { if (raf) cancelAnimationFrame(raf); raf = null; }
     start();
-    return { push, setArena, setZones, current, start, stop };
+    return { push, setArena, setZones, setGhost, current, start, stop };
   }
 
   return {
     W, H, LANE_X, ARENAS, COLORS: { INK, CREAM, PINK, BLUE, ORANGE, I7, I8 },
     TOWER_SYMBOLS, GRADIENT_DEF,
     toBoard, groundPaths, renderGround, renderDynamic, renderScene, createRenderer,
-    pointToDeploy, renderZones, laneAtPoint, unitAtPoint,
+    pointToDeploy, renderZones, renderGhost, laneAtPoint, unitAtPoint, unmapY,
   };
 }));
