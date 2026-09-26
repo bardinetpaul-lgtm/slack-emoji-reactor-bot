@@ -19,16 +19,21 @@
       <span class="clock" id="clock" aria-live="off">2:00</span>
     </header>
 
-    <!-- ⏳ Préparation -->
+    <!-- ⏳ Préparation = éditeur de deck (DA « Editeur de deck ») -->
     <section class="phase" id="phase-preparing" hidden>
-      <h1>Prépare ton deck</h1>
-      <p class="muted" id="prep-info">Le combat démarre quand vous êtes prêts tous les deux.</p>
-      <div class="deck-grid" id="prep-deck"></div>
+      <header class="prep-head">
+        <div class="prep-title">
+          <span class="vs"><span id="prep-me">Vous</span> <span class="sep">vs</span> <span id="prep-opp">Adversaire</span></span>
+          <small>Préparation du combat. Le deck adverse reste caché. <span class="prep-arena" id="prep-arena"></span></small>
+        </div>
+        <div class="prep-status">
+          <span class="prep-chip" id="chip-me"><i></i><span>Vous · en préparation</span></span>
+          <span class="prep-chip" id="chip-opp"><i></i><span>Adversaire · en préparation</span></span>
+        </div>
+        <div class="prep-clock"><b id="prep-clock">1:00</b><span>avant le lancement</span></div>
+      </header>
+      <div class="editor" id="editor"></div>
       <p class="muted small">Les cartes que tu poses sont en jeu : détruites, elles sont perdues. Si tu perds le combat, toutes tes cartes posées sont perdues.</p>
-      <div class="actions">
-        <button type="button" class="btn ghost" id="btn-leave">Quitter</button>
-        <button type="button" class="btn" id="btn-ready">✅ Prêt</button>
-      </div>
     </section>
 
     <!-- ⚔️ Combat -->
@@ -63,6 +68,7 @@
   </main>
 
   <script src="../arena-board.js?v=__ASSET_VERSION__"></script>
+  <script src="../deck-editor.js?v=__ASSET_VERSION__"></script>
   <script src="../arena.js?v=__ASSET_VERSION__"></script>
 </body>
 </html>

@@ -6,10 +6,12 @@
 //
 //  Contrat serveur (chemins relatifs, page servie sur …/arena/<id>?t=) :
 //    GET  ../api/arena/<id>/stream?t=  (SSE)
-//         event « setup » : { arena, names: { you, opponent }, symbols, sprites, images }
+//         event « setup » : { arena, names: { you, opponent }, symbols, sprites, images,
+//                             catalogue: [{ url, title, rarity, archetype, cost, copies, image }] }
 //         event « state » : vue du joueur (src/game/matches.js view) + events
 //    POST ../api/arena/<id>/action?t=  { type: 'deploy', url, lane, forward }
-//         | { type: 'ready' } | { type: 'forfeit' }  → { ok, reason? }
+//         | { type: 'decks', decks, active } | { type: 'ready', ready, urls }
+//         | { type: 'forfeit' }  → { ok, reason? }
 // ═══════════════════════════════════════════════════════════
 (function () {
   'use strict';
@@ -38,6 +40,9 @@
   let selected = null;      // url de la carte choisie
   let handKey = '';
   let pillTimer = null;
+  let editor = null;
+  let shownPhase = null;
+  const ARENA_NAMES = { jardin: 'Arène 01 · Le jardin', port: 'Arène 02 · Le port', serveurs: 'Arène 03 · La salle serveur' };
 
   // ─────────────────────────────────────────────
   // 🧱 Petits constructeurs DOM (aucun innerHTML sur du texte)
@@ -218,21 +223,33 @@
   // ─────────────────────────────────────────────
 
   function renderPreparing(v) {
-    const grid = $('prep-deck');
-    grid.replaceChildren(...v.deck.map((c) => {
-      const d = el('div', 'card');
-      d.append(cardFace(c), costBadge(c.cost), el('span', 'name', c.title || ''));
-      if (c.copies > 1) d.append(el('span', 'copies', `×${c.copies}`));
-      return d;
-    }));
+    const names = (setup && setup.names) || {};
+    $('prep-me').textContent = names.you || 'Vous';
+    $('prep-opp').textContent = names.opponent || 'Adversaire';
+    $('prep-arena').textContent = ARENA_NAMES[v.arena] || '';
+    const chip = (id, who, ready) => {
+      $(id).classList.toggle('ready', ready);
+      $(id).lastChild.textContent = `${who} · ${ready ? 'prêt' : 'en préparation'}`;
+    };
+    chip('chip-me', 'Vous', v.ready.you);
+    chip('chip-opp', names.opponent || 'Adversaire', v.ready.opponent);
     const left = Math.max(0, Math.ceil((v.deadline - Date.now()) / 1000));
-    $('prep-info').textContent = v.ready.you
-      ? (v.ready.opponent ? 'C’est parti !' : `En attente de ton adversaire… (${left} s)`)
-      : `Le combat démarre quand vous êtes prêts tous les deux (au plus tard dans ${left} s).`;
-    $('btn-ready').disabled = v.ready.you;
-    if (v.replaced && v.replaced.length) {
-      $('prep-info').textContent += ` ${v.replaced.length} carte(s) de ton deck ont disparu de ta collection : elles ont été remplacées.`;
+    $('prep-clock').textContent = `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`;
+
+    if (!editor && setup && setup.catalogue) {
+      editor = DeckEditor.mount($('editor'), {
+        catalogue: setup.catalogue,
+        decks: v.decks,
+        active: v.activeDeck,
+        mode: 'prep',
+        onSave: (value) => send({ type: 'decks', ...value }),
+        onReady: async (ready, urls) => {
+          const res = await send({ type: 'ready', ready, urls });
+          if (!res.ok) editor.setStatus({ ready: { you: false } });
+        },
+      });
     }
+    if (editor) editor.setStatus({ ready: v.ready });
   }
 
   function renderEnded(v) {
@@ -270,6 +287,11 @@
 
   function showPhase(phase) {
     const p = phase === 'cancelled' ? 'ended' : phase;
+    document.body.classList.toggle('wide', p === 'preparing');
+    if (p !== shownPhase) {
+      shownPhase = p;
+      window.scrollTo(0, 0);
+    }
     for (const k of ['preparing', 'running', 'ended']) $(`phase-${k}`).hidden = k !== p;
   }
 
@@ -290,12 +312,13 @@
     return renderEnded(v);
   }
 
-  $('btn-ready').addEventListener('click', () => send({ type: 'ready' }));
-  $('btn-leave').addEventListener('click', () => send({ type: 'forfeit' }));
+  // Le décompte de préparation avance entre deux états du serveur
+  setInterval(() => { if (view && view.phase === 'preparing') renderPreparing(view); }, 1000);
 
   const es = new EventSource(api('stream'));
   es.addEventListener('setup', (e) => {
     setup = JSON.parse(e.data);
+    editor = null;
     $('opponent').textContent = setup.names && setup.names.opponent ? setup.names.opponent : 'Adversaire';
     if (renderer) renderer.stop();
     handKey = '';
