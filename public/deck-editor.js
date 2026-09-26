@@ -2,26 +2,33 @@
 //  🃏 Éditeur de deck de l'Arène (DA « Editeur de deck »)
 //
 //  À gauche : 3 decks enregistrés (onglets), les 8 emplacements du
-//  deck actif (vraies images des cartes), coût moyen, archétypes,
-//  alerte, « Vider » et « Prêt » (préparation) ou enregistrement auto.
+//  deck actif (vraies images des cartes), 🎖 Capitaine, coût moyen,
+//  archétypes, alerte, 🛒 cartes mystère (préparation), « Vider » et
+//  « Prêt » (préparation) ou enregistrement auto.
 //  À droite : toute la collection (vraies images), filtres par
-//  archétype, tri coût / nom, exemplaires possédés, badge « Deck ×n ».
+//  archétype, tri coût / nom, exemplaires possédés, badge « Deck ×n »,
+//  ✨ spécialité des épiques / légendaires.
 //  Une carte ×3 possédée peut occuper jusqu'à 3 emplacements ; chaque
 //  emplacement se joue UNE fois par combat.
 //
 //  DeckEditor.mount(root, {
-//    catalogue: [{ url, title, rarity, archetype, cost, copies, image }],
-//    decks: [{ name, cards: [url] }] × 3, active,
+//    catalogue: [{ url, title, rarity, archetype, cost, copies, image, specialty }],
+//    decks: [{ name, cards: [url], captain }] × 3, active,
+//    captains, specialties,          // textes (serveur)
+//    shop: { prices, max, credits }, // préparation : cartes mystère
 //    mode: 'prep' | 'standalone',
-//    onSave({ decks, active }),     // enregistrement (débouncé)
-//    onReady(ready, urls),          // mode prep : « Prêt » / « Prêt · annuler »
-//  }) → { setStatus({ ready: { you, opponent }, opponentName }) }
+//    onSave({ decks, active }),      // enregistrement (débouncé)
+//    onReady(ready, urls, captain),  // mode prep : « Prêt » / « Prêt · annuler »
+//  }) → { setStatus({ ready: { you } }), activeCards() }
 // ═══════════════════════════════════════════════════════════
 (function (root) {
   'use strict';
 
   const ARCH_LABELS = { tank: 'Tank', guerrier: 'Guerrier', tireur: 'Tireur', essaim: 'Essaim', sort: 'Sort', pompe: 'Pompe' };
+  const RARITY_LABELS = { epic: 'Épique', legendary: 'Légendaire' };
   const DECK_SIZE = 8;
+  const isToken = (u) => typeof u === 'string' && u.startsWith('shop:');
+  const tokenRarity = (u) => u.slice(5);
 
   function el(tag, cls, text) {
     const e = document.createElement(tag);
@@ -33,14 +40,14 @@
   const fmt = (n) => n.toFixed(1).replace('.', ',');
   const avgCost = (cards) => (cards.length ? fmt(cards.reduce((a, c) => a + c.cost, 0) / cards.length) : '–');
 
-  /** Alerte de la DA, dans l'ordre de priorité. */
-  function warningFor(cards) {
-    if (cards.length < DECK_SIZE) {
-      const n = DECK_SIZE - cards.length;
+  /** Alerte de la DA, dans l'ordre de priorité (les cartes mystère comptent comme cartes). */
+  function warningFor(cards, total = cards.length) {
+    if (total < DECK_SIZE) {
+      const n = DECK_SIZE - total;
       return `Encore ${n} carte${n > 1 ? 's' : ''} à ajouter pour pouvoir combattre.`;
     }
     if (!cards.some((c) => c.archetype === 'tank' || c.archetype === 'guerrier')) return 'Aucune unité de mêlée ni Tank : vos tours seront difficiles à défendre.';
-    if (cards.reduce((a, c) => a + c.cost, 0) / cards.length > 4.2) return 'Coût moyen élevé : votre main risque de rester bloquée en début de combat.';
+    if (cards.length && cards.reduce((a, c) => a + c.cost, 0) / cards.length > 4.2) return 'Coût moyen élevé : votre main risque de rester bloquée en début de combat.';
     if (!cards.some((c) => c.archetype === 'sort')) return 'Aucun sort dans ce deck.';
     return '';
   }
@@ -58,27 +65,43 @@
 
   function mount(rootEl, opts) {
     const byUrl = Object.fromEntries(opts.catalogue.map((c) => [c.url, c]));
+    const captains = opts.captains || {};
+    const specs = opts.specialties || {};
+    const shop = opts.shop || null;
     const state = {
       decks: opts.decks.map((d) => {
         const used = {};
         // garde un emplacement tant qu'il reste un exemplaire pour le couvrir
-        return { name: d.name, cards: d.cards.filter((u) => byUrl[u] && (used[u] = (used[u] || 0) + 1) <= byUrl[u].copies) };
+        const cards = d.cards.filter((u) => byUrl[u] && (used[u] = (used[u] || 0) + 1) <= byUrl[u].copies);
+        return { name: d.name, cards, captain: d.captain && cards.includes(d.captain) ? d.captain : null };
       }),
       active: opts.active || 0,
       filter: 'all',
       sort: 'cost',
       ready: false,
-      opponentReady: false,
     };
     let saveTimer = null;
 
-    const deckCards = () => state.decks[state.active].cards.map((u) => byUrl[u]).filter(Boolean);
+    const current = () => state.decks[state.active];
+    const realCards = () => current().cards.filter((u) => !isToken(u)).map((u) => byUrl[u]).filter(Boolean);
+    const tokens = () => current().cards.filter(isToken);
+    const shopCost = () => tokens().reduce((s, t) => s + ((shop && shop.prices[tokenRarity(t)]) || 0), 0);
+
+    function specBadge(card) {
+      const info = card.specialty && specs[card.specialty];
+      if (!info) return null;
+      const b = el('span', 'de-spec', info.emoji);
+      b.title = `${info.label} : ${info.desc}`;
+      return b;
+    }
 
     function changed() {
       if (state.ready && opts.onReady) {
         state.ready = false;
-        opts.onReady(false, null);
+        opts.onReady(false, null, null);
       }
+      const d = current();
+      if (d.captain && !d.cards.includes(d.captain)) d.captain = null;
       clearTimeout(saveTimer);
       saveTimer = setTimeout(() => opts.onSave && opts.onSave({ decks: state.decks, active: state.active }), 400);
       render();
@@ -90,43 +113,72 @@
     rootEl.replaceChildren(deckPanel, collPanel);
 
     function renderDeck() {
-      const cards = deckCards();
+      const d = current();
+      const cards = realCards();
       const tabs = el('div', 'de-tabs');
-      state.decks.forEach((d, i) => {
+      state.decks.forEach((dk, i) => {
         const b = el('button', `de-tab${i === state.active ? ' on' : ''}`);
         b.type = 'button';
-        const cs = d.cards.map((u) => byUrl[u]).filter(Boolean);
-        b.append(el('span', 'de-tab-name', d.name), el('span', 'de-tab-meta', `${cs.length}/8 · coût ${avgCost(cs)}`));
+        const cs = dk.cards.filter((u) => !isToken(u)).map((u) => byUrl[u]).filter(Boolean);
+        b.append(el('span', 'de-tab-name', dk.name), el('span', 'de-tab-meta', `${dk.cards.length}/8 · coût ${avgCost(cs)}`));
         b.title = 'Double-clic pour renommer';
         b.addEventListener('click', () => { if (state.active !== i) { state.active = i; changed(); } });
         b.addEventListener('dblclick', () => {
-          const name = window.prompt('Nom du deck', d.name);
-          if (name && name.trim()) { d.name = name.trim().slice(0, 24); changed(); }
+          const name = window.prompt('Nom du deck', dk.name);
+          if (name && name.trim()) { dk.name = name.trim().slice(0, 24); changed(); }
         });
         tabs.append(b);
       });
 
       const head = el('div', 'de-deck-head');
-      head.append(el('h2', null, state.decks[state.active].name), el('span', 'de-count', `${cards.length}/8 cartes`));
+      head.append(el('h2', null, d.name), el('span', 'de-count', `${d.cards.length}/8 cartes`));
 
+      // 8 emplacements (le Capitaine est marqué ; une carte mystère reste cachée)
       const slots = el('div', 'de-slots');
+      let captainMarked = false;
       for (let i = 0; i < DECK_SIZE; i += 1) {
-        const c = cards[i];
-        const b = el('button', `de-card${c ? '' : ' empty'}`);
+        const u = d.cards[i];
+        const wrap = el('div', 'de-slot');
+        const b = el('button', 'de-card');
         b.type = 'button';
-        if (c) {
-          b.append(cardArt(c), el('span', 'de-cost', String(c.cost)));
-          b.setAttribute('aria-label', `Retirer ${c.title}`);
-          b.addEventListener('click', () => {
-            state.decks[state.active].cards = state.decks[state.active].cards.filter((_, j) => j !== i);
-            changed();
-          });
-        } else {
+        if (!u) {
+          b.classList.add('empty');
           b.append(el('span', 'de-plus', '+'));
           b.setAttribute('aria-label', 'Emplacement vide');
           b.disabled = true;
+          wrap.append(b);
+        } else if (isToken(u)) {
+          const r = tokenRarity(u);
+          b.classList.add('mystery', r);
+          b.append(el('span', 'de-mystery-q', '?'), el('span', 'de-mystery-label', `${RARITY_LABELS[r]} mystère`), el('span', 'de-mystery-price', `${shop ? shop.prices[r] : ''} cr.`));
+          b.setAttribute('aria-label', `Retirer la carte ${RARITY_LABELS[r]} mystère`);
+          b.addEventListener('click', () => { d.cards = d.cards.filter((_, j) => j !== i); changed(); });
+          wrap.append(b);
+        } else {
+          const c = byUrl[u];
+          const isCap = !captainMarked && d.captain === u;
+          if (isCap) captainMarked = true;
+          if (isCap) b.classList.add('captain');
+          b.append(cardArt(c), el('span', 'de-cost', String(c.cost)));
+          const sb = specBadge(c);
+          if (sb) b.append(sb);
+          b.setAttribute('aria-label', `Retirer ${c.title}`);
+          b.addEventListener('click', () => {
+            d.cards = d.cards.filter((_, j) => j !== i);
+            changed();
+          });
+          const star = el('button', `de-star${isCap ? ' on' : ''}`, '🎖');
+          star.type = 'button';
+          star.title = isCap ? 'Retirer le Capitaine' : `Choisir comme Capitaine (${captains[c.archetype] ? captains[c.archetype].style : ''})`;
+          star.setAttribute('aria-pressed', String(isCap));
+          star.addEventListener('click', (e) => {
+            e.stopPropagation();
+            d.captain = isCap ? null : u;
+            changed();
+          });
+          wrap.append(b, star);
         }
-        slots.append(b);
+        slots.append(wrap);
       }
 
       const counts = {};
@@ -140,8 +192,42 @@
       mixBox.append(el('span', 'de-stat-label', 'Archétypes'), mix);
       stats.append(avgBox, mixBox);
 
-      const parts = [el('div', 'de-kicker', 'Vos decks'), tabs, head, slots, stats];
-      const warn = warningFor(cards);
+      // 🎖 Capitaine
+      const capBox = el('div', 'de-captain');
+      const cap = d.captain && byUrl[d.captain];
+      const capInfo = cap && captains[cap.archetype];
+      if (capInfo) {
+        capBox.append(
+          el('span', 'de-stat-label', `🎖 Capitaine · ${capInfo.style}`),
+          el('span', 'de-cap-line', capInfo.passive),
+          el('span', 'de-cap-line', `Pouvoir (1× par combat) — ${capInfo.power.label} : ${capInfo.power.desc}`),
+          el('span', 'de-cap-note', 'Ton Capitaine n’est jamais posé : il ne risque rien, mais tu as une pose de moins.'),
+        );
+      } else {
+        capBox.append(el('span', 'de-stat-label', '🎖 Capitaine'), el('span', 'de-cap-note', 'Touche 🎖 sur une carte du deck pour en faire ton Capitaine : un style de jeu, un pouvoir, et une carte jamais risquée.'));
+      }
+
+      const parts = [el('div', 'de-kicker', 'Vos decks'), tabs, head, slots, stats, capBox];
+
+      // 🛒 Cartes mystère (préparation)
+      if (opts.mode === 'prep' && shop) {
+        const box = el('div', 'de-shop');
+        const left = shop.credits - shopCost();
+        box.append(el('span', 'de-stat-label', `🛒 Compléter avec une carte mystère · ${left} crédits disponibles`));
+        const row = el('div', 'de-shop-row');
+        for (const r of ['epic', 'legendary']) {
+          const price = shop.prices[r];
+          const btn = el('button', `de-btn shop ${r}`, `${r === 'epic' ? '🟣' : '🟡'} ${RARITY_LABELS[r]} mystère · ${price}`);
+          btn.type = 'button';
+          btn.disabled = d.cards.length >= DECK_SIZE || tokens().length >= shop.max || left < price;
+          btn.addEventListener('click', () => { d.cards = [...d.cards, `shop:${r}`]; changed(); });
+          row.append(btn);
+        }
+        box.append(row, el('span', 'de-cap-note', `Tirée au hasard, révélée en combat, valable pour ce combat seulement (jamais ajoutée à ta collection). ${shop.max} max. Débitée au lancement.`));
+        parts.push(box);
+      }
+
+      const warn = warningFor(cards, d.cards.length);
       if (warn) {
         const w = el('div', 'de-warn');
         w.append(el('span', 'de-warn-dot'), el('span', null, warn));
@@ -151,16 +237,18 @@
       const actions = el('div', 'de-actions');
       const clear = el('button', 'de-btn ghost', 'Vider');
       clear.type = 'button';
-      clear.addEventListener('click', () => { state.decks[state.active].cards = []; changed(); });
+      clear.addEventListener('click', () => { d.cards = []; d.captain = null; changed(); });
       actions.append(clear);
-      const full = cards.length === DECK_SIZE;
+      const full = d.cards.length === DECK_SIZE;
       if (opts.mode === 'prep') {
-        const ready = el('button', `de-btn primary${state.ready ? ' ready' : ''}`, !full ? '8 cartes requises' : state.ready ? 'Prêt · annuler' : 'Prêt');
+        const cost = shopCost();
+        const label = !full ? '8 cartes requises' : state.ready ? 'Prêt · annuler' : cost ? `Prêt · ${cost} crédits au lancement` : 'Prêt';
+        const ready = el('button', `de-btn primary${state.ready ? ' ready' : ''}`, label);
         ready.type = 'button';
         ready.disabled = !full;
         ready.addEventListener('click', () => {
           state.ready = !state.ready;
-          if (opts.onReady) opts.onReady(state.ready, state.decks[state.active].cards.slice());
+          if (opts.onReady) opts.onReady(state.ready, d.cards.slice(), d.captain);
           render();
         });
         actions.append(ready);
@@ -174,9 +262,10 @@
 
     // ── Panneau collection ──
     function renderCollection() {
+      const d = current();
       const inDeckCount = {};
-      state.decks[state.active].cards.forEach((u) => { inDeckCount[u] = (inDeckCount[u] || 0) + 1; });
-      const deckFull = state.decks[state.active].cards.length >= DECK_SIZE;
+      d.cards.forEach((u) => { inDeckCount[u] = (inDeckCount[u] || 0) + 1; });
+      const deckFull = d.cards.length >= DECK_SIZE;
       const owned = opts.catalogue.filter((c) => c.copies > 0).length;
 
       const head = el('div', 'de-coll-head');
@@ -212,13 +301,15 @@
         b.setAttribute('aria-label', `${c.title}, ${ARCH_LABELS[c.archetype]}, coût ${c.cost}, ${c.copies} exemplaire(s), ${n} dans le deck`);
         b.title = can ? 'Ajouter un emplacement' : on ? 'Retirer un emplacement' : '';
         b.append(cardArt(c), el('span', 'de-cost', String(c.cost)), el('span', 'de-copies', c.copies > 0 ? `×${c.copies}` : '0'));
+        const sb = specBadge(c);
+        if (sb) b.append(sb);
         if (on) b.append(el('span', 'de-badge', n > 1 ? `Deck ×${n}` : 'Deck'));
         b.addEventListener('click', () => {
-          const cards = state.decks[state.active].cards;
-          if (can) state.decks[state.active].cards = [...cards, c.url];          // un emplacement de plus
-          else if (on) {                                                          // plus d'exemplaire libre : on en retire un
+          const cards = d.cards;
+          if (can) d.cards = [...cards, c.url];          // un emplacement de plus
+          else if (on) {                                 // plus d'exemplaire libre : on en retire un
             const i = cards.lastIndexOf(c.url);
-            state.decks[state.active].cards = cards.filter((_, j) => j !== i);
+            d.cards = cards.filter((_, j) => j !== i);
           } else return;
           changed();
         });
@@ -240,7 +331,7 @@
           renderDeck();
         }
       },
-      activeCards: () => state.decks[state.active].cards.slice(),
+      activeCards: () => current().cards.slice(),
     };
   }
 

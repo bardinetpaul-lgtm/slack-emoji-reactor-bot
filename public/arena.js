@@ -32,12 +32,18 @@
     not_in_hand: 'Cette carte n’est plus en main',
     not_running: 'Le combat est terminé',
     network: 'Connexion perdue, réessaie',
+    recall: '🏳 Rappel ! Le groupe fait demi-tour',
+    not_recallable: 'Ce groupe ne peut pas être rappelé',
+    already: 'Déjà en retraite',
+    power_used: 'Pouvoir déjà utilisé',
+    no_captain: 'Pas de Capitaine dans ce deck',
   };
 
   let setup = null;
   let renderer = null;
   let view = null;
   let selected = null;      // { index, url } de l'emplacement choisi en main
+  let powerArmed = false;   // 🎖 pouvoir en attente d'un couloir
   let handKey = '';
   let pillTimer = null;
   let editor = null;
@@ -129,7 +135,7 @@
     const me = v.players[v.you];
     const hand = me.hand || [];
     if (selected && (!hand[selected.index] || hand[selected.index].url !== selected.url)) selectCard(null);
-    const key = JSON.stringify([hand.map((c) => [c.url, c.copies, c.cost <= me.elixir]), selected, me.next && me.next.url]);
+    const key = JSON.stringify([hand.map((c) => [c.url, c.copies, c.cost <= me.elixir, c.echo]), selected, me.next && me.next.url]);
     if (key === handKey) return;
     handKey = key;
 
@@ -144,6 +150,10 @@
       b.setAttribute('aria-label', `${c.title || 'Carte'}, coût ${c.cost}, ${c.copies} pose(s) restante(s)`);
       b.append(cardFace(c), costBadge(c.cost));
       if (c.copies > 1) b.append(el('span', 'copies', `×${c.copies}`));
+      const spec = c.specialty && setup && setup.specialties && setup.specialties[c.specialty];
+      if (spec) { const sp = el('span', 'spec', spec.emoji); sp.title = `${spec.label} : ${spec.desc}`; b.append(sp); }
+      if (c.echo) b.append(el('span', 'tag', 'Écho'));
+      else if (c.rented) b.append(el('span', 'tag rented', 'Achetée'));
       b.addEventListener('click', (e) => {
         e.stopPropagation();
         selectCard(on ? null : { index, url: c.url });
@@ -158,6 +168,7 @@
 
   function selectCard(slot) {
     selected = slot;
+    if (slot) armPower(false);
     handKey = '';
     $('board-wrap').classList.toggle('selecting', Boolean(slot));
     if (renderer) renderer.setZones(Boolean(slot));
@@ -166,10 +177,13 @@
 
   function renderElixir(v) {
     const elixir = v.players[v.you].elixir;
+    const max = v.players[v.you].elixirMax || 10;   // 🎖 Économie : jusqu'à 12
     $('elixir-count').textContent = String(Math.floor(elixir));
     const segs = $('elixir-segs');
-    if (!segs.children.length) {
-      for (let i = 0; i < 10; i += 1) {
+    segs.style.gridTemplateColumns = `repeat(${max}, 1fr)`;
+    if (segs.children.length !== max) {
+      segs.replaceChildren();
+      for (let i = 0; i < max; i += 1) {
         const s = el('span', 'seg');
         s.append(el('i'));
         segs.append(s);
@@ -182,6 +196,47 @@
     });
   }
 
+  // 🎖 Pouvoir du Capitaine · 🔥 Rage
+  function renderPower(v) {
+    const me = v.players[v.you];
+    const foe = v.players[v.you === 'A' ? 'B' : 'A'];
+    const texts = (setup && setup.captains) || {};
+    const btn = $('power');
+    const cap = me.captain;
+    if (cap && texts[cap.archetype]) {
+      const def = texts[cap.archetype].power;
+      btn.hidden = false;
+      btn.disabled = cap.used;
+      btn.textContent = cap.used ? `🎖 ${def.label} · utilisé` : powerArmed ? `🎖 ${def.label} · touche un couloir` : `🎖 ${def.label}`;
+      btn.title = `${texts[cap.archetype].style} — ${def.desc}`;
+      btn.classList.toggle('armed', powerArmed);
+    } else {
+      btn.hidden = true;
+    }
+    $('opp-cap').textContent = foe.captain && texts[foe.captain.archetype] ? `🎖 ${texts[foe.captain.archetype].style}` : '';
+    $('rage').hidden = !me.rage;
+    $('opp-rage').hidden = !foe.rage;
+  }
+
+  function armPower(on) {
+    powerArmed = on;
+    if (view && view.phase === 'running') renderPower(view);
+  }
+
+  $('power').addEventListener('click', async () => {
+    if (!view || view.phase !== 'running') return;
+    const cap = view.players[view.you].captain;
+    const texts = (setup && setup.captains) || {};
+    if (!cap || cap.used || !texts[cap.archetype]) return;
+    if (!texts[cap.archetype].power.lane) {
+      const res = await send({ type: 'power' });
+      if (!res.ok) flash(res.reason);
+      return;
+    }
+    selectCard(null);
+    armPower(!powerArmed);
+  });
+
   function renderClock(ms) {
     const s = Math.ceil(ms / 1000);
     $('clock').textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
@@ -192,16 +247,35 @@
   // ─────────────────────────────────────────────
 
   $('board').addEventListener('click', async (e) => {
-    if (!selected || !view || view.phase !== 'running') return;
+    if (!view || view.phase !== 'running') return;
     const r = e.currentTarget.getBoundingClientRect();
     const x = ((e.clientX - r.left) / r.width) * ArenaBoard.W;
     const y = ((e.clientY - r.top) / r.height) * ArenaBoard.H;
     const yPct = (y / ArenaBoard.H) * 100;
+    const live = (renderer && renderer.current()) || view;
+
+    // 🎖 Pouvoir armé : le couloir le plus proche du point touché
+    if (powerArmed) {
+      const lane = ArenaBoard.laneAtPoint(x, live);
+      armPower(false);
+      const res = await send({ type: 'power', lane });
+      if (!res.ok) flash(res.reason, yPct);
+      return undefined;
+    }
+
+    // 🏳 Aucune carte choisie : toucher un de mes groupes le rappelle
+    if (!selected) {
+      const unit = ArenaBoard.unitAtPoint(x, y, live, live.you);
+      if (!unit) return undefined;
+      const res = await send({ type: 'recall', poseId: unit.poseId });
+      flash(res.ok ? 'recall' : res.reason, yPct);
+      return undefined;
+    }
     const me = view.players[view.you];
     const card = selected && (me.hand || [])[selected.index];
     if (!card || card.url !== selected.url) return selectCard(null);
 
-    const spot = ArenaBoard.pointToDeploy(x, y, renderer.current() || view);
+    const spot = ArenaBoard.pointToDeploy(x, y, live);
     if (!spot.ok) return flash(spot.reason, yPct);
     if (card.cost > me.elixir) return flash('elixir', yPct);
 
@@ -217,7 +291,7 @@
     const hand = view.players[view.you].hand || [];
     const n = Number(e.key);
     if (n >= 1 && n <= hand.length) selectCard({ index: n - 1, url: hand[n - 1].url });
-    if (e.key === 'Escape') selectCard(null);
+    if (e.key === 'Escape') { selectCard(null); armPower(false); }
   });
 
   // ─────────────────────────────────────────────
@@ -243,10 +317,13 @@
         catalogue: setup.catalogue,
         decks: v.decks,
         active: v.activeDeck,
+        captains: setup.captains,
+        specialties: setup.specialties,
+        shop: v.shop,
         mode: 'prep',
         onSave: (value) => send({ type: 'decks', ...value }),
-        onReady: async (ready, urls) => {
-          const res = await send({ type: 'ready', ready, urls });
+        onReady: async (ready, urls, captain) => {
+          const res = await send({ type: 'ready', ready, urls, captain });
           if (!res.ok) editor.setStatus({ ready: { you: false } });
         },
       });
@@ -277,6 +354,9 @@
     if (s.lost.length) line('Cartes perdues', s.lost.map((c) => c.title).join(', '));
     else line('Cartes perdues', 'aucune');
     if (s.kept.length) line('Cartes revenues', s.kept.map((c) => c.title).join(', '));
+    const rec = ((v.result && v.result.poses) || []).filter((p) => p.side === v.you && p.status === 'recalled');
+    if (rec.length) line('Sauvées par Rappel', rec.map((c) => c.title).join(', '));
+    if (v.rented && v.rented.length) line('Achetées pour ce combat', v.rented.map((c) => `${c.title} (${c.price} crédits)`).join(', '));
     if (s.loot) line('Butin', `${s.loot.title} rejoint ta collection`);
     if (s.stolen) line('Volée', `${s.stolen.title} part chez ton adversaire`);
     if (s.boosterId) line('Récompense', `1 booster Commun + ${s.credits} crédits`);
@@ -307,6 +387,7 @@
       renderClock(v.remainingMs);
       renderElixir(v);
       renderHand(v);
+      renderPower(v);
       $('x2').hidden = !v.doubleElixir;
       return undefined;
     }

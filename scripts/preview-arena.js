@@ -26,6 +26,9 @@ const engine = require('../src/game/engine');
 const characters = require('../src/game/characters');
 const deckRules = require('../src/game/deck');
 const { getCardStats } = require('../src/game/cards');
+const { CAPTAINS } = require('../src/game/captains');
+const specialties = require('../src/game/specialties');
+const shop = require('../src/game/shop');
 const { cardImageUrl, getCardImage } = require('../src/cardImages');
 const { compact } = require('../src/game/arenaWeb');
 const wire = require('../public/arena-wire');
@@ -63,7 +66,7 @@ function demoCollection() {
 function catalogueOf(collection) {
   return collection.map((m) => {
     const s = getCardStats(m);
-    return { url: m.url, title: m.title, rarity: s.rarity, archetype: s.archetype, cost: s.cost, copies: m.count, image: imageOf(m) };
+    return { url: m.url, title: m.title, rarity: s.rarity, archetype: s.archetype, cost: s.cost, specialty: s.specialty, copies: m.count, image: imageOf(m) };
   });
 }
 
@@ -77,7 +80,10 @@ function newGame(arena, now) {
   return {
     arena: ARENAS.includes(arena) ? arena : 'jardin',
     collection,
-    decks: { active: 0, decks: [{ name: 'Deck 1', cards: auto }, { name: 'Deck 2', cards: [] }, { name: 'Deck 3', cards: [] }] },
+    decks: { active: 0, decks: [{ name: 'Deck 1', cards: auto, captain: null }, { name: 'Deck 2', cards: [] }, { name: 'Deck 3', cards: [] }] },
+    captain: null,
+    credits: 100,   // crédits de démo pour les cartes mystère
+    rented: [],
     phase: 'preparing',
     startedAt: now,
     deadline: now + PREP_MS,
@@ -88,20 +94,36 @@ function newGame(arena, now) {
 }
 
 function prepSetup(game) {
-  return { arena: game.arena, names: { you: 'Toi', opponent: 'Bot Jeanpip' }, catalogue: catalogueOf(game.collection), symbols: '', sprites: {}, images: {} };
+  return {
+    arena: game.arena, names: { you: 'Toi', opponent: 'Bot Jeanpip' }, captains: CAPTAINS, specialties: specialties.INFO,
+    catalogue: catalogueOf(game.collection), symbols: '', sprites: {}, images: {},
+  };
 }
 
 function startCombat(game) {
   const owned = game.collection.filter((m) => m.count > 0);
   const byUrl = Object.fromEntries(owned.map((m) => [m.url, m]));
   const active = game.decks.decks[game.decks.active].cards;
-  const mine = (deckRules.validateDeck(game.collection, active).ok ? active : deckRules.resolveDeck(active, game.collection).urls).map((u) => byUrl[u]);
+  const chosen = deckRules.validateDeck(game.collection, active).ok ? active : deckRules.resolveDeck(active, game.collection).urls;
+  const mine = chosen.filter((u) => !shop.isToken(u)).map((u) => byUrl[u]);
+  // 🛒 cartes mystère : tirées au hasard, révélées maintenant (crédits de démo)
+  for (const t of chosen.filter(shop.isToken)) {
+    const price = shop.PRICES[shop.tokenRarity(t)];
+    const card = shop.drawCard(shop.tokenRarity(t), mine.map((m) => m.url));
+    if (!card || game.credits < price) continue;
+    game.credits -= price;
+    mine.push({ ...card, count: 1, rented: true });
+    game.rented.push({ url: card.url, title: card.title, rarity: card.rarity, price });
+  }
   const bot = shuffled(media.getAllMedia().filter((m) => !mine.includes(m))).slice(0, 8).map((m) => ({ ...m, count: 2 }));
-  const deck = (cards) => cards.map((m) => ({ url: m.url, title: m.title, rarity: m.rarity }));
+  const deck = (cards) => cards.map((m) => ({ url: m.url, title: m.title, rarity: m.rarity, rented: Boolean(m.rented) }));
   const copies = (cards) => Object.fromEntries(cards.map((m) => [m.url, m.count]));
   game.state = engine.createMatch({
     id: 'preview', seed: Math.floor(Math.random() * 1e9),
-    players: { A: { userId: 'Toi', deck: deck(mine), copies: copies(mine) }, B: { userId: 'Bot', deck: deck(bot), copies: copies(bot) } },
+    players: {
+      A: { userId: 'Toi', deck: deck(mine), copies: copies(mine), captain: game.captain },
+      B: { userId: 'Bot', deck: deck(bot), copies: copies(bot), captain: bot[1].url },
+    },
   });
   game.phase = 'running';
   const sprites = {};
@@ -118,6 +140,9 @@ function startCombat(game) {
 /** Bot : défend le couloir menacé, sinon pousse ; garde parfois l'élixir. */
 function botAct(state) {
   const p = state.players.B;
+  if (p.captain && !p.captain.used && state.timeMs > 40000 && Math.random() < 0.01) {
+    engine.applyAction(state, 'B', { type: 'power', lane: Math.floor(Math.random() * 3) });
+  }
   const playable = p.hand.filter((u) => engine.cardStats(state, 'B', u).cost <= p.elixir);
   if (!playable.length || Math.random() < 0.9) return;
   const url = playable[Math.floor(Math.random() * playable.length)];
@@ -129,6 +154,7 @@ function prepView(game) {
   return {
     matchId: 'preview', you: 'A', opponent: 'Bot', arena: game.arena, phase: 'preparing',
     deadline: game.deadline, ready: game.ready, decks: game.decks.decks, activeDeck: game.decks.active,
+    shop: { prices: shop.PRICES, max: shop.MAX_PER_DECK, credits: game.credits },
   };
 }
 
@@ -143,18 +169,21 @@ function endedView(game) {
   return {
     matchId: 'preview', you: 'A', opponent: 'Bot', arena: game.arena, phase: 'ended', result: r,
     summary: { you: { lost, kept, loot, stolen: null, boosterId: r.winner === 'A' ? 'aperçu' : null, credits: r.winner === 'A' ? 10 : 0 } },
+    rented: game.rented,
   };
 }
 
-let current = null;
+// Une partie par page (identifiant unique dans l'adresse, comme un vrai combat)
+const games = new Map();
 
-function handleAction(action) {
-  const game = current;
+function handleAction(id, action) {
+  const game = games.get(id);
   if (!game) return { ok: false, reason: 'not_running' };
   if (action.type === 'decks' && game.phase === 'preparing') {
     game.decks = { active: Number(action.active) || 0, decks: action.decks };
     return { ok: true };
   }
+  if (action.type === 'ready' && game.phase === 'preparing' && action.ready) game.captain = action.captain || null;
   if (action.type === 'ready' && game.phase === 'preparing') {
     if (action.ready) {
       const check = deckRules.validateDeck(game.collection, action.urls);
@@ -184,18 +213,26 @@ function readBody(req) {
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://127.0.0.1:${PORT}`);
 
+  // /arena/preview → une partie neuve à son propre identifiant
   if (url.pathname === '/arena/preview') {
+    const id = `p${Date.now().toString(36)}${Math.floor(Math.random() * 1e6).toString(36)}`;
+    res.writeHead(302, { Location: `/arena/${id}${url.search}` });
+    return res.end();
+  }
+  if (/^\/arena\/p[a-z0-9]+$/.test(url.pathname)) {
     const html = fs.readFileSync(path.join(PUBLIC, 'arena.html'), 'utf-8').replace(/__ASSET_VERSION__/g, String(Date.now()));
     res.writeHead(200, { 'Content-Type': TYPES['.html'] });
     return res.end(html);
   }
 
-  if (url.pathname === '/api/arena/preview/stream') {
+  const api = /^\/api\/arena\/(p[a-z0-9]+)\/(stream|action)$/.exec(url.pathname);
+  if (api && api[2] === 'stream') {
+    const gameId = api[1];
     res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });
     const send = (event, data) => res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
     const arena = url.searchParams.get('t');
-    let game = newGame(arena, Date.now());
-    current = game;
+    let game = games.get(gameId) || newGame(arena, Date.now());
+    games.set(gameId, game);
     const encoder = wire.createEncoder();   // même envoi différentiel que la prod
     send('setup', prepSetup(game));
     send('state', prepView(game));
@@ -217,7 +254,7 @@ const server = http.createServer(async (req, res) => {
         game.endedFor += 1;
         if (game.endedFor < 100) return;   // 10 s sur l'écran de fin, puis revanche
         game = newGame(arena, now);
-        current = game;
+        games.set(gameId, game);
         send('setup', prepSetup(game));
         send('state', prepView(game));
         return;
@@ -236,8 +273,8 @@ const server = http.createServer(async (req, res) => {
     return undefined;
   }
 
-  if (url.pathname === '/api/arena/preview/action' && req.method === 'POST') {
-    const result = handleAction(await readBody(req));
+  if (api && api[2] === 'action' && req.method === 'POST') {
+    const result = handleAction(api[1], await readBody(req));
     res.writeHead(200, { 'Content-Type': 'application/json' });
     return res.end(JSON.stringify({ ok: result.ok, reason: result.reason }));
   }

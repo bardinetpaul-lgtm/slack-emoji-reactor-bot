@@ -15,7 +15,7 @@
 <body>
   <main class="frame" id="frame">
     <header class="top">
-      <div class="opponent"><span class="dot" aria-hidden="true"></span><span id="opponent">Adversaire</span></div>
+      <div class="opponent"><span class="dot" aria-hidden="true"></span><span id="opponent">Adversaire</span><span class="opp-cap" id="opp-cap"></span><span class="opp-rage" id="opp-rage" hidden>🔥</span></div>
       <span class="clock" id="clock" aria-live="off">2:00</span>
     </header>
 
@@ -42,6 +42,7 @@
         <svg id="board" role="img" aria-label="Arène"></svg>
         <span class="pill" id="pill" role="status" hidden></span>
         <span class="x2" id="x2" hidden>×2 élixir</span>
+        <span class="rage" id="rage" hidden>🔥 Rage !</span>
       </div>
       <div class="hand-row">
         <div class="next">
@@ -53,6 +54,10 @@
       <div class="elixir" aria-label="Élixir">
         <span class="badge" id="elixir-count">5</span>
         <div class="segs" id="elixir-segs"></div>
+      </div>
+      <div class="power-row">
+        <button type="button" class="power" id="power" hidden></button>
+        <span class="hint" id="hint">Touche un de tes groupes pour le rappeler 🏳 : sorti du terrain, sa carte est sauvée.</span>
       </div>
     </section>
 

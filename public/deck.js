@@ -19,6 +19,8 @@
         catalogue: data.catalogue,
         decks: data.decks,
         active: data.active,
+        captains: data.captains,
+        specialties: data.specialties,
         mode: 'standalone',
         onSave: (value) => fetch(api, {
           method: 'POST',

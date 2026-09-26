@@ -102,5 +102,33 @@ const zones = board.renderZones(breach);
 check('zones : moitié + brèche en pointillé bleu', (zones.match(/<path/g) || []).length === 2 && zones.includes('#1C72F1') && zones.includes('6 5'));
 check('zones : sans brèche, seulement ma moitié', (board.renderZones(noBreach).match(/<path/g) || []).length === 1);
 
+// 🎖 Pouvoir : couloir touché · 🏳 Rappel : groupe touché
+check('pouvoir : couloir le plus proche du point (vue A)', board.laneAtPoint(50, { you: 'A' }) === 0 && board.laneAtPoint(310, { you: 'A' }) === 2);
+check('pouvoir : couloirs en miroir (vue B)', board.laneAtPoint(50, { you: 'B' }) === 2);
+const rv = { you: 'A', units: [
+  { id: 1, side: 'A', lane: 0, y: 30, poseId: 7, slot: 0, packSize: 3, archetype: 'guerrier' },
+  { id: 2, side: 'B', lane: 0, y: 32, poseId: 8, slot: 0, packSize: 3, archetype: 'guerrier' },
+  { id: 3, side: 'A', lane: 2, y: 30, poseId: 9, slot: 0, packSize: 3, archetype: 'guerrier', recalling: true },
+] };
+const at = board.toBoard(0, 30, 'A');
+check('rappel : toucher mon groupe le désigne', board.unitAtPoint(at.x, at.y, rv, 'A') && board.unitAtPoint(at.x, at.y, rv, 'A').poseId === 7);
+check('rappel : jamais un groupe adverse', !board.unitAtPoint(board.toBoard(0, 32, 'A').x, board.toBoard(0, 32, 'A').y - 60, rv, 'A'));
+check('rappel : un groupe déjà en retraite est ignoré', !board.unitAtPoint(board.toBoard(2, 30, 'A').x, board.toBoard(2, 30, 'A').y, rv, 'A'));
+check('rappel : rien à toucher loin des groupes', board.unitAtPoint(180, 600, rv, 'A') === null);
+
+// ✨ États visibles
+const fv = { you: 'A', buildings: [{ id: 1, side: 'A', kind: 'tower', lane: 0, y: 15, hp: 600, maxHp: 600, alive: true, shielded: true }], units: [
+  { id: 1, side: 'B', lane: 1, y: 60, hp: 10, maxHp: 10, archetype: 'guerrier', url: 'g', slot: 0, packSize: 3, frozen: true },
+  { id: 2, side: 'B', lane: 1, y: 60, hp: 10, maxHp: 10, archetype: 'guerrier', url: 'g', slot: 1, packSize: 3, shield: true },
+  { id: 3, side: 'A', lane: 1, y: 30, hp: 10, maxHp: 10, archetype: 'guerrier', url: 'g', slot: 0, packSize: 3, recalling: true },
+] };
+const fs2 = board.renderDynamic(fv, { sprites: { g: 's1' } });
+check('gel : anneau bleu', fs2.includes('data-fx="frozen"'));
+check('bouclier : anneau blanc', fs2.includes('data-fx="shield"'));
+check('retraite : groupe estompé', fs2.includes('opacity="0.55"'));
+check('Rempart : tour protégée', fs2.includes('data-fx="rempart"'));
+const fx2 = board.renderDynamic({ you: 'A', units: [], buildings: [] }, { fx: [{ type: 'lane', lane: 1, color: '#FF73C0', age: 100 }, { type: 'ring', x: 10, y: 10, age: 0, color: '#FF6229' }] });
+check('pouvoir : le couloir visé s\'illumine', fx2.includes('data-fx="lane"'));
+
 console.log(failures ? `\n❌ ${failures} échec(s)` : '\n✅ Tout est bon');
 process.exit(failures ? 1 : 0);

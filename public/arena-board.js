@@ -197,11 +197,17 @@
     const y = +(at.y + dy).toFixed(2);
     const phase = (time / 1000) * (STEP_HZ[u.archetype] || 1.8) * 2 * Math.PI + u.id * 1.7;
     const sin = Math.sin(phase);
-    const walking = Boolean(u.moving) && sprite.walk !== 'none';
+    const walking = Boolean(u.moving) && sprite.walk !== 'none' && !u.frozen;
     const bob = walking ? -Math.abs(sin) * 2.4 : -Math.abs(Math.sin(phase * 0.3)) * 0.8;
     const tilt = walking ? sin * (sprite.walk === 'sway' ? 5 : 3) : 0;
     const use = (href) => `<use href="#${href}" x="-45" y="-85" width="90" height="95"/>`;
     const hpBar = u.hp < u.maxHp ? bar(x, y - 95 * s, 14, u.hp / u.maxHp, color) : '';
+    // ✨ états : gel, ralenti, bouclier ; 🏳 retraite = estompé
+    let marks = '';
+    if (u.frozen) marks += `<g data-fx="frozen">${pathTag(F(C(x, y - 40 * s, 44 * s), 'none', BLUE, 2.5))}</g>`;
+    else if (u.slowed) marks += `<g data-fx="slowed">${pathTag(F(C(x, y - 40 * s, 44 * s), 'none', BLUE, 1.5, '3 3'))}</g>`;
+    if (u.shield) marks += `<g data-fx="shield">${pathTag(F(C(x, y - 40 * s, 50 * s), 'none', WHITE, 2))}</g>`;
+    const fade = u.recalling ? ' opacity="0.55"' : '';
 
     let body;
     if (sprite.walk === 'step') {
@@ -215,11 +221,11 @@
       body = use(`${sprite.id}-f`);
     } else {
       // personnage figé (symbole complet, son sol compris)
-      return `<g transform="translate(${x} ${y}) scale(${s})" style="color:${color}">${use(sprite.id)}</g>${hpBar}`;
+      return `<g${fade} transform="translate(${x} ${y}) scale(${s})" style="color:${color}">${use(sprite.id)}</g>${marks}${hpBar}`;
     }
-    return `<g transform="translate(${x} ${y}) scale(${s})" style="color:${color}">`
+    return `<g${fade} transform="translate(${x} ${y}) scale(${s})" style="color:${color}">`
       + `<path d="${GROUND}" fill="${color}"/>`
-      + `<g transform="translate(0 ${bob.toFixed(2)}) rotate(${tilt.toFixed(2)} 0 0)">${body}</g></g>${hpBar}`;
+      + `<g transform="translate(0 ${bob.toFixed(2)}) rotate(${tilt.toFixed(2)} 0 0)">${body}</g></g>${marks}${hpBar}`;
   }
 
   const teamColor = (side, viewer) => (side === viewer ? BLUE : ORANGE);
@@ -244,6 +250,12 @@
     }
     // 💥 Sorts : cercle rose + pointillé (sous les unités)
     for (const f of fx) {
+      if (f.type === 'lane') {
+        const o = Math.max(0, 0.35 * (1 - f.age / 900)).toFixed(2);
+        const screen = laneAt(f.lane, viewer);
+        under.push(`<g opacity="${o}" data-fx="lane">${pathTag(F(R(LANE_SPAN[screen][0], 0, LANE_SPAN[screen][1] - LANE_SPAN[screen][0], H, 14), f.color || PINK))}</g>`);
+        continue;
+      }
       if (f.type === 'ring') {
         const k = Math.min(1, f.age / 800);
         under.push(`<g opacity="${(1 - k).toFixed(2)}">${pathTag(F(C(f.x, f.y, 10 + k * 18), 'none', f.color || BLUE, 2))}</g>`);
@@ -267,6 +279,7 @@
       const pos = king ? { x: W / 2, y: at.y } : { x: at.x, y: at.y + (b.lane === 1 ? -4 : 4) * (b.side === viewer ? 1 : -1) };
       const href = b.alive ? (king ? '#t-king' : '#t-lane') : '#t-ruine';
       let svg = `<use href="${href}" x="-34" y="-46" width="68" height="80" transform="translate(${pos.x} ${pos.y})" style="color:${color}"/>`;
+      if (b.alive && b.shielded) svg += `<g data-fx="rempart">${pathTag(F(C(pos.x, pos.y - 8, 34), 'none', WHITE, 3, '4 4'))}</g>`;
       if (b.alive) {
         const ratio = b.hp / b.maxHp;
         if (ratio < 0.5) svg += pathTag(F(`M${pos.x - 9} ${pos.y - 2}l4 5l-3 5M${pos.x + 10} ${pos.y + 4}l-3 4l3 4`, 'none', INK, 1.4));
@@ -322,6 +335,27 @@
       return { ok: true, lane, forward: true };
     }
     return { ok: false, reason: 'zone' };
+  }
+
+  /** 🎖 Pouvoir : couloir du moteur le plus proche de x (vu par view.you). */
+  function laneAtPoint(x, view) {
+    let screen = 0;
+    for (let i = 1; i < 3; i += 1) if (Math.abs(LANE_X[i] - x) < Math.abs(LANE_X[screen] - x)) screen = i;
+    return laneAt(screen, view.you);
+  }
+
+  /** 🏳 Rappel : mon unité la plus proche du point touché (≤ 22 px), hors retraite. */
+  function unitAtPoint(x, y, view, viewer) {
+    let best = null;
+    let bestD = 22;
+    for (const u of view.units || []) {
+      if (u.side !== viewer || u.recalling || u.poseId === null || u.poseId === undefined) continue;
+      const at = toBoard(u.lane, u.y, viewer);
+      const [dx, dy] = formationOffset(u);
+      const d = Math.hypot(at.x + dx - x, at.y + dy - 12 - y);
+      if (d < bestD) { best = u; bestD = d; }
+    }
+    return best;
   }
 
   function renderZones(view) {
@@ -381,6 +415,13 @@
           const at = toBoard(e.lane, spawnY, view.you);
           fx.push({ type: 'ring', x: at.x, y: at.y - 6, born: now, color: e.side === view.you ? BLUE : ORANGE });
         }
+        if (e.type === 'power' && e.lane !== null && e.lane !== undefined) {
+          fx.push({ type: 'lane', lane: e.lane, born: now, color: e.power === 'gel' ? BLUE : e.side === view.you ? PINK : ORANGE });
+        }
+        if (e.type === 'explosion') {
+          const at = toBoard(e.lane, e.y, view.you);
+          fx.push({ type: 'ring', x: at.x, y: at.y - 8, born: now, color: ORANGE });
+        }
         if (e.type === 'spell') {
           const at = toBoard(e.lane, e.y, view.you);
           fx.push({ type: 'spell', x: at.x, y: at.y - 10, born: now, color: e.side === view.you ? BLUE : ORANGE });
@@ -418,7 +459,7 @@
           return p ? { ...u, y: p.y + (u.y - p.y) * t, moving: Math.abs(u.y - p.y) > 0.001 } : u;
         }) };
       }
-      fx = fx.filter((f) => now - f.born < (f.type === 'ring' ? 800 : 700));
+      fx = fx.filter((f) => now - f.born < (f.type === 'ring' ? 800 : f.type === 'lane' ? 900 : 700));
       chips = chips.filter((c) => now - c.born < 900);
       live.innerHTML = (showZones ? renderZones(view) : '') + renderDynamic(view, {
         arena,
@@ -443,6 +484,6 @@
     W, H, LANE_X, ARENAS, COLORS: { INK, CREAM, PINK, BLUE, ORANGE, I7, I8 },
     TOWER_SYMBOLS, GRADIENT_DEF,
     toBoard, groundPaths, renderGround, renderDynamic, renderScene, createRenderer,
-    pointToDeploy, renderZones,
+    pointToDeploy, renderZones, laneAtPoint, unitAtPoint,
   };
 }));

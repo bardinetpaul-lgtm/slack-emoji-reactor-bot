@@ -197,3 +197,41 @@ body.wide .top { display: none; }
 .de-filter { border: none; cursor: pointer; border-radius: 10px; padding: 8px 12px; font: 600 13px 'Inter Tight', sans-serif; background: var(--c3); color: var(--ink); }
 .de-filter.on { background: var(--ink); color: var(--cream); }
 .de-spacer { flex: 1; }
+
+/* ═══════════════════════════════════════════════════════════
+   🎖 Capitaine · 🏳 Rappel · 🔥 Rage · ✨ Spécialités · 🛒 Achats
+   ═══════════════════════════════════════════════════════════ */
+
+.opp-cap { margin-left: 8px; font-size: 12px; font-weight: 600; color: var(--muted); }
+.opp-rage { margin-left: 4px; }
+.rage { position: absolute; left: 10px; top: 10px; background: var(--orange); color: var(--ink); border-radius: 999px; padding: 3px 10px; font-size: 12px; font-weight: 600; }
+.power-row { display: flex; align-items: center; gap: 10px; padding: 0 2px 4px; }
+.power { border: none; cursor: pointer; border-radius: 10px; padding: 8px 12px; font: 600 13px 'Inter Tight', sans-serif; background: var(--cream); color: var(--ink); white-space: nowrap; }
+.power.armed { background: var(--pink); }
+.power:disabled { background: var(--i7); color: var(--grey); cursor: default; }
+.hint { font-size: 11px; line-height: 1.35; color: var(--muted); }
+.card .spec { position: absolute; right: -5px; top: -5px; width: 22px; height: 22px; border-radius: 50%; background: var(--ink); display: flex; align-items: center; justify-content: center; font-size: 12px; }
+.card .tag { position: absolute; left: 4px; bottom: 4px; background: var(--pink); color: var(--ink); border-radius: 999px; padding: 1px 6px; font-size: 10px; font-weight: 600; }
+.card .tag.rented { background: var(--orange); }
+
+/* Éditeur : Capitaine, spécialités, cartes mystère */
+.de-slot { position: relative; }
+.de-slot .de-card { width: 100%; }
+.de-star { position: absolute; right: -6px; top: -6px; width: 26px; height: 26px; border-radius: 50%; border: none; cursor: pointer; background: var(--ink); font-size: 13px; opacity: .55; }
+.de-star.on { opacity: 1; background: var(--pink); }
+.de-star:focus-visible { outline: 3px solid var(--blue); }
+.de-card.captain { box-shadow: 0 0 0 3px var(--pink); }
+.de-spec { position: absolute; right: 6px; top: 6px; width: 22px; height: 22px; border-radius: 50%; background: var(--ink); display: flex; align-items: center; justify-content: center; font-size: 12px; }
+.de-slot .de-spec { top: auto; bottom: 6px; }
+.de-card.mystery { background: var(--i7); color: var(--cream); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; }
+.de-card.mystery.epic { box-shadow: inset 0 0 0 2px #9B6BFF; }
+.de-card.mystery.legendary { box-shadow: inset 0 0 0 2px #FFC83D; }
+.de-mystery-q { font-family: 'Space Grotesk', sans-serif; font-size: 34px; line-height: 1; }
+.de-mystery-label { font-size: 10px; font-weight: 600; text-align: center; padding: 0 4px; }
+.de-mystery-price { font-size: 10px; color: var(--muted); }
+.de-captain, .de-shop { background: var(--ink); border-radius: 14px; padding: 12px 16px; display: flex; flex-direction: column; gap: 6px; }
+.de-cap-line { font-size: 13px; line-height: 1.4; }
+.de-cap-note { font-size: 12px; line-height: 1.4; color: var(--muted); }
+.de-shop-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.de-btn.shop { padding: 10px 12px; font-size: 13px; background: var(--i7); color: var(--cream); }
+.de-btn.shop:disabled { color: var(--grey); }
