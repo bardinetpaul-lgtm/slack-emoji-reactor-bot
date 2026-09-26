@@ -172,7 +172,7 @@ const pathOf = (url) => url.replace('http://jeanpip.test/', '');
   check('allègement : pas d\'URL longue pour les bâtiments', run.buildings.every((b) => !b.url || b.url.length <= 5));
 
   const hand = run.players[run.you].hand;
-  const card = hand.find((c) => c.cost <= run.players[run.you].elixir);
+  const card = hand.find((c) => c.cost <= run.players[run.you].elixir && !['sort', 'pompe'].includes(c.archetype)) || hand[0];
   const before = sB.events.length;
   const dep = await request('POST', `api/arena/${m.id}/action?t=${encodeURIComponent(t)}`, { type: 'deploy', url: card.url, lane: 1 });
   check('pose acceptée', dep.json && dep.json.ok);
