@@ -9,6 +9,7 @@
 // ═══════════════════════════════════════════════════════════
 
 const { getCardStats } = require('./cards');
+const shop = require('./shop');
 
 const DECK_SIZE = 8;
 
@@ -31,8 +32,10 @@ const tally = (urls) => urls.reduce((m, u) => m.set(u, (m.get(u) || 0) + 1), new
 
 function validateDeck(collection, urls) {
   if (!Array.isArray(urls) || urls.length !== DECK_SIZE) return { ok: false, reason: 'size' };
+  // 🛒 cartes mystère achetées : 2 max, pas besoin de les posséder
+  if (urls.filter(shop.isToken).length > shop.MAX_PER_DECK) return { ok: false, reason: 'shop_limit' };
   const have = new Map(owned(collection).map((c) => [c.url, c.count]));
-  for (const [url, n] of tally(urls)) {
+  for (const [url, n] of tally(urls.filter((u) => !shop.isToken(u)))) {
     if (!have.has(url)) return { ok: false, reason: 'not_owned' };
     if (n > have.get(url)) return { ok: false, reason: 'copies' };
   }
@@ -100,18 +103,21 @@ function buildAutoDeck(collection, exclude = []) {
 // ─────────────────────────────────────────────
 
 function resolveDeck(saved, collection) {
-  if (totalCopies(collection) < DECK_SIZE) return null;
+  const tokens = (Array.isArray(saved) ? saved : []).filter(shop.isToken).slice(0, shop.MAX_PER_DECK);
+  if (totalCopies(collection) + tokens.length < DECK_SIZE) return null;
   if (!Array.isArray(saved) || !saved.length) return { urls: buildAutoDeck(collection), replaced: [] };
 
   const have = new Map(owned(collection).map((c) => [c.url, c.count]));
-  const kept = [];
+  const kept = [...tokens];   // 🛒 achats gardés tels quels
   const replaced = [];
   for (const url of saved.slice(0, DECK_SIZE)) {
+    if (shop.isToken(url)) continue;
     const n = kept.filter((u) => u === url).length;
     if (n < (have.get(url) || 0)) kept.push(url);
     else replaced.push(url);
   }
-  const fill = kept.length < DECK_SIZE ? buildAutoDeck(collection, kept) : [];
+  const real = kept.filter((u) => !shop.isToken(u));
+  const fill = kept.length < DECK_SIZE ? (buildAutoDeck(collection, real) || []).slice(0, DECK_SIZE - kept.length) : [];
   return { urls: [...kept, ...fill], replaced };
 }
 

@@ -102,7 +102,7 @@ function createMatch({ id, seed = 1, players }) {
     const copies = {};
     const slots = [];
     for (const card of p.deck) {
-      if (!cards[card.url]) cards[card.url] = getCardStats(card);
+      if (!cards[card.url]) cards[card.url] = { ...getCardStats(card), rented: Boolean(card.rented) };
       const owned = Math.max(0, (p.copies && p.copies[card.url]) || 0);
       if ((copies[card.url] || 0) < owned) {
         copies[card.url] = (copies[card.url] || 0) + 1;
@@ -247,7 +247,7 @@ function applyAction(state, side, action) {
 
   const pose = {
     id: state.nextId++, side, url, title: stats.title, rarity: stats.rarity,
-    archetype: stats.archetype, status: 'pending', free: echoed,
+    archetype: stats.archetype, status: 'pending', free: echoed || stats.rented,   // 🛒 achetée : hors bilan
   };
   state.poses.push(pose);
   state.pending.push({ poseId: pose.id, side, url, lane, forward, readyAt: state.timeMs + DEPLOY_DELAY_MS });

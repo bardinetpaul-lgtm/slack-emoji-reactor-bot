@@ -70,7 +70,8 @@ function normalizeDecks(raw) {
     const d = list[i] || {};
     const name = typeof d.name === 'string' && d.name.trim() ? d.name.trim().slice(0, DECK_NAME_MAX) : `Deck ${i + 1}`;
     // une même carte peut occuper plusieurs emplacements (vérifié contre la collection au combat)
-    const cards = (Array.isArray(d.cards) ? d.cards : []).filter((u) => typeof u === 'string' && u).slice(0, DECK_MAX_CARDS);
+    // 🛒 les cartes mystère (« shop:… ») valent pour un combat : jamais enregistrées
+    const cards = (Array.isArray(d.cards) ? d.cards : []).filter((u) => typeof u === 'string' && u && !u.startsWith('shop:')).slice(0, DECK_MAX_CARDS);
     // 🎖 Capitaine : une des cartes du deck (sinon aucun)
     const captain = typeof d.captain === 'string' && cards.includes(d.captain) ? d.captain : null;
     return { name, cards, captain };

@@ -24,6 +24,8 @@ const arenaStore = require('./arenaStore');
 const { settleMatch } = require('./settle');
 const collections = require('../collections');
 const arenas = require('./arenas');
+const shop = require('./shop');
+const credits = require('../credits');
 
 const PREP_MS = 60 * 1000;
 const DISCONNECT_MS = 20 * 1000;
@@ -109,7 +111,7 @@ function setDeck(id, userId, urls, captain = null) {
   match.players[side].deckUrls = urls.slice();
   match.players[side].captain = captain && urls.includes(captain) ? captain : null;
   match.players[side].replaced = [];
-  arenaStore.setDeck(userId, urls, match.players[side].captain);   // devient le deck par défaut
+  arenaStore.setDeck(userId, urls.filter((u) => !shop.isToken(u)), match.players[side].captain);   // devient le deck par défaut (sans les achats)
   broadcast(match);
   return { ok: true };
 }
@@ -183,11 +185,33 @@ function startMatch(match, now) {
     // Re-vérifie le deck au dernier moment (une carte a pu disparaître)
     const resolved = deckRules.resolveDeck(p.deckUrls, collection);
     if (!resolved) return cancel(match, 'cards', now);
-    p.deckUrls = resolved.urls;
+    let urls = resolved.urls.filter((u) => !shop.isToken(u));
     const byUrl = Object.fromEntries(collection.map((c) => [c.url, c]));
-    const deck = resolved.urls.map((u) => ({ url: u, title: byUrl[u].title, rarity: byUrl[u].rarity }));
-    const copies = Object.fromEntries(resolved.urls.map((u) => [u, byUrl[u].count]));
-    const captain = p.captain && resolved.urls.includes(p.captain) ? p.captain : null;
+    const deck = urls.map((u) => ({ url: u, title: byUrl[u].title, rarity: byUrl[u].rarity }));
+    const copies = Object.fromEntries(urls.map((u) => [u, byUrl[u].count]));
+
+    // 🛒 Cartes mystère : débit au lancement, tirage au hasard, ce combat seulement
+    p.rented = [];
+    for (const t of resolved.urls.filter(shop.isToken)) {
+      const rarity = shop.tokenRarity(t);
+      const price = shop.PRICES[rarity];
+      const card = shop.drawCard(rarity, deck.map((c) => c.url));
+      if (!card || !credits.spend(p.userId, price)) continue;   // solde insuffisant : l'achat saute
+      deck.push({ url: card.url, title: card.title, rarity: card.rarity, rented: true });
+      copies[card.url] = 1;
+      p.rented.push({ url: card.url, title: card.title, rarity: card.rarity, price });
+    }
+    // Achat sauté : on complète avec la collection
+    if (deck.length < deckRules.DECK_SIZE) {
+      const fill = deckRules.buildAutoDeck(collection, urls) || [];
+      for (const u of fill.slice(0, deckRules.DECK_SIZE - deck.length)) {
+        deck.push({ url: u, title: byUrl[u].title, rarity: byUrl[u].rarity });
+        copies[u] = byUrl[u].count;
+        urls = [...urls, u];
+      }
+    }
+    p.deckUrls = urls;
+    const captain = p.captain && urls.includes(p.captain) ? p.captain : null;
     players[side] = { userId: p.userId, deck, copies, captain };
   }
   match.engine = engine.createMatch({ id: match.id, seed: crypto.randomInt(0, 2 ** 31), players });
@@ -312,7 +336,11 @@ function view(match, userId) {
       ...base,
       phase: 'preparing',
       deadline: match.prepDeadline,
-      deck: me.deckUrls.filter((u) => byUrl[u]).map((u) => ({ ...getCardStats(byUrl[u]), copies: byUrl[u].count })),
+      // 🛒 une carte mystère reste cachée (rareté + prix seulement)
+      deck: me.deckUrls.filter((u) => byUrl[u] || shop.isToken(u)).map((u) => (shop.isToken(u)
+        ? { url: u, mystery: true, rarity: shop.tokenRarity(u), price: shop.PRICES[shop.tokenRarity(u)] }
+        : { ...getCardStats(byUrl[u]), copies: byUrl[u].count })),
+      shop: { prices: shop.PRICES, max: shop.MAX_PER_DECK, credits: credits.getBalance(userId) },
       replaced: me.replaced,
       ready: { you: me.ready, opponent: match.players[foe].ready },
       decks: arenaStore.getDecks(userId).decks,
@@ -329,6 +357,7 @@ function view(match, userId) {
     cancelReason: match.cancelReason || null,
     result: match.engine ? match.engine.result : null,
     summary: match.summary ? { you: match.summary[side], opponent: match.summary[foe] } : null,
+    rented: match.players[side].rented || [],   // 🛒 cartes achetées pour ce combat
   };
 }
 
