@@ -36,6 +36,8 @@ const collections = require('../collections');
 const { getAllMedia } = require('../media');
 const { cardImageUrl } = require('../cardImages');
 const wire = require('../../public/arena-wire');
+const { CAPTAINS } = require('./captains');
+const specialties = require('./specialties');
 
 const PING_MS = 15 * 1000;
 const MAX_BODY = 16 * 1024;
@@ -96,7 +98,10 @@ function catalogueFor(userId, prefix) {
   const owned = Object.fromEntries(collections.getCollection(userId).map((c) => [c.url, c.count]));
   return getAllMedia().map((m) => {
     const s = getCardStats(m);
-    return { url: m.url, title: m.title, rarity: s.rarity, archetype: s.archetype, cost: s.cost, copies: owned[m.url] || 0, image: imageFor(m, prefix) };
+    return {
+      url: m.url, title: m.title, rarity: s.rarity, archetype: s.archetype, cost: s.cost, specialty: s.specialty,
+      copies: owned[m.url] || 0, image: imageFor(m, prefix),
+    };
   });
 }
 
@@ -148,9 +153,15 @@ function compact(view, keyOf) {
   const players = {};
   for (const side of ['A', 'B']) {
     const p = view.players[side];
-    const out = { userId: p.userId, elixir: r2(p.elixir), handCount: p.handCount, towersDestroyed: p.towersDestroyed };
+    const out = {
+      userId: p.userId, elixir: r2(p.elixir), handCount: p.handCount, towersDestroyed: p.towersDestroyed,
+      elixirMax: p.elixirMax, captain: p.captain, rage: p.rage, overheat: p.overheat,
+    };
     if (p.hand) {
-      const slim = (c) => ({ url: c.url, title: c.title, rarity: c.rarity, archetype: c.archetype, cost: c.cost, copies: c.copies });
+      const slim = (c) => ({
+        url: c.url, title: c.title, rarity: c.rarity, archetype: c.archetype, cost: c.cost, copies: c.copies,
+        specialty: c.specialty || null, echo: Boolean(c.echo), rented: Boolean(c.rented),
+      });
       out.hand = p.hand.map(slim);
       out.next = p.next ? slim(p.next) : null;
     }
@@ -197,10 +208,12 @@ async function handleStream(req, res, matchId, userId) {
     if (view.phase !== phase) {
       phase = view.phase;
       encoder.reset();
-      if (phase === 'preparing') write('setup', { arena: match.arena, names, catalogue: catalogueFor(userId, '../') });
+      // textes des Capitaines / Spécialités pour l'interface
+      const texts = { captains: CAPTAINS, specialties: specialties.INFO };
+      if (phase === 'preparing') write('setup', { arena: match.arena, names, ...texts, catalogue: catalogueFor(userId, '../') });
       if (phase === 'running') {
         const a = combatAssets(match);
-        write('setup', { arena: match.arena, names, symbols: a.symbols, sprites: a.sprites, images: a.images });
+        write('setup', { arena: match.arena, names, ...texts, symbols: a.symbols, sprites: a.sprites, images: a.images });
       }
     }
     write('state', phase === 'running' ? encoder.encode(compact(view, combatAssets(match).keyOf)) : view);
@@ -277,7 +290,9 @@ async function handleDeckApi(req, res, userId) {
   if (req.method === 'GET') {
     const { decks, active } = arenaStore.getDecks(userId);
     const name = await ctx.displayName(ctx.client, userId, ctx.logger);
-    return ctx.sendJson(res, 200, { status: 'ok', name, catalogue: catalogueFor(userId, ''), decks, active });
+    return ctx.sendJson(res, 200, {
+      status: 'ok', name, catalogue: catalogueFor(userId, ''), decks, active, captains: CAPTAINS, specialties: specialties.INFO,
+    });
   }
   if (req.method === 'POST') {
     const body = await readJson(req);

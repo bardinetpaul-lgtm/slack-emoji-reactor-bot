@@ -50,7 +50,10 @@ const rnd = () => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed
 for (const viewer of ['A', 'B']) {
   const s = engine.createMatch({
     id: 'w', seed: 11,
-    players: { A: { userId: 'UA', deck: toDeck(deckA), copies: copies(deckA) }, B: { userId: 'UB', deck: toDeck(deckB), copies: copies(deckB) } },
+    players: {
+      A: { userId: 'UA', deck: toDeck(deckA), copies: copies(deckA), captain: deckA[0].url },
+      B: { userId: 'UB', deck: toDeck(deckB), copies: copies(deckB), captain: deckB[1].url },
+    },
   });
   const enc = wire.createEncoder();
   const dec = wire.createDecoder();
@@ -64,6 +67,10 @@ for (const viewer of ['A', 'B']) {
       const p = s.players[side];
       const u = p.hand.find((x) => engine.cardStats(s, side, x).cost <= p.elixir);
       if (u && rnd() < 0.08) engine.applyAction(s, side, { type: 'deploy', url: u, lane: Math.floor(rnd() * 3) });
+    }
+    if (n === 300) for (const side of ['A', 'B']) engine.applyAction(s, side, { type: 'power', lane: 1 });
+    if (n === 400 && s.poses.find((p) => p.side === 'A' && p.status === 'alive')) {
+      engine.applyAction(s, 'A', { type: 'recall', poseId: s.poses.find((p) => p.side === 'A' && p.status === 'alive').id });
     }
     const events = engine.tick(s, 100);
     const view = compact({ matchId: 'w', you: viewer, opponent: 'X', arena: 'port', phase: 'running', ...engine.publicState(s, viewer), events }, keyOf);
