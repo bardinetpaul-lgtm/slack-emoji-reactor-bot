@@ -41,6 +41,7 @@
   let handKey = '';
   let pillTimer = null;
   let editor = null;
+  const decoder = ArenaWire.createDecoder();   // états différentiels (public/arena-wire.js)
   let shownPhase = null;
   const ARENA_NAMES = { jardin: 'Arène 01 · Le jardin', port: 'Arène 02 · Le port', serveurs: 'Arène 03 · La salle serveur' };
 
@@ -319,12 +320,13 @@
   es.addEventListener('setup', (e) => {
     setup = JSON.parse(e.data);
     editor = null;
+    decoder.reset();
     $('opponent').textContent = setup.names && setup.names.opponent ? setup.names.opponent : 'Adversaire';
     if (renderer) renderer.stop();
     handKey = '';
     renderer = ArenaBoard.createRenderer($('board'), { arena: setup.arena, symbols: setup.symbols, sprites: setup.sprites });
   });
-  es.addEventListener('state', (e) => onState(JSON.parse(e.data)));
+  es.addEventListener('state', (e) => onState(decoder.decode(JSON.parse(e.data))));
   es.onerror = () => {
     if (!view || (view.phase !== 'ended' && view.phase !== 'cancelled')) {
       $('status').hidden = false;

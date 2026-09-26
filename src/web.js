@@ -12,6 +12,7 @@
 //    GET  /collection/<user>?t=<token>     → classeur Panini (en direct)
 //    GET  /api/collection/<user>?t=<token> → contenu du classeur (JSON)
 //    GET  /api/card-image/<fileId>    → image d'une carte (proxy + cache)
+//    …/arena/…, …/api/arena/…, /deck, /api/deck → Arène (src/game/arenaWeb.js)
 //    GET  /<fichier>                  → statiques de public/
 //
 //  Désactivé si WEB_PUBLIC_URL est vide (ouverture Slack uniquement).
@@ -27,6 +28,8 @@ const { openOnce } = require('./openBooster');
 const { getCardImage, cardImageUrl } = require('./cardImages');
 const { buildWebOpenedBlocks } = require('./blocks');
 const { buildAlbum } = require('./album');
+const arenaWeb = require('./game/arenaWeb');
+const arenaMatches = require('./game/matches');
 
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 const SECRET_PATH = path.join(__dirname, '..', 'data', 'web-secret');
@@ -199,11 +202,12 @@ function getAssetVersion(names) {
   return assetVersions[key];
 }
 
-// Page HTML + ses assets (même nom : open.html → open.css / open.js)
-function servePage(res, name) {
+// Page HTML + ses assets (même nom : open.html → open.css / open.js ;
+// `assets` pour une page qui en charge d'autres, ex. l'Arène)
+function servePage(res, name, assets = [`${name}.css`, `${name}.js`]) {
   fs.readFile(path.join(PUBLIC_DIR, `${name}.html`), 'utf-8', (err, html) => {
     if (err) return send(res, 404, 'Not found');
-    send(res, 200, html.replace(/__ASSET_VERSION__/g, getAssetVersion([`${name}.css`, `${name}.js`])), {
+    send(res, 200, html.replace(/__ASSET_VERSION__/g, getAssetVersion(assets)), {
       'Content-Type': STATIC_TYPES['.html'],
       'Cache-Control': 'no-cache',
     });
@@ -348,6 +352,7 @@ function createHandler(deps) {
       if (req.method === 'GET' && (m = /^\/api\/card-image\/([A-Z0-9]+)$/.exec(pathname))) {
         return await handleCardImage(res, m[1], deps);
       }
+      if (await arenaWeb.route(req, res, url)) return undefined;
       if (req.method === 'GET' && pathname !== '/') {
         return serveStatic(res, pathname);
       }
@@ -373,6 +378,8 @@ function startWebServer({ client, logger = console, port = WEB_PORT, host = '127
     return null;
   }
   getSecret();
+  configureArena({ client, logger });
+  arenaMatches.start();   // boucle 10 Hz des combats (idempotent)
   const server = http.createServer(createHandler({ client, logger, onOpened }));
   server.on('error', (err) => logger.error('[web] serveur:', err.message));
   server.listen(port, host, () => {
@@ -380,5 +387,11 @@ function startWebServer({ client, logger = console, port = WEB_PORT, host = '127
   });
   return server;
 }
+
+// ⚔️ Arène : mêmes secret, réponses et pages que le reste du site
+function configureArena({ client = null, logger = console } = {}) {
+  arenaWeb.configure({ publicUrl: WEB_PUBLIC_URL, getSecret, send, sendJson, servePage, displayName, client, logger });
+}
+configureArena();   // les liens (Slack) sont constructibles avant le démarrage du serveur
 
 module.exports = { startWebServer, buildOpenUrl, buildCollectionUrl, isEnabled, signToken, verifyToken };

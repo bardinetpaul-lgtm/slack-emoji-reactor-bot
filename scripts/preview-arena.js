@@ -27,6 +27,8 @@ const characters = require('../src/game/characters');
 const deckRules = require('../src/game/deck');
 const { getCardStats } = require('../src/game/cards');
 const { cardImageUrl, getCardImage } = require('../src/cardImages');
+const { compact } = require('../src/game/arenaWeb');
+const wire = require('../public/arena-wire');
 console.log = origLog;
 
 const PORT = parseInt(process.argv[2], 10) || 3200;
@@ -194,6 +196,7 @@ const server = http.createServer(async (req, res) => {
     const arena = url.searchParams.get('t');
     let game = newGame(arena, Date.now());
     current = game;
+    const encoder = wire.createEncoder();   // même envoi différentiel que la prod
     send('setup', prepSetup(game));
     send('state', prepView(game));
     let tickN = 0;
@@ -203,6 +206,7 @@ const server = http.createServer(async (req, res) => {
       if (game.phase === 'preparing') {
         if (!game.ready.opponent && now - game.startedAt >= BOT_READY_MS) game.ready.opponent = true;
         if ((game.ready.you && game.ready.opponent) || now >= game.deadline) {
+          encoder.reset();
           send('setup', startCombat(game));
         } else {
           if (tickN % 5 === 0) send('state', prepView(game));
@@ -225,7 +229,8 @@ const server = http.createServer(async (req, res) => {
         send('state', endedView(game));
         return;
       }
-      send('state', { matchId: 'preview', you: 'A', opponent: 'Bot', arena: game.arena, phase: 'running', ...engine.publicState(game.state, 'A'), events });
+      const view = { matchId: 'preview', you: 'A', opponent: 'Bot', arena: game.arena, phase: 'running', ...engine.publicState(game.state, 'A'), events };
+      send('state', encoder.encode(compact(view, {})));
     }, engine.STEP_MS);
     req.on('close', () => clearInterval(timer));
     return undefined;

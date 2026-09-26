@@ -369,6 +369,8 @@ function start() {
       console.error('[arena] boucle:', e);
     }
   }, LOOP_MS);
+  // Ne maintient pas le process en vie à lui seul (le bot s'en charge en prod)
+  if (typeof timer.unref === 'function') timer.unref();
 }
 
 function stop() {
