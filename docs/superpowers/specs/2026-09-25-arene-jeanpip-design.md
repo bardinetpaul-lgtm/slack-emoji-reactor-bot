@@ -135,6 +135,57 @@ Une pose encore en train d'apparaître (délai de 1 s) à la fin compte aussi co
 - **Animations** : groupes en formation, marche (jambes qui alternent, corps qui se balance ; Tank et
   robes longues se dandinent sans pas visible), respiration à l'arrêt, anneau de pose, Sorts, chips de dégâts.
 
+## 🎭 Styles de jeu et façons de gagner
+
+**Principe d'équilibrage (Paul)** : à stratégie égale, les épiques / légendaires donnent un avantage ;
+mais un bon joueur doit pouvoir battre un mauvais joueur qui aligne des légendaires. Mesuré par
+`scripts/simulate-balance.js` (bons / mauvais joueurs automatiques) :
+
+| Situation | Résultat |
+|---|---|
+| Bon joueur contre mauvais joueur, mêmes cartes communes | ~90 % pour le bon |
+| À stratégie égale : deck commun contre deck riche (2 L, 2 É, 2 R, 2 C) | ~61 % pour le deck riche |
+| Bon joueur 100 % commun contre mauvais joueur au deck riche | ~78 % pour le bon joueur |
+
+Pour y arriver, **la rareté ne renforce que les PV** (×1,04 / ×1,07 / ×1,10), jamais les dégâts ;
+les épiques / légendaires ont en plus une **Spécialité**.
+
+### 🎖 Capitaine
+Une carte du deck est désignée Capitaine : **jamais posée** (donc jamais risquée), elle occupe un
+emplacement (7 poses au lieu de 8) et donne un passif + un **pouvoir utilisable une fois** :
+
+| Capitaine | Style | Passif | Pouvoir |
+|---|---|---|---|
+| Tank | Siège | Tanks +15 % PV | Rempart : tour du couloir invulnérable 4 s |
+| Guerrier | Rush | unités +25 % vitesse, +15 % dégâts | Charge : couloir vitesse ×2, dégâts +20 % pendant 3 s |
+| Tireur | Contrôle | tours +20 % portée | Salve : 200 dégâts à tout le couloir adverse |
+| Essaim | Nuée | Essaims +2 abeilles | Renforts : 4 abeilles gratuites |
+| Pompe | Économie | +2 élixir au départ, recharge +10 %, élixir jusqu'à 12 | Surchauffe : élixir ×2 pendant 12 s |
+| Sort | Magie | Écho : chaque Sort se relance une fois gratuitement (sans carte en jeu), −1 élixir | Gel : couloir adverse figé 3 s |
+
+Chaque Capitaine gagne entre 41 % et 60 % contre un deck sans Capitaine (bons joueurs des deux côtés).
+
+### 🏳 Rappel
+Toucher un de ses groupes le fait **faire demi-tour** (il ne combat plus, reste vulnérable). Arrivé à sa
+tour, il sort du terrain : **sa carte est sauvée, même en cas de défaite, et ne peut pas être volée**.
+Tué pendant la retraite : perdu.
+
+### 🔥 Rage
+Perdre une tour donne **+2 élixir** et **+10 % de dégâts pendant 10 s** : le camp mené peut revenir.
+
+### ✨ Spécialités
+Automatiques pour les épiques / légendaires (selon l'archétype), surchargeables dans
+`data/card-overrides.json` (`"specialty": "none"` pour en retirer une) :
+Charge (+30 % la 1re seconde), Bouclier (12 % des PV), Vampire (12 % des dégâts rendus), Explosion
+(à la mort), Invocation (un petit guerrier à la mort), Ralenti (−40 % de vitesse), Soin (2,5 PV/s
+aux alliés proches). Chaque spécialité ajoute au plus +8 pts en duel.
+
+### 🛒 Cartes mystère
+En préparation, jusqu'à **2 cartes mystère** : épique (25 crédits) ou légendaire (40 crédits), tirées au
+hasard et **révélées seulement en combat**. Valables pour ce combat : jamais dans la collection, jamais
+perdues ni volées. **Débit au lancement** (rien si retirée ou combat annulé ; l'achat saute si le solde
+ne suffit plus, et le deck est complété). Jamais enregistrées dans les decks sauvegardés.
+
 ## 🏟️ Progression des arènes
 
 | Niveau | Arène | Débloquée à |
