@@ -23,6 +23,7 @@ const deckRules = require('./deck');
 const arenaStore = require('./arenaStore');
 const { settleMatch } = require('./settle');
 const collections = require('../collections');
+const arenas = require('./arenas');
 
 const PREP_MS = 60 * 1000;
 const DISCONNECT_MS = 20 * 1000;
@@ -66,7 +67,7 @@ function sideOf(match, userId) {
 // 🏗️ Création (après un défi accepté ou une association en file)
 // ─────────────────────────────────────────────
 
-function createMatchFor(userA, userB, now = Date.now()) {
+function createMatchFor(userA, userB, now = Date.now(), { arena } = {}) {
   if (isBusy(userA) || isBusy(userB)) return { ok: false, reason: 'busy' };
   const deckA = deckRules.resolveDeck(arenaStore.getDeck(userA), collections.getCollection(userA));
   const deckB = deckRules.resolveDeck(arenaStore.getDeck(userB), collections.getCollection(userB));
@@ -81,6 +82,7 @@ function createMatchFor(userA, userB, now = Date.now()) {
   const match = {
     id,
     status: 'preparing',
+    arena: arenas.byKey(arena) ? arena : 'jardin',
     createdAt: now,
     prepDeadline: now + PREP_MS,
     endedAt: null,
@@ -111,12 +113,13 @@ function setDeck(id, userId, urls) {
   return { ok: true };
 }
 
-function setReady(id, userId) {
+/** « Prêt » (ou « Prêt · annuler » avec ready = false). */
+function setReady(id, userId, ready = true) {
   const match = getMatch(id);
   const side = match && sideOf(match, userId);
   if (!side) return { ok: false, reason: 'not_player' };
   if (match.status !== 'preparing') return { ok: false, reason: 'not_preparing' };
-  match.players[side].ready = true;
+  match.players[side].ready = Boolean(ready);
   broadcast(match);
   return { ok: true };
 }
@@ -296,6 +299,7 @@ function view(match, userId) {
     matchId: match.id,
     you: side,
     opponent: match.players[foe].userId,
+    arena: match.arena,
   };
 
   if (match.status === 'preparing') {
@@ -309,6 +313,8 @@ function view(match, userId) {
       deck: me.deckUrls.filter((u) => byUrl[u]).map((u) => ({ ...getCardStats(byUrl[u]), copies: byUrl[u].count })),
       replaced: me.replaced,
       ready: { you: me.ready, opponent: match.players[foe].ready },
+      decks: arenaStore.getDecks(userId).decks,
+      activeDeck: arenaStore.getDecks(userId).active,
       opponentConnected: match.players[foe].connections > 0,
     };
   }

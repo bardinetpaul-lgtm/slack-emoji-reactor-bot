@@ -7,17 +7,23 @@
 //  Horloge passée par l'appelant (`now`) → testable ; l'app appelle
 //  sweep(now) régulièrement et prévient les joueurs des expirations.
 //
-//  configure({ isBusy(userId), cardCount(userId) }) :
+//  configure({ isBusy(userId), cardCount(userId), winsOf(userId) }) :
 //    isBusy     → déjà dans un combat (src/game/matches.js)
 //    cardCount  → nombre de cartes DIFFÉRENTES possédées
+//    winsOf     → victoires (arènes débloquées, src/game/arenas.js)
+//
+//  Arène : choisie par le challenger parmi SES arènes débloquées
+//  (sa meilleure par défaut) ; en file rapide, la meilleure arène
+//  du joueur arrivé le premier.
 // ═══════════════════════════════════════════════════════════
 
 const { DECK_SIZE } = require('./deck');
+const arenas = require('./arenas');
 
 const CHALLENGE_TTL_MS = 60 * 1000;
 const QUEUE_TTL_MS = 60 * 1000;
 
-let deps = { isBusy: () => false, cardCount: () => 0 };
+let deps = { isBusy: () => false, cardCount: () => 0, winsOf: () => 0 };
 let challenges = new Map();   // id → { id, from, to, createdAt, expiresAt }
 let queue = [];               // [{ userId, joinedAt }]
 let seq = 0;
@@ -43,15 +49,20 @@ function isWaiting(userId) {
 // 🎯 Défis
 // ─────────────────────────────────────────────
 
-function createChallenge(from, to, now = Date.now()) {
+function createChallenge(from, to, now = Date.now(), { arena } = {}) {
   if (from === to) return { ok: false, reason: 'self' };
   if (deps.isBusy(from) || isWaiting(from)) return { ok: false, reason: 'busy_from' };
   if (deps.isBusy(to) || inQueue(to)) return { ok: false, reason: 'busy_to' };
   if (deps.cardCount(from) < DECK_SIZE) return { ok: false, reason: 'cards_from' };
   if (deps.cardCount(to) < DECK_SIZE) return { ok: false, reason: 'cards_to' };
+  const wins = deps.winsOf(from);
+  if (arena && !arenas.canPlay(wins, arena)) return { ok: false, reason: 'arena_locked' };
 
   seq += 1;
-  const challenge = { id: `c_${now.toString(36)}_${seq}`, from, to, createdAt: now, expiresAt: now + CHALLENGE_TTL_MS };
+  const challenge = {
+    id: `c_${now.toString(36)}_${seq}`, from, to, createdAt: now, expiresAt: now + CHALLENGE_TTL_MS,
+    arena: arena || arenas.levelOf(wins).key,
+  };
   challenges.set(challenge.id, challenge);
   return { ok: true, ...challenge };
 }
@@ -72,7 +83,7 @@ function acceptChallenge(id, userId, now = Date.now()) {
   const cancelled = [...challenges.values()].filter((x) => involved.has(x.from) || involved.has(x.to));
   for (const x of cancelled) challenges.delete(x.id);
   queue = queue.filter((q) => !involved.has(q.userId));
-  return { ok: true, from: c.from, to: c.to, cancelled };
+  return { ok: true, from: c.from, to: c.to, arena: c.arena, cancelled };
 }
 
 /** Refus par la cible, ou annulation par le challenger. */
@@ -96,7 +107,7 @@ function joinQueue(userId, now = Date.now()) {
   const opponent = queue.find((q) => q.userId !== userId && !deps.isBusy(q.userId));
   if (opponent) {
     queue = queue.filter((q) => q !== opponent);
-    return { ok: true, matched: opponent.userId };
+    return { ok: true, matched: opponent.userId, arena: arenas.levelOf(deps.winsOf(opponent.userId)).key };
   }
   queue.push({ userId, joinedAt: now });
   return { ok: true, matched: null };

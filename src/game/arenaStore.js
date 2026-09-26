@@ -5,7 +5,8 @@
 //  Persistant : survit aux redémarrages du bot.
 //
 //  DB = fichier JSON local (data/arena.json)
-//    { decks: { U123: [url × 8] },
+//    { decks: { U123: { active: 0, decks: [{ name, cards: [url ≤ 8] }] × 3 } },
+//      (ancien format accepté : { U123: [url × 8] } → repris en « Deck 1 »)
 //      stats: { U123: { wins, losses, draws, streak, bestStreak, bestLoot } },
 //      rewards: { U123: { day: 'YYYY-MM-DD', total, vs: { U456: n } } },
 //      settled: { <matchId>: ISO },
@@ -56,15 +57,48 @@ const parisDay = (now) => new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/P
 // 🃏 Decks
 // ─────────────────────────────────────────────
 
-function getDeck(userId) {
-  const deck = load().decks[userId];
-  return Array.isArray(deck) && deck.length ? deck : null;
+//    3 decks enregistrés par joueur (éditeur de deck), un actif.
+
+const DECK_SLOTS = 3;
+const DECK_MAX_CARDS = 8;
+const DECK_NAME_MAX = 24;
+
+function normalizeDecks(raw) {
+  const legacy = Array.isArray(raw);
+  const list = legacy ? [{ cards: raw }] : (raw && Array.isArray(raw.decks) ? raw.decks : []);
+  const decks = Array.from({ length: DECK_SLOTS }, (_, i) => {
+    const d = list[i] || {};
+    const name = typeof d.name === 'string' && d.name.trim() ? d.name.trim().slice(0, DECK_NAME_MAX) : `Deck ${i + 1}`;
+    const cards = [...new Set((Array.isArray(d.cards) ? d.cards : []).filter((u) => typeof u === 'string' && u))].slice(0, DECK_MAX_CARDS);
+    return { name, cards };
+  });
+  const active = !legacy && raw && Number.isInteger(raw.active) && raw.active >= 0 && raw.active < DECK_SLOTS ? raw.active : 0;
+  return { active, decks };
 }
 
-function setDeck(userId, urls) {
+/** → { active, decks: [{ name, cards }] × 3 } */
+function getDecks(userId) {
+  return normalizeDecks(load().decks[userId]);
+}
+
+function setDecks(userId, value) {
   const data = load();
-  data.decks[userId] = urls.slice();
+  data.decks[userId] = normalizeDecks(value);
   save(data);
+  return data.decks[userId];
+}
+
+/** Cartes du deck actif (null s'il est vide). */
+function getDeck(userId) {
+  const { active, decks } = getDecks(userId);
+  return decks[active].cards.length ? decks[active].cards : null;
+}
+
+/** Remplace les cartes du deck actif. */
+function setDeck(userId, urls) {
+  const value = getDecks(userId);
+  value.decks[value.active].cards = urls.slice();
+  setDecks(userId, value);
 }
 
 // ─────────────────────────────────────────────
@@ -162,6 +196,9 @@ function markSettled(matchId) {
 }
 
 module.exports = {
+  DECK_SLOTS,
+  getDecks,
+  setDecks,
   MAX_REWARDED_PER_DAY,
   MAX_REWARDED_VS_SAME,
   getDeck,
