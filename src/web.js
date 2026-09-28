@@ -133,6 +133,12 @@ function buildCollectionUrl(userId) {
   return `${WEB_PUBLIC_URL}/${collectionPath(userId)}`;
 }
 
+/** Lien personnel vers un combat de l'Arène (null si la page web est désactivée). */
+function buildArenaUrl(matchId, userId) {
+  if (!isEnabled()) return null;
+  return arenaWeb.buildArenaUrl(matchId, userId);
+}
+
 /** Lien personnel « Mon deck » de l'Arène (null si la page web est désactivée). */
 function buildDeckUrl(userId) {
   if (!isEnabled()) return null;
@@ -400,4 +406,4 @@ function configureArena({ client = null, logger = console } = {}) {
 }
 configureArena();   // les liens (Slack) sont constructibles avant le démarrage du serveur
 
-module.exports = { startWebServer, buildOpenUrl, buildCollectionUrl, buildDeckUrl, isEnabled, signToken, verifyToken };
+module.exports = { startWebServer, buildOpenUrl, buildCollectionUrl, buildDeckUrl, buildArenaUrl, isEnabled, signToken, verifyToken };
