@@ -124,8 +124,36 @@ function getCollection(userId) {
   return Object.entries(user.cards).map(([url, card]) => ({ url, ...card }));
 }
 
+// ─────────────────────────────────────────────
+// ➖ Retirer des cartes (Arène : cartes perdues au combat)
+//    Un exemplaire par URL de la liste (une URL répétée = plusieurs).
+//    Jamais sous 0 ; la carte quitte le classeur à 0.
+//    Retourne, pour chaque URL (même ordre), le nombre restant.
+// ─────────────────────────────────────────────
+
+function removeCards(userId, urls) {
+  const data = load();
+  const owned = data.users[userId] && data.users[userId].cards;
+  if (!owned) return urls.map(() => 0);
+
+  const counts = urls.map((url) => {
+    const entry = owned[url];
+    if (!entry) return 0;
+    entry.count -= 1;
+    if (entry.count <= 0) {
+      delete owned[url];
+      return 0;
+    }
+    return entry.count;
+  });
+
+  save(data);
+  return counts;
+}
+
 module.exports = {
   addCards,
+  removeCards,
   copyPhrase,
   getCount,
   getCollection,

@@ -15,6 +15,7 @@ const credits = require('./credits');
 const targets = require('./targets');
 const { addMedia, getRarityInfo } = require('./media');
 const { buildMediaBlocks } = require('./blocks');
+const { describeText: describeCharacter } = require('./game/characters');
 
 // 🎨 Crédits offerts à l'auteur d'un média, selon sa rareté
 const AUTHOR_REWARDS = { common: 10, rare: 15, epic: 20, legendary: 30 };
@@ -128,7 +129,7 @@ function createAdminActions({ safeSendDM, isBot, targetEmoji }) {
       authorLine = `\n🎨 Attribué à <@${authorId}> : *+${formatCredits(reward)} crédit(s)* (nouveau solde : *${formatCredits(newBalance)}*). La personne a été notifiée.`;
     }
 
-    const text = `✅ *Média ajouté à la banque !*\n\n🔢 Numéro attribué : *Surprise #${result.number}*\n${info.emoji} Rareté : *${info.label}* · Type : *${result.media.type}*\n📊 Il y a maintenant *${result.count}* média(s) en ${info.label}.${authorLine}\n\n👇 Aperçu :`;
+    const text = `✅ *Média ajouté à la banque !*\n\n🔢 Numéro attribué : *Surprise #${result.number}*\n${info.emoji} Rareté : *${info.label}* · Type : *${result.media.type}*\n📊 Il y a maintenant *${result.count}* média(s) en ${info.label}.${authorLine}\n⚔️ Son personnage d'Arène est né : ${describeCharacter(result.media)}\n\n👇 Aperçu :`;
 
     return {
       ok: true,
