@@ -73,6 +73,7 @@
       i.src = img;
       i.alt = card.title || '';
       i.loading = 'lazy';
+      i.draggable = false;   // sinon le navigateur lance son propre glisser d'image et la pose n'arrive jamais
       i.onerror = () => i.replaceWith(characterFace(card));
       return i;
     }
@@ -420,6 +421,11 @@ ${DeckEditor.roleText(e.archetype)}`;
 
   let drag = null;           // { index, url, x0, y0, moved }
   let swallowClick = false;  // le « click » qui suit un glisser ne sélectionne rien
+
+  // ✋ aucun glisser natif (images) dans la main : c'est notre glisser-déposer qui compte
+  $('hand').addEventListener('dragstart', (e) => e.preventDefault());
+  // glisser interrompu (appel, geste système…) : on repart de zéro
+  document.addEventListener('pointercancel', () => { if (drag) { drag = null; if (renderer) renderer.setGhost(null); } });
 
   $('hand').addEventListener('pointerdown', (e) => {
     const btn = e.target.closest('.card');

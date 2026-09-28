@@ -415,3 +415,5 @@ body.wide .top { display: none; }
 .de-card.pickable { box-shadow: 0 0 0 3px var(--pink); cursor: pointer; }
 .de-card.captain { box-shadow: 0 0 0 3px var(--cream), 0 0 0 6px var(--pink); }
 .de-cap-badge { position: absolute; left: 6px; top: 22px; z-index: 4; width: 24px; height: 24px; border-radius: 50%; background: var(--pink); display: flex; align-items: center; justify-content: center; font-size: 13px; }
+/* ✋ Main : pas de glisser d'image natif ni de sélection de texte pendant un glisser-déposer */
+#hand .card, #hand .card img { -webkit-user-drag: none; user-select: none; -webkit-user-select: none; }
