@@ -32,3 +32,4 @@ data/arena.json
 data/web-secret
 data/card-cache/
 data/card-looks.json
+data/card-overrides.json

@@ -37,7 +37,7 @@ const OVERRIDES_PATH = path.join(__dirname, '..', '..', 'data', 'card-overrides.
 const ARCHETYPES = {
   tank:     { key: 'tank',     label: 'Tank',     emoji: '🛡', share: 20, cost: 5, hp: 700, dps: 22.5, range: 2,  speed: 6,  count: 2, targets: 'buildings' },
   guerrier: { key: 'guerrier', label: 'Guerrier', emoji: '⚔️', share: 27, cost: 3, hp: 170, dps: 24,   range: 2,  speed: 8,  count: 3, targets: 'all' },
-  tireur:   { key: 'tireur',   label: 'Tireur',   emoji: '🏹', share: 23, cost: 3, hp: 115, dps: 29,   range: 10, speed: 8,  count: 3, targets: 'all' },
+  tireur:   { key: 'tireur',   label: 'Tireur',   emoji: '🏹', share: 23, cost: 3, hp: 115, dps: 29,   range: 10, speed: 9,  count: 3, targets: 'all' },
   essaim:   { key: 'essaim',   label: 'Essaim',   emoji: '🐝', share: 15, cost: 3, hp: 105, dps: 20,   range: 2,  speed: 11, count: 6, targets: 'all', rarityWeight: 0.5 },
   sort:     { key: 'sort',     label: 'Sort',     emoji: '💥', share: 10, cost: 4, damage: 350, radius: 6, buildingRatio: 0.4 },
   pompe:    { key: 'pompe',    label: 'Pompe',    emoji: '⚗️', share: 5,  cost: 4, hp: 500, productionMs: 7000, lifetimeMs: 45000 },
@@ -98,6 +98,33 @@ function reloadOverrides() {
 function getOverride(url) {
   if (!overrides) reloadOverrides();
   return overrides[url] || null;
+}
+
+/**
+ * ⚔️ Impose le type (archétype) d'une carte — panneau Admin de l'Accueil,
+ * ou à l'ajout d'un média. `archetype` = null → retour au tirage automatique.
+ * Écrit data/card-overrides.json (les autres réglages de la carte sont gardés).
+ * → { ok, archetype } | { ok: false, error }
+ */
+function setArchetype(url, archetype) {
+  if (!url) return { ok: false, error: 'carte' };
+  if (archetype !== null && !ARCHETYPES[archetype]) return { ok: false, error: 'type' };
+  const data = { ...reloadOverrides() };
+  const entry = { ...(data[url] || {}) };
+  if (archetype) entry.archetype = archetype;
+  else delete entry.archetype;
+  if (Object.keys(entry).length) data[url] = entry;
+  else delete data[url];
+  try {
+    fs.mkdirSync(path.dirname(OVERRIDES_PATH), { recursive: true });
+    const tmp = `${OVERRIDES_PATH}.tmp`;
+    fs.writeFileSync(tmp, JSON.stringify(data, null, 2));
+    fs.renameSync(tmp, OVERRIDES_PATH);
+  } catch (e) {
+    return { ok: false, error: 'ecriture', detail: e.message };
+  }
+  overrides = data;
+  return { ok: true, archetype: archetype || archetypeFromUrl(url), auto: !archetype };
 }
 
 // ─────────────────────────────────────────────
@@ -179,4 +206,5 @@ module.exports = {
   damageMultiplier,
   reloadOverrides,
   getOverride,
+  setArchetype,
 };

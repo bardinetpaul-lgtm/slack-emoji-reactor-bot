@@ -24,6 +24,8 @@ const farm = require('./farm');
 const weeklyGift = require('./weeklyGift');
 const { SPAM_CARDS } = require('./spamCards');
 const looks = require('./game/looks');
+const cards = require('./game/cards');
+const { describeText: describeCharacter } = require('./game/characters');
 
 // ─────────────────────────────────────────────
 // 🔧 Validation de la configuration
@@ -1486,6 +1488,7 @@ const ADMIN_MODALS = {
   admin_give_attack_open: home.buildGiveAttackModal,
   admin_credits_open: home.buildCreditsModal,
   admin_addmedia_open: home.buildAddMediaModal,
+  admin_card_type_open: home.buildCardTypeModal,
   admin_target_add_open: home.buildAddTargetModal,
   admin_credit_value_open: home.buildCreditValueModal,
   admin_farm_limit_open: home.buildFarmLimitModal,
@@ -1553,11 +1556,14 @@ app.view('admin_addmedia_submit', async ({ ack, body, view, client, logger }) =>
   const rarity = values.rarity.value.selected_option && values.rarity.value.selected_option.value;
   const title = (values.title.value.value || '').trim();
   const authorId = (values.author && values.author.value.selected_user) || null;
+  const arch = values.arch && values.arch.value.selected_option ? values.arch.value.selected_option.value : null;
 
   if (!/^https?:\/\//i.test(url)) return ack(fieldError('url', 'Le lien doit commencer par http:// ou https://.'));
   if (!rarity) return ack(fieldError('rarity', 'Choisis une rareté.'));
   if (authorId && await isBot(client, authorId)) return ack(fieldError('author', 'Impossible d\'attribuer un média à un bot.'));
 
+  // ⚔️ Type en Arène choisi : imposé avant l'ajout (le DM de confirmation montre le bon personnage)
+  if (arch) cards.setArchetype(url, arch);
   const result = adminActions.addMediaToBank(adminId, { url, rarity, title, authorId }, logger);
   if (!result.ok) return ack(fieldError('url', plain(result.text.split('\n')[1] || result.text)));
   createCardLook(client, result.media, logger);
@@ -1573,6 +1579,28 @@ app.view('admin_addmedia_submit', async ({ ack, body, view, client, logger }) =>
   } catch (error) {
     logger.error('❌ Erreur dans admin_addmedia_submit:', error);
   }
+});
+
+// ⚔️ Modale « Type de carte » : impose (ou rend automatique) le type d'une carte dans l'Arène
+app.view('admin_card_type_submit', async ({ ack, body, view, client, logger }) => {
+  const adminId = body.user.id;
+  if (!isAdminUser(adminId, logger, 'admin_card_type_submit')) return ack(fieldError('card', 'Réservé aux admins.'));
+
+  const values = view.state.values;
+  const card = home.cardFromValue(values.card.value.selected_option && values.card.value.selected_option.value);
+  const choice = values.arch.value.selected_option && values.arch.value.selected_option.value;
+  if (!card) return ack(fieldError('card', 'Carte introuvable (la banque a peut-être changé) : rouvre la fenêtre.'));
+  if (!choice) return ack(fieldError('arch', 'Choisis un type.'));
+
+  const before = cards.getCardStats(card).archetype;
+  const result = cards.setArchetype(card.url, choice === 'auto' ? null : choice);
+  if (!result.ok) return ack(fieldError('arch', `Enregistrement impossible${result.detail ? ` : ${result.detail}` : ''}.`));
+  await ack();
+
+  const label = (k) => `${cards.ARCHETYPES[k].emoji} ${cards.ARCHETYPES[k].label}`;
+  logger.info(`⚔️ <@${adminId}> : type de « ${card.title} » ${before} → ${result.archetype}${result.auto ? ' (automatique)' : ''}`);
+  const text = `⚔️ *Type de carte mis à jour*\n*${card.title}* : ${label(before)} → *${label(result.archetype)}*${result.auto ? ' _(automatique)_' : ''}\n🎭 Son personnage : ${describeCharacter(card)}\n_Les combats en cours ne changent pas._`;
+  await sendAdminResult(client, adminId, { text }, logger);
 });
 
 // ⚙️ Modale « Crédits par Jeanpip » (valeur d'un Jeanpip envoyé, sans rétroactivité)

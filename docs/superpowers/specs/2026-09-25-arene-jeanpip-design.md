@@ -33,10 +33,10 @@ donnés par personnage.
 
 | Archétype | Part | Coût | Groupe | PV / perso | DPS / perso | Portée | Vitesse | Cible |
 |---|---|---|---|---|---|---|---|---|
-| 🛡 Tank | 20 % | 5 | ×2 | 700 | 22,5 | mêlée | lente | **bâtiments uniquement** (tours, QG, Pompe) |
-| ⚔️ Guerrier | 27 % | 3 | ×3 | 170 | 24 | mêlée | moyenne | tout |
-| 🏹 Tireur | 23 % | 3 | ×3 | 115 | 29 | distance | moyenne | tout |
-| 🐝 Essaim | 15 % | 3 | ×6 | 105 | 20 | mêlée | rapide | tout |
+| 🛡 Tank | 20 % | 5 | ×2 | 700 | 22,5 | mêlée | lente (6), char lourd | **bâtiments uniquement** (tours, QG, Pompe) |
+| ⚔️ Guerrier | 27 % | 3 | ×3 | 170 | 24 | mêlée | moyenne (8), chargé | tout |
+| 🏹 Tireur | 23 % | 3 | ×3 | 115 | 29 | distance | assez rapide (9), léger | tout |
+| 🐝 Essaim | 15 % | 3 | ×6 | 105 | 20 | mêlée | rapide (11), vole | tout |
 | 💥 Sort | 10 % | 4 | – | – | 350 en zone | – | instantané | le point visé (ou le groupe ennemi visé), dégâts en zone autour, **40 % sur les bâtiments** |
 | ⚗️ Pompe | 5 % | 4 | bâtiment | 500 | – | – | immobile | +1 élixir / 7 s pendant 45 s |
 

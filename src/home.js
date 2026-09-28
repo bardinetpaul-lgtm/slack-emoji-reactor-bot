@@ -13,7 +13,8 @@ const scores = require('./scores');
 const credits = require('./credits');
 const boosters = require('./boosters');
 const broadcast = require('./broadcast');
-const { RARITIES } = require('./media');
+const { RARITIES, getAllMedia } = require('./media');
+const { ARCHETYPES, getCardStats, getOverride } = require('./game/cards');
 const settings = require('./settings');
 const weeklyGift = require('./weeklyGift');
 const { formatCredits, AUTHOR_REWARDS } = require('./admin');
@@ -207,6 +208,7 @@ function buildAdminBlocks(autoTargets) {
         button('🎁 Offrir une attaque', 'admin_give_attack_open'),
         button('💳 Crédits ±', 'admin_credits_open'),
         button('🖼️ Ajouter un média', 'admin_addmedia_open'),
+        button('⚔️ Type de carte', 'admin_card_type_open'),
         button('🎪 Ajouter une cible', 'admin_target_add_open'),
         button('⚙️ Crédits par Jeanpip', 'admin_credit_value_open'),
         button('🚜 Limite anti-farm', 'admin_farm_limit_open'),
@@ -343,6 +345,14 @@ function buildAddMediaModal() {
     },
     {
       type: 'input',
+      block_id: 'arch',
+      optional: true,
+      label: { type: 'plain_text', text: 'Type en Arène (optionnel)' },
+      element: { type: 'static_select', action_id: 'value', placeholder: { type: 'plain_text', text: '🎲 Automatique' }, options: archetypeOptions() },
+      hint: { type: 'plain_text', text: 'Son rôle en combat. Sans choix : tiré automatiquement. Modifiable ensuite (⚔️ Type de carte).' },
+    },
+    {
+      type: 'input',
       block_id: 'title',
       optional: true,
       label: { type: 'plain_text', text: 'Titre (optionnel)' },
@@ -358,6 +368,80 @@ function buildAddMediaModal() {
       hint: { type: 'plain_text', text: `La personne reçoit des crédits selon la rareté : ${Object.entries(AUTHOR_REWARDS).map(([key, n]) => `${RARITIES[key].emoji} ${n}`).join(' · ')}. Elle est notifiée en DM.` },
     },
   ]);
+}
+
+// ⚔️ Types de carte de l'Arène (ordre d'affichage) + « automatique »
+const ARCH_ORDER = ['tank', 'guerrier', 'tireur', 'essaim', 'sort', 'pompe'];
+const ARCH_HINTS = {
+  tank: 'char : ne vise que les bâtiments', guerrier: 'corps à corps', tireur: 'archer, tire de loin',
+  essaim: 'petits volants', sort: 'explosion visée', pompe: 'bâtiment à élixir',
+};
+
+function archetypeOptions({ withAuto = false } = {}) {
+  const opts = ARCH_ORDER.map((k) => ({
+    text: { type: 'plain_text', text: `${ARCHETYPES[k].emoji} ${ARCHETYPES[k].label} — ${ARCH_HINTS[k]}`, emoji: true },
+    value: k,
+  }));
+  if (withAuto) opts.push({ text: { type: 'plain_text', text: '🎲 Automatique (tirage stable)', emoji: true }, value: 'auto' });
+  return opts;
+}
+
+const cut = (t, n) => (t.length > n ? `${t.slice(0, n - 1)}…` : t);
+
+/** Valeur d'option d'une carte : son URL (≤ 150 car., limite Slack), sinon son rang dans la banque. */
+function cardValue(media, i) {
+  return media.url.length <= 150 ? media.url : `#${i}`;
+}
+
+/**
+ * ⚔️ Modale « Type de carte » : une carte (rangées par rareté) + son type.
+ * Groupes de 100 options max (limite Slack) : une rareté trop fournie est découpée.
+ */
+function buildCardTypeModal() {
+  const all = getAllMedia();
+  const groups = [];
+  for (const [key, r] of Object.entries(RARITIES)) {
+    const list = all.map((m, i) => [m, i]).filter(([m]) => (m.rarity || 'common') === key);
+    for (let from = 0; from < list.length; from += 100) {
+      const chunk = list.slice(from, from + 100);
+      const part = list.length > 100 ? ` (${from / 100 + 1}/${Math.ceil(list.length / 100)})` : '';
+      groups.push({
+        label: { type: 'plain_text', text: `${r.emoji} ${r.label}${part}`, emoji: true },
+        options: chunk.map(([m, i]) => {
+          const { archetype } = getCardStats(m);
+          const forced = getOverride(m.url) && getOverride(m.url).archetype ? '' : ' 🎲';
+          return {
+            text: { type: 'plain_text', text: cut(`${m.title || 'Carte'} · ${ARCHETYPES[archetype].emoji} ${ARCHETYPES[archetype].label}${forced}`, 75), emoji: true },
+            value: cardValue(m, i),
+          };
+        }),
+      });
+    }
+  }
+  return modal('admin_card_type_submit', 'Type de carte', 'Enregistrer', [
+    section('⚔️ *Type d\'une carte dans l\'Arène* — son rôle en combat (stats, silhouette de son personnage).\n🎲 = tiré automatiquement.'),
+    {
+      type: 'input',
+      block_id: 'card',
+      label: { type: 'plain_text', text: 'Carte' },
+      element: { type: 'static_select', action_id: 'value', placeholder: { type: 'plain_text', text: 'Choisis une carte' }, option_groups: groups.slice(0, 100) },
+    },
+    {
+      type: 'input',
+      block_id: 'arch',
+      label: { type: 'plain_text', text: 'Type' },
+      element: { type: 'static_select', action_id: 'value', placeholder: { type: 'plain_text', text: 'Choisis un type' }, options: archetypeOptions({ withAuto: true }) },
+    },
+    { type: 'context', elements: [{ type: 'mrkdwn', text: '_Le personnage garde les traits de sa photo (chapeau, lunettes, couleurs…) et prend la silhouette du nouveau rôle. Les combats en cours ne changent pas ; les decks déjà faits gardent la carte._' }] },
+  ]);
+}
+
+/** Retrouve la carte choisie dans la modale (URL, ou « #rang »). */
+function cardFromValue(value) {
+  const all = getAllMedia();
+  if (typeof value !== 'string') return null;
+  if (value.startsWith('#')) return all[Number(value.slice(1))] || null;
+  return all.find((m) => m.url === value) || null;
 }
 
 function buildAddTargetModal() {
@@ -414,5 +498,7 @@ module.exports = {
   buildCreditsModal,
   buildAddMediaModal,
   buildAddTargetModal,
+  buildCardTypeModal,
+  cardFromValue,
   attackMode,
 };
