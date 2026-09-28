@@ -106,11 +106,12 @@
 
   function flash(reason, yPct = 50) {
     const pill = $('pill');
-    pill.textContent = REFUSALS[reason] || reason;
+    const text = REFUSALS[reason] || reason;
+    pill.textContent = text;
     pill.style.top = `${Math.min(92, Math.max(8, yPct))}%`;
     pill.hidden = false;
     clearTimeout(pillTimer);
-    pillTimer = setTimeout(() => { pill.hidden = true; }, 1400);
+    pillTimer = setTimeout(() => { pill.hidden = true; }, Math.max(1400, text.length * 45));   // le temps de lire
   }
 
   // ─────────────────────────────────────────────
@@ -134,12 +135,47 @@
   // 🃏 Main, carte suivante, élixir
   // ─────────────────────────────────────────────
 
+  // ⏳ Pourquoi une carte n'est pas jouable (et dans combien de temps elle le sera)
+  const ELIXIR_REGEN_MS = 2800;
+  function pumpActive(v) {
+    return (v.buildings || []).some((b) => b.side === v.you && b.kind === 'pompe' && b.alive)
+      || (v.pending || []).some((p) => p.side === v.you && p.archetype === 'pompe');
+  }
+  function blockOf(c, v) {
+    const me = v.players[v.you];
+    if (c.archetype === 'pompe' && pumpActive(v)) return { reason: 'pump_active' };
+    if (c.cost <= me.elixir) return null;
+    let regen = ELIXIR_REGEN_MS / (v.doubleElixir ? 2 : 1) / (me.overheat ? 2 : 1);
+    if (me.captain && me.captain.archetype === 'pompe') regen /= 1.1;   // 🎖 Économie
+    const secs = Math.max(1, Math.ceil(((c.cost - me.elixir) * regen) / 1000));
+    return { reason: 'elixir', have: Math.floor(me.elixir), secs, fill: Math.max(0, Math.min(1, me.elixir / c.cost)) };
+  }
+  const blockText = (b, c) => (b.reason === 'elixir'
+    ? `Pas assez d’élixir : ${b.have}/${c.cost} · prête dans ≈ ${b.secs} s`
+    : REFUSALS[b.reason]);
+
+  /** Met à jour la jauge des cartes en charge sans reconstruire la main. */
+  function updateCharge(v) {
+    const hand = v.players[v.you].hand || [];
+    [...$('hand').children].forEach((b, i) => {
+      const c = hand[i];
+      const blk = c && blockOf(c, v);
+      if (!blk || blk.reason !== 'elixir') return;
+      b.style.setProperty('--fill', `${Math.round(blk.fill * 100)}%`);
+      const need = b.querySelector('.need');
+      if (need) {
+        need.firstChild.textContent = `💧 ${blk.have}/${c.cost}`;
+        need.lastChild.textContent = `≈ ${blk.secs} s`;
+      }
+    });
+  }
+
   function renderHand(v) {
     const me = v.players[v.you];
     const hand = me.hand || [];
     if (selected && (!hand[selected.index] || hand[selected.index].url !== selected.url)) selectCard(null);
-    const key = JSON.stringify([hand.map((c) => [c.url, c.copies, c.cost <= me.elixir, c.echo]), selected, me.next && me.next.url]);
-    if (key === handKey) return;
+    const key = JSON.stringify([hand.map((c) => [c.url, c.copies, (blockOf(c, v) || {}).reason || null, c.echo]), selected, me.next && me.next.url]);
+    if (key === handKey) { updateCharge(v); return; }
     handKey = key;
 
     const box = $('hand');
@@ -147,7 +183,16 @@
       const b = el('button', 'card');
       b.type = 'button';
       const on = Boolean(selected) && selected.index === index;
-      if (c.cost > me.elixir) b.classList.add('poor');
+      const blk = blockOf(c, v);
+      if (blk && blk.reason === 'elixir') {
+        b.classList.add('poor');   // en charge : jauge + ce qu'il manque
+        const need = el('span', 'need');
+        need.append(document.createTextNode(''), el('small'));
+        b.append(el('span', 'charge'), need);
+      } else if (blk) {
+        b.classList.add('blocked');
+        b.append(el('span', 'tag', '1 Pompe max'));
+      }
       if (on) b.classList.add('selected');
       b.setAttribute('aria-pressed', String(on));
       b.append(cardFace(c), costBadge(c.cost));
@@ -167,6 +212,9 @@
       b.addEventListener('click', (e) => {
         e.stopPropagation();
         if (swallowClick) return;
+        const why = view && blockOf(c, view);
+        if (why) flash(blockText(why, c), 88);   // on dit pourquoi, tout de suite
+        if (why && why.reason === 'pump_active') return;
         selectCard(on ? null : { index, url: c.url });
       });
       return b;
@@ -175,6 +223,7 @@
     const next = $('next-card');
     next.replaceChildren();
     if (me.next) next.append(cardFace(me.next), costBadge(me.next.cost));
+    updateCharge(v);
   }
 
   function selectCard(slot) {
@@ -333,7 +382,8 @@ ${DeckEditor.roleText(e.archetype)}`;
     if (!card || card.url !== selected.url) return selectCard(null);
     const spot = ArenaBoard.pointToDeploy(x, y, live, { spell: card.archetype === 'sort' });
     if (!spot.ok) return flash(spot.reason, yPct);
-    if (card.cost > me.elixir) return flash('elixir', yPct);
+    const why = blockOf(card, view);
+    if (why) return flash(blockText(why, card), yPct);
 
     const { url } = selected;
     selectCard(null);
@@ -485,8 +535,20 @@ ${DeckEditor.roleText(e.archetype)}`;
   // 📡 Flux SSE
   // ─────────────────────────────────────────────
 
+  // 🎓 Tuto : d'office à la première ouverture (préparation), puis via « ❓ Tuto »
+  let tutorialOffered = false;
+  function openTutorial() {
+    ArenaTutorial.open({ onDone: (completed) => { if (completed) send({ type: 'tutorial' }); } });
+  }
+  $('tuto-btn').addEventListener('click', openTutorial);
+
   function showPhase(phase) {
     const p = phase === 'cancelled' ? 'ended' : phase;
+    // le combat démarre : le tuto s'efface (il reviendra à la prochaine ouverture s'il n'était pas fini)
+    if (p !== 'preparing' && ArenaTutorial.isOpen()) {
+      ArenaTutorial.close();
+      if (p === 'running') setTimeout(() => flash('Le combat commence ! Le tuto reviendra à ta prochaine préparation.', 30), 50);
+    }
     document.body.classList.toggle('wide', p === 'preparing');
     if (p !== shownPhase) {
       shownPhase = p;
@@ -520,6 +582,10 @@ ${DeckEditor.roleText(e.archetype)}`;
   const es = new EventSource(api('stream'));
   es.addEventListener('setup', (e) => {
     setup = JSON.parse(e.data);
+    if (setup.tutorialSeen === false && !tutorialOffered) {
+      tutorialOffered = true;
+      openTutorial();
+    }
     editor = null;
     decoder.reset();
     $('opponent').textContent = setup.names && setup.names.opponent ? setup.names.opponent : 'Adversaire';

@@ -3,10 +3,10 @@
 //
 //    GET  /arena/<id>?t=               → page de combat (préparation + combat + fin)
 //    GET  /api/arena/<id>/stream?t=    → flux SSE (setup + états)
-//    POST /api/arena/<id>/action?t=    → deploy | decks | ready | forfeit
+//    POST /api/arena/<id>/action?t=    → deploy | decks | ready | forfeit | tutorial
 //    GET  /deck?t=                     → « Mon deck » (éditeur hors combat)
 //    GET  /api/deck?t=                 → catalogue + mes decks
-//    POST /api/deck?t=                 → enregistre mes decks
+//    POST /api/deck?t=                 → enregistre mes decks ({ tutorial: true } : tuto vu)
 //
 //  Jeton = « <userId>.<hmac> » (lien personnel, signé comme les autres
 //  liens du bot). Arène : hmac(« arena|<match>|<user> ») ; deck :
@@ -216,7 +216,7 @@ async function handleStream(req, res, matchId, userId) {
       encoder.reset();
       // textes des Capitaines / Spécialités pour l'interface
       const texts = { captains: CAPTAINS, specialties: specialties.INFO };
-      if (phase === 'preparing') write('setup', { arena: match.arena, names, ...texts, catalogue: catalogueFor(userId, '../') });
+      if (phase === 'preparing') write('setup', { arena: match.arena, names, ...texts, catalogue: catalogueFor(userId, '../'), tutorialSeen: arenaStore.hasSeenTutorial(userId) });
       if (phase === 'running') {
         const a = combatAssets(match);
         write('setup', { arena: match.arena, names, ...texts, symbols: a.symbols, sprites: a.sprites, images: a.images });
@@ -271,7 +271,10 @@ async function handleAction(req, res, matchId, userId) {
   if (!action || typeof action.type !== 'string') return ctx.sendJson(res, 400, { ok: false, reason: 'invalid' });
 
   let result;
-  if (action.type === 'decks') {
+  if (action.type === 'tutorial') {
+    arenaStore.markTutorialSeen(userId);
+    result = { ok: true };
+  } else if (action.type === 'decks') {
     arenaStore.setDecks(userId, { decks: action.decks, active: action.active });
     result = { ok: true };
   } else if (action.type === 'ready') {
@@ -298,11 +301,16 @@ async function handleDeckApi(req, res, userId) {
     const name = await ctx.displayName(ctx.client, userId, ctx.logger);
     return ctx.sendJson(res, 200, {
       status: 'ok', name, catalogue: catalogueFor(userId, ''), decks, active, captains: CAPTAINS, specialties: specialties.INFO,
+      tutorialSeen: arenaStore.hasSeenTutorial(userId),
     });
   }
   if (req.method === 'POST') {
     const body = await readJson(req);
     if (!body) return ctx.sendJson(res, 400, { ok: false, reason: 'invalid' });
+    if (body.tutorial === true) {
+      arenaStore.markTutorialSeen(userId);
+      return ctx.sendJson(res, 200, { ok: true });
+    }
     arenaStore.setDecks(userId, body);
     return ctx.sendJson(res, 200, { ok: true });
   }
@@ -313,8 +321,8 @@ async function handleDeckApi(req, res, userId) {
 // 🚦 Routage : true si la requête était pour l'Arène
 // ─────────────────────────────────────────────
 
-const ARENA_ASSETS = ['arena.css', 'arena.js', 'arena-board.js', 'arena-wire.js', 'deck-editor.js'];
-const DECK_ASSETS = ['arena.css', 'deck.js', 'deck-editor.js'];
+const ARENA_ASSETS = ['arena.css', 'arena.js', 'arena-board.js', 'arena-wire.js', 'deck-editor.js', 'arena-tutorial.js'];
+const DECK_ASSETS = ['arena.css', 'deck.js', 'deck-editor.js', 'arena-tutorial.js'];
 
 async function route(req, res, url) {
   const { pathname } = url;

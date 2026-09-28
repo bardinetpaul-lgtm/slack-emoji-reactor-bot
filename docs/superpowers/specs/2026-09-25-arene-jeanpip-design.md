@@ -120,6 +120,9 @@ hors de [35 %, 65 %].
 - **Élixir :** départ 5, max 10, +1 toutes les 2,8 s ; **double élixir la dernière minute**.
 - L'élixir des deux joueurs est visible.
 - **Une seule Pompe active** à la fois par joueur.
+- **Carte pas encore jouable** (2026-09-28) : elle reste visible en main (pour planifier), photo éteinte,
+  une **jauge rose** monte avec l'élixir et affiche « 💧 3/5 · ≈ 6 s ». La toucher explique pourquoi.
+  Une Pompe alors qu'une autre est active : grisée « 1 Pompe max ».
 
 ### Fin du combat
 
@@ -267,6 +270,14 @@ File d'attente de **60 s** : association avec le premier joueur disponible. Pers
 Écran « Paul vs Julie » : son deck avec **✏️ Modifier** et **✅ Prêt**. Le combat démarre quand
 les deux sont prêts, ou **60 s** après l'ouverture de la préparation (deck en cours). Un joueur
 jamais connecté → combat annulé. Le deck adverse reste caché.
+
+### 🎓 Tuto (2026-09-28)
+
+8 écrans illustrés (`public/arena-tutorial.js`) : but, deck et rareté, élixir, pose, six rôles,
+qui attaque qui, atouts (Capitaine, Rappel, Rage), enjeux (cartes perdues, butin). Montré **d'office à la
+première ouverture** (préparation d'un combat ou « Mon deck »), puis via le bouton **❓ Tuto**.
+Le « vu » est enregistré par joueur côté serveur (`data/arena.json` → `tutorial`), quand il est
+terminé ou passé. S'il est ouvert quand le combat démarre, il se ferme et reviendra la fois suivante.
 
 ### Fin
 

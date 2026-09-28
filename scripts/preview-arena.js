@@ -93,8 +93,12 @@ function newGame(arena, now) {
   };
 }
 
+// 🎓 Tuto : montré d'office tant qu'il n'a pas été vu (mémoire du serveur d'aperçu)
+let tutorialSeen = false;
+
 function prepSetup(game) {
   return {
+    tutorialSeen,
     arena: game.arena, names: { you: 'Toi', opponent: 'Bot Jeanpip' }, captains: CAPTAINS, specialties: specialties.INFO,
     catalogue: catalogueOf(game.collection), symbols: '', sprites: {}, images: {},
   };
@@ -181,6 +185,10 @@ const games = new Map();
 function handleAction(id, action) {
   const game = games.get(id);
   if (!game) return { ok: false, reason: 'not_running' };
+  if (action.type === 'tutorial') {
+    tutorialSeen = true;
+    return { ok: true };
+  }
   if (action.type === 'decks' && game.phase === 'preparing') {
     game.decks = { active: Number(action.active) || 0, decks: action.decks };
     return { ok: true };

@@ -10,7 +10,8 @@
 //      stats: { U123: { wins, losses, draws, streak, bestStreak, bestLoot } },
 //      rewards: { U123: { day: 'YYYY-MM-DD', total, vs: { U456: n } } },
 //      settled: { <matchId>: ISO },
-//      history: [{ matchId, at, winnerId, loserId, draw }] }
+//      history: [{ matchId, at, winnerId, loserId, draw }],
+//      tutorial: { U123: ISO } }   // 🎓 tuto vu (affiché à la 1re ouverture)
 // ═══════════════════════════════════════════════════════════
 
 const fs = require('fs');
@@ -29,7 +30,7 @@ const RARITY_RANK = { common: 0, rare: 1, epic: 2, legendary: 3 };
 // ─────────────────────────────────────────────
 
 function load() {
-  const empty = { decks: {}, stats: {}, rewards: {}, settled: {}, history: [] };
+  const empty = { decks: {}, stats: {}, rewards: {}, settled: {}, history: [], tutorial: {} };
   try {
     if (!fs.existsSync(ARENA_PATH)) return empty;
     const data = JSON.parse(fs.readFileSync(ARENA_PATH, 'utf-8')) || {};
@@ -110,6 +111,22 @@ function setDeck(userId, urls, captain) {
   value.decks[value.active].cards = urls.slice();
   if (captain !== undefined) value.decks[value.active].captain = captain;
   setDecks(userId, value);
+}
+
+// ─────────────────────────────────────────────
+// 🎓 Tuto (montré une fois, à la première ouverture)
+// ─────────────────────────────────────────────
+
+function hasSeenTutorial(userId) {
+  return Boolean(load().tutorial[userId]);
+}
+
+function markTutorialSeen(userId, now = Date.now()) {
+  const data = load();
+  if (!data.tutorial[userId]) {
+    data.tutorial[userId] = new Date(now).toISOString();
+    save(data);
+  }
 }
 
 // ─────────────────────────────────────────────
@@ -221,4 +238,6 @@ module.exports = {
   consumeReward,
   isSettled,
   markSettled,
+  hasSeenTutorial,
+  markTutorialSeen,
 };
