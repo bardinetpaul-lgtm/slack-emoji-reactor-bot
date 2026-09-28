@@ -29,23 +29,19 @@
   const RARITIES = { common: 'Commune', rare: 'Rare', epic: 'Épique', legendary: 'Légendaire' };
   const RARITY_ORDER = { legendary: 0, epic: 1, rare: 2, common: 3 };
 
-  // Rôle de chaque archétype (miroir de src/game/cards.js : ARCHETYPES + COUNTERS)
+  // Rôle de chaque archétype (miroir de src/game/cards.js : ARCHETYPES + COUNTERS).
+  // `vs` décrit les dégâts RÉELS : l'attaquant fait ×1,5 à ce qu'il contre et
+  // ×0,67 à ce qui le contre. Le Tank ne frappant jamais les troupes, son
+  // « contre » ne joue que dans un sens : il encaisse mal l'Essaim, bien les Guerriers.
   const ROLES = {
-    tank:     { emoji: '🛡', label: 'Tank',     role: '2 colosses (700 PV). Ignorent les unités et foncent sur les tours.', strong: 'guerrier', weak: 'essaim' },
-    guerrier: { emoji: '⚔️', label: 'Guerrier', role: '3 combattants au corps à corps, polyvalents.', strong: 'tireur', weak: 'tank' },
-    tireur:   { emoji: '🏹', label: 'Tireur',   role: '3 tireurs à distance, fragiles : à protéger derrière un Tank ou des Guerriers.', strong: 'essaim', weak: 'guerrier' },
-    essaim:   { emoji: '🐝', label: 'Essaim',   role: '6 petits très rapides, qui submergent les grosses cibles.', strong: 'tank', weak: 'tireur' },
-    sort:     { emoji: '💥', label: 'Sort',     role: 'Explose au point visé (zone). Seulement 40 % des dégâts sur les bâtiments.', strong: 'essaim', weak: null },
-    pompe:    { emoji: '⚗️', label: 'Pompe',    role: 'Bâtiment : +1 élixir toutes les 7 s pendant 45 s. Une seule à la fois.', strong: null, weak: null },
+    tank:     { emoji: '🛡', label: 'Tank',     role: '2 colosses (700 PV) qui ignorent les troupes et foncent sur les tours.', vs: 'Encaisse bien les ⚔️ Guerriers (ils ne lui font que ×0,67). L’🐝 Essaim le fait fondre (×1,5).' },
+    guerrier: { emoji: '⚔️', label: 'Guerrier', role: '3 combattants au corps à corps, polyvalents.', vs: 'Écrase les 🏹 Tireurs (×1,5). Tape mal sur les 🛡 Tanks (×0,67) : laisse plutôt l’Essaim s’en charger.' },
+    tireur:   { emoji: '🏹', label: 'Tireur',   role: '3 tireurs à distance, fragiles : à protéger derrière un Tank.', vs: 'Nettoie l’🐝 Essaim (×1,5). Tape mal sur les ⚔️ Guerriers (×0,67), qui l’écrasent en retour.' },
+    essaim:   { emoji: '🐝', label: 'Essaim',   role: '6 petits très rapides.', vs: 'Fait fondre les 🛡 Tanks (×1,5). Tape mal sur les 🏹 Tireurs (×0,67), qui le nettoient. Craint les 💥 Sorts.' },
+    sort:     { emoji: '💥', label: 'Sort',     role: 'Explose au point visé (zone). Seulement 40 % des dégâts sur les bâtiments.', vs: 'Écrase l’🐝 Essaim (×1,5).' },
+    pompe:    { emoji: '⚗️', label: 'Pompe',    role: 'Bâtiment : +1 élixir toutes les 7 s pendant 45 s. Une seule à la fois.', vs: '' },
   };
-  const roleText = (k) => {
-    const r = ROLES[k];
-    if (!r) return '';
-    const bits = [r.role];
-    if (r.strong) bits.push(`Fort contre ${ROLES[r.strong].emoji} ${ROLES[r.strong].label}.`);
-    if (r.weak) bits.push(`Faible contre ${ROLES[r.weak].emoji} ${ROLES[r.weak].label}.`);
-    return bits.join(' ');
-  };
+  const roleText = (k) => (ROLES[k] ? `${ROLES[k].role} ${ROLES[k].vs}`.trim() : '');
 
   /** Cadre de rareté + étiquettes rareté / rôle sur une carte (bouton). */
   function decorate(b, card, { compact = false } = {}) {
@@ -69,8 +65,10 @@
     }
     const rules = el('ul', 'de-guide-rules');
     [
-      'Le cycle des contres : 🛡 Tank → ⚔️ Guerrier → 🏹 Tireur → 🐝 Essaim → 🛡 Tank. On fait ×1,5 de dégâts à ce qu’on contre, ×0,67 à ce qui nous contre. 💥 Sort écrase 🐝 Essaim.',
-      'Chaque groupe avance dans son couloir et attaque l’ennemi LE PLUS PROCHE, même celui qu’il vient de croiser. Exception : le 🛡 Tank ne frappe que les bâtiments.',
+      'Qui frappe fort qui : ⚔️ Guerrier > 🏹 Tireur > 🐝 Essaim > 🛡 Tank, et 💥 Sort > 🐝 Essaim (×1,5). Dans l’autre sens, les coups ne font que ×0,67 (un Tireur qui tape un Guerrier, un Guerrier qui tape un Tank…).',
+      'Le 🛡 Tank ne frappe jamais les troupes : il sert de bouclier. Pendant que les ennemis s’acharnent sur lui, tes Tireurs et Guerriers derrière font le travail.',
+      'Chaque groupe avance dans son couloir et attaque l’ennemi LE PLUS PROCHE, même celui qu’il vient de croiser (sauf le 🛡 Tank).',
+      'Les poses adverses s’affichent sur le terrain (🏹 Tireur…) et dans le bandeau en haut du terrain.',
       'Une tour ne tire que dans son couloir. Tant qu’elle tient, tu ne peux poser que dans ta moitié.',
       'La rareté (cadre coloré) renforce les PV : Rare +4 %, Épique +7 %, Légendaire +10 %. Les Épiques et Légendaires ont en plus une spécialité ✨.',
       'Une pose apparaît 0,5 s après avoir été jouée.',

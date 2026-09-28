@@ -47,6 +47,14 @@ const groupHp = (s, url) => s.units.filter((u) => u.url === url).reduce((a, u) =
   check('la pose apparaît en 0,5 s', s.units.length === 3);
 }
 
+// ─── 👁 La pose annonce la carte (l'adversaire voit ce qui arrive) ───
+{
+  const s = match();
+  give(s, 'B', ['tireur3']);
+  const ev = engine.applyAction(s, 'B', { type: 'deploy', url: 'tireur3', lane: 2, depth: 30 }).events.find((e) => e.type === 'deploy');
+  check('événement de pose : titre, rareté, rôle et point exact', ev.title === 'tireur3' && ev.rarity === 'common' && ev.archetype === 'tireur' && Math.abs(ev.y - 70) < 0.01);
+}
+
 // ─── Ennemi déjà dépassé : on se retourne pour le combattre ───
 {
   const s = match();

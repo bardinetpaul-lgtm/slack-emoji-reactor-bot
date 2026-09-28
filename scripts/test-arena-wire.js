@@ -73,7 +73,7 @@ for (const viewer of ['A', 'B']) {
       engine.applyAction(s, 'A', { type: 'recall', poseId: s.poses.find((p) => p.side === 'A' && p.status === 'alive').id });
     }
     const events = engine.tick(s, 100);
-    const view = compact({ matchId: 'w', you: viewer, opponent: 'X', arena: 'port', phase: 'running', ...engine.publicState(s, viewer), events }, keyOf);
+    const view = compact({ matchId: 'w', you: viewer, opponent: 'X', arena: 'port', phase: 'running', ...engine.publicState(s, viewer), events }, { keyOf });
     const packet = enc.encode(view);
     const text = JSON.stringify(packet);
     const back = dec.decode(JSON.parse(text));

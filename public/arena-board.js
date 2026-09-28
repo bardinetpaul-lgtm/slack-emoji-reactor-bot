@@ -238,6 +238,10 @@
       + `<g transform="translate(0 ${bob.toFixed(2)}) rotate(${tilt.toFixed(2)} 0 0)">${body}</g></g>${marks}${hpBar}`;
   }
 
+  // 👁 rôles des poses adverses (même vocabulaire que l'éditeur de deck)
+  const ROLE_ICONS = { tank: '🛡', guerrier: '⚔️', tireur: '🏹', essaim: '🐝', sort: '💥', pompe: '⚗️' };
+  const ROLE_TAGS = { tank: '🛡 Tank', guerrier: '⚔️ Guerrier', tireur: '🏹 Tireur', essaim: '🐝 Essaim', sort: '💥 Sort', pompe: '⚗️ Pompe' };
+  const RARITY_TAGS = { rare: 'Rare', epic: 'Épique', legendary: 'Légendaire' };
   const teamColor = (side, viewer) => (side === viewer ? BLUE : ORANGE);
   const bar = (x, y, w, ratio, color) => pathTag(F(R(x - w / 2, y, w, 5, 2.5), I7)) + pathTag(F(R(x - w / 2, y, Math.max(5, w * ratio), 5, 2.5), color));
 
@@ -301,15 +305,25 @@
       const sprite = spriteOf(sprites[u.url]);
       if (!sprite) continue;
       const at = toBoard(u.lane, u.y, viewer);
-      items.push({ y: at.y, svg: renderUnit(u, at, teamColor(u.side, viewer), sprite, time) });
+      let svg = renderUnit(u, at, teamColor(u.side, viewer), sprite, time);
+      // 👁 groupe adverse : son rôle au-dessus du chef de file
+      if (u.side !== viewer && u.slot === 0 && ROLE_ICONS[u.archetype]) {
+        const s = UNIT_SCALE[u.archetype] || 0.42;
+        const [dx, dy] = formationOffset(u);
+        const ix = +(at.x + dx).toFixed(1);
+        const iy = +(at.y + dy - 95 * s - 12).toFixed(1);
+        svg += `<g data-fx="role" transform="translate(${ix} ${iy})"><circle r="8" fill="${ORANGE}"/><text y="3.5" text-anchor="middle" font-size="10">${ROLE_ICONS[u.archetype]}</text></g>`;
+      }
+      items.push({ y: at.y, svg });
     }
     items.sort((a, b) => a.y - b.y);
     out.push(...under, ...items.map((i) => i.svg));
 
     // 🏷️ Chips de dégâts (−210, ×1,5) comme dans la DA
     for (const c of chips) {
-      const o = Math.max(0, 1 - c.age / 900).toFixed(2);
-      const rise = Math.min(14, c.age / 60);
+      const life = c.life || 900;
+      const o = Math.max(0, Math.min(1, (life - c.age) / 300)).toFixed(2);   // bien lisible, puis s'efface
+      const rise = c.life ? 0 : Math.min(14, c.age / 60);
       const bg = dark ? CREAM : INK;
       const fg = c.accent ? ORANGE : (dark ? INK : CREAM);
       const w = 12 + String(c.txt).length * 7;
@@ -447,10 +461,15 @@
       curr = view;
       currAt = now;
       for (const e of view.events || []) {
-        if (e.type === 'deploy' && e.archetype !== 'sort') {
-          const spawnY = e.side === 'A' ? (e.forward ? 60 : 20) : (e.forward ? 40 : 80);
+        if (e.type === 'deploy') {
+          const spawnY = typeof e.y === 'number' ? e.y : (e.side === 'A' ? (e.forward ? 60 : 20) : (e.forward ? 40 : 80));
           const at = toBoard(e.lane, spawnY, view.you);
-          fx.push({ type: 'ring', x: at.x, y: at.y - 6, born: now, color: e.side === view.you ? BLUE : ORANGE });
+          if (e.archetype !== 'sort') fx.push({ type: 'ring', x: at.x, y: at.y - 6, born: now, color: e.side === view.you ? BLUE : ORANGE });
+          // 👁 pose adverse : étiquette « 🏹 Tireur · Légendaire » au point d'arrivée
+          if (e.side !== view.you && ROLE_TAGS[e.archetype]) {
+            const rare = RARITY_TAGS[e.rarity] ? ` · ${RARITY_TAGS[e.rarity]}` : '';
+            chips.push({ x: at.x, y: at.y - 34, txt: ROLE_TAGS[e.archetype] + rare, accent: true, born: now, life: 2200 });
+          }
         }
         if (e.type === 'power' && e.lane !== null && e.lane !== undefined) {
           fx.push({ type: 'lane', lane: e.lane, born: now, color: e.power === 'gel' ? BLUE : e.side === view.you ? PINK : ORANGE });
@@ -497,7 +516,7 @@
         }) };
       }
       fx = fx.filter((f) => now - f.born < (f.type === 'ring' ? 800 : f.type === 'lane' ? 900 : 700));
-      chips = chips.filter((c) => now - c.born < 900);
+      chips = chips.filter((c) => now - c.born < (c.life || 900));
       live.innerHTML = (showZones ? renderZones(view) : '') + renderGhost(ghost) + renderDynamic(view, {
         arena,
         sprites,

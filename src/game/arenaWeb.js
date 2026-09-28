@@ -147,7 +147,7 @@ function combatAssets(match) {
 
 const r2 = (n) => Math.round(n * 100) / 100;
 
-function compact(view, keyOf) {
+function compact(view, { keyOf = {}, images = {} } = {}) {
   if (view.phase !== 'running') return view;
   const key = (url) => (url && keyOf[url]) || url;
   const players = {};
@@ -173,7 +173,13 @@ function compact(view, keyOf) {
     buildings: view.buildings.map((b) => ({ ...b, hp: Math.round(b.hp), url: b.url ? key(b.url) : undefined })),
     units: view.units.map((u) => ({ ...u, y: r2(u.y), hp: Math.round(u.hp), maxHp: Math.round(u.maxHp), url: key(u.url) })),
     pending: view.pending.map((p) => ({ ...p, url: key(p.url) })),
-    events: (view.events || []).map((e) => (e.url ? { ...e, url: key(e.url) } : e)),
+    // 👁 une pose porte l'image de sa carte (l'adversaire voit ce qui arrive)
+    events: (view.events || []).map((e) => {
+      if (!e.url) return e;
+      const out = { ...e, url: key(e.url) };
+      if (e.type === 'deploy' && images[e.url]) out.image = images[e.url];
+      return out;
+    }),
   };
 }
 
@@ -216,7 +222,7 @@ async function handleStream(req, res, matchId, userId) {
         write('setup', { arena: match.arena, names, ...texts, symbols: a.symbols, sprites: a.sprites, images: a.images });
       }
     }
-    write('state', phase === 'running' ? encoder.encode(compact(view, combatAssets(match).keyOf)) : view);
+    write('state', phase === 'running' ? encoder.encode(compact(view, combatAssets(match))) : view);
   };
 
   matches.connect(matchId, userId, Date.now());

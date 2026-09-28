@@ -137,17 +137,19 @@ function startCombat(game) {
   return { ...prepSetup(game), symbols, sprites, images };
 }
 
-/** Bot : défend le couloir menacé, sinon pousse ; garde parfois l'élixir. */
+/** Bot : défend le couloir menacé, sinon pousse ; garde parfois l'élixir. → événements de ses actions */
 function botAct(state) {
   const p = state.players.B;
+  const events = [];
   if (p.captain && !p.captain.used && state.timeMs > 40000 && Math.random() < 0.01) {
-    engine.applyAction(state, 'B', { type: 'power', lane: Math.floor(Math.random() * 3) });
+    events.push(...engine.applyAction(state, 'B', { type: 'power', lane: Math.floor(Math.random() * 3) }).events);
   }
   const playable = p.hand.filter((u) => engine.cardStats(state, 'B', u).cost <= p.elixir);
-  if (!playable.length || Math.random() < 0.9) return;
+  if (!playable.length || Math.random() < 0.9) return events;
   const url = playable[Math.floor(Math.random() * playable.length)];
   const threat = state.units.filter((u) => u.side === 'A').sort((x, y) => y.y - x.y)[0];
-  engine.applyAction(state, 'B', { type: 'deploy', url, lane: threat ? threat.lane : Math.floor(Math.random() * 3) });
+  events.push(...engine.applyAction(state, 'B', { type: 'deploy', url, lane: threat ? threat.lane : Math.floor(Math.random() * 3) }).events);
+  return events;
 }
 
 function prepView(game) {
@@ -259,8 +261,7 @@ const server = http.createServer(async (req, res) => {
         send('state', prepView(game));
         return;
       }
-      botAct(game.state);
-      const events = engine.tick(game.state, engine.STEP_MS);
+      const events = [...botAct(game.state), ...engine.tick(game.state, engine.STEP_MS)];
       if (game.state.status === 'ended') {
         game.phase = 'ended';
         send('state', endedView(game));

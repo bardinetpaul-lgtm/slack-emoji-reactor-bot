@@ -274,7 +274,11 @@ function applyAction(state, side, action) {
   state.poses.push(pose);
   state.pending.push({ poseId: pose.id, side, url, lane, forward, y: depth === null ? null : pos(side, depth), readyAt: state.timeMs + DEPLOY_DELAY_MS });
 
-  events.push({ type: 'deploy', side, url, lane, forward, poseId: pose.id, archetype: stats.archetype });
+  // 👁 l'adversaire voit ce qui est posé (carte, rareté, rôle) et où
+  events.push({
+    type: 'deploy', side, url, lane, forward, poseId: pose.id, archetype: stats.archetype,
+    y: depth === null ? null : pos(side, depth), title: stats.title, rarity: stats.rarity, cost: stats.cost,
+  });
   return { ok: true, events };
 }
 

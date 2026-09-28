@@ -187,6 +187,40 @@
     if (view && view.phase === 'running') renderHand(view);
   }
 
+  // ─────────────────────────────────────────────
+  // 👁 Dernières cartes posées par l'adversaire (bandeau en haut du terrain)
+  // ─────────────────────────────────────────────
+
+  const FEED_MAX = 4;
+
+  function renderOppFeed(v) {
+    const box = $('opp-feed');
+    for (const e of v.events || []) {
+      if (e.type !== 'deploy' || e.side === v.you) continue;
+      const rarity = DeckEditor.RARITIES[e.rarity] ? e.rarity : 'common';
+      const role = DeckEditor.ROLES[e.archetype];
+      const c = el('div', `feed-card r-${rarity}`);
+      const img = e.image || (setup && setup.images && setup.images[e.url]);
+      if (img) {
+        const i = el('img');
+        i.src = img;
+        i.alt = '';
+        i.onerror = () => i.replaceWith(characterFace({ url: e.url }));
+        c.append(i);
+      } else {
+        c.append(characterFace({ url: e.url }));
+      }
+      if (role) c.append(el('span', 'feed-role', role.emoji));
+      c.title = `${e.title || 'Carte'} · ${DeckEditor.RARITIES[rarity]} · ${role ? role.label : ''}
+${DeckEditor.roleText(e.archetype)}`;
+      c.setAttribute('role', 'img');
+      c.setAttribute('aria-label', `L'adversaire pose ${e.title || 'une carte'}, ${role ? role.label : ''}, ${DeckEditor.RARITIES[rarity]}`);
+      box.prepend(c);
+      while (box.children.length > FEED_MAX) box.lastChild.remove();
+      box.hidden = false;
+    }
+  }
+
   function renderElixir(v) {
     const elixir = v.players[v.you].elixir;
     const max = v.players[v.you].elixirMax || 10;   // 🎖 Économie : jusqu'à 12
@@ -472,6 +506,7 @@
       renderElixir(v);
       renderHand(v);
       renderPower(v);
+      renderOppFeed(v);
       $('x2').hidden = !v.doubleElixir;
       return undefined;
     }
@@ -490,6 +525,8 @@
     $('opponent').textContent = setup.names && setup.names.opponent ? setup.names.opponent : 'Adversaire';
     if (renderer) renderer.stop();
     handKey = '';
+    $('opp-feed').replaceChildren();
+    $('opp-feed').hidden = true;
     renderer = ArenaBoard.createRenderer($('board'), { arena: setup.arena, symbols: setup.symbols, sprites: setup.sprites });
   });
   es.addEventListener('state', (e) => onState(decoder.decode(JSON.parse(e.data))));
