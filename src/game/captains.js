@@ -9,17 +9,17 @@
 const CAPTAINS = {
   tank: {
     style: 'Siège',
-    passive: 'Tes Tanks ont +15 % de PV.',
-    power: { key: 'rempart', label: 'Rempart', lane: true, desc: 'Ta tour la plus proche du point touché est invulnérable 4 s.' },
+    passive: 'Tes Tanks ont +50 % de PV.',
+    power: { key: 'rempart', label: 'Rempart', lane: true, desc: 'Ta tour la plus proche du point touché est invulnérable 10 s.' },
   },
   guerrier: {
     style: 'Rush',
-    passive: 'Tes unités avancent 25 % plus vite et frappent 15 % plus fort.',
-    power: { key: 'charge', label: 'Charge', lane: true, desc: 'Tes unités autour du point touché foncent 3 s (vitesse ×2, dégâts +20 %).' },
+    passive: 'Tes unités avancent 35 % plus vite et frappent 30 % plus fort.',
+    power: { key: 'charge', label: 'Charge', lane: true, desc: 'Tes unités autour du point touché foncent 6 s (vitesse ×2, dégâts +40 %).' },
   },
   tireur: {
     style: 'Contrôle',
-    passive: 'Tes tours tirent 20 % plus loin.',
+    passive: 'Tes tours tirent 10 % plus loin.',
     power: { key: 'salve', label: 'Salve', lane: true, desc: '200 dégâts à toutes les unités ennemies autour du point touché.' },
   },
   essaim: {
@@ -29,8 +29,8 @@ const CAPTAINS = {
   },
   pompe: {
     style: 'Économie',
-    passive: '+2 élixir au départ, recharge 10 % plus rapide, et ton élixir monte jusqu’à 12.',
-    power: { key: 'surchauffe', label: 'Surchauffe', lane: false, desc: 'Ton élixir se recharge deux fois plus vite pendant 12 s.' },
+    passive: '+2 élixir au départ, recharge 5 % plus rapide, et ton élixir monte jusqu’à 11.',
+    power: { key: 'surchauffe', label: 'Surchauffe', lane: false, desc: 'Ton élixir se recharge deux fois plus vite pendant 6 s.' },
   },
   sort: {
     style: 'Magie',
@@ -41,23 +41,23 @@ const CAPTAINS = {
 
 // Valeurs utilisées par le moteur (réglables, validées par la simulation)
 const TUNING = {
-  tankHp: 1.7,
-  rushSpeed: 1.25,
-  rushDps: 1.45,
-  towerRange: 1.05,
+  tankHp: 1.5,
+  rushSpeed: 1.35,
+  rushDps: 1.3,
+  towerRange: 1.1,
   extraSwarm: 2,
-  startElixir: 4,
-  elixirMax: 12,
-  ecoRegen: 1.25,
+  startElixir: 2,
+  elixirMax: 11,
+  ecoRegen: 1.05,
   spellDiscount: 1,
   spellDamage: 1,
-  rempartMs: 4000,
-  chargeMs: 3000,
+  rempartMs: 10000,
+  chargeMs: 6000,
   chargeSpeed: 2,
-  chargeDps: 1.2,
+  chargeDps: 1.4,
   salveDamage: 200,
   renforts: 4,
-  surchauffeMs: 12000,
+  surchauffeMs: 6000,
   gelMs: 3000,
 };
 

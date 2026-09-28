@@ -14,8 +14,9 @@
 //     rare/épique/légendaire contre deck 100 % commun (indicatif).
 //
 //  3. Spécialités : une légendaire qui porte la spécialité, en duel.
-//  4. Capitaines : combats complets entre BONS joueurs, deck avec Capitaine
-//     (7 poses) contre deck sans Capitaine (8 poses).
+//  4. Capitaines : combats complets entre BONS joueurs, chacun avec un
+//     Capitaine (9e carte, hors deck, 2026-09-28) : chaque Capitaine contre
+//     les cinq autres, à tour de rôle.
 //
 //  Critères (code de sortie 1 si non respectés) :
 //    • aucune rareté au-dessus de 70 % de victoires en duel (hors spécialité) ;
@@ -202,23 +203,21 @@ function fullMatchRate(rarity) {
   return (100 * score) / MATCHES;
 }
 
-/** Combats complets : deck avec Capitaine `arch` contre deck sans Capitaine. */
+/** Combats complets : Capitaine `arch` contre chacun des autres Capitaines (9e carte, hors deck). */
 function captainRate(arch) {
   let score = 0;
+  const others = ALL.filter((a) => a !== arch);
   for (let m = 0; m < MATCHES; m += 1) {
     const rand = lcg(7000 + m);
     const base = [...ALL, 'guerrier', 'tireur'];
-    // Un joueur qui choisit ce Capitaine garde une autre carte de l'archétype
-    // dans son deck (sinon le passif ne s'applique à rien)
-    const capBase = base.slice();
-    if (base.filter((x) => x === arch).length < 2 && arch !== 'pompe') capBase[6] = arch;
-    const deckA = capBase.map((a, i) => ({ url: `${a}-${i}`, title: a, rarity: 'common' }));
+    const deckA = base.map((a, i) => ({ url: `${a}-${i}`, title: a, rarity: 'common' }));
     const deckB = base.map((a, i) => ({ url: `${a}-${10 + i}`, title: a, rarity: 'common' }));
     const copies = (deck) => Object.fromEntries(deck.map((c) => [c.url, 3]));
-    const captain = `${arch}-${capBase.indexOf(arch)}`;
+    const foeArch = others[m % others.length];
+    const capCard = (a, n) => ({ url: `${a}-${n}`, title: a, rarity: 'common' });
     const capSide = m % 2 === 0 ? 'A' : 'B';
-    const withCap = { userId: 'C', deck: deckA, copies: copies(deckA), captain };
-    const without = { userId: 'N', deck: deckB, copies: copies(deckB) };
+    const withCap = { userId: 'C', deck: deckA, copies: copies(deckA), captain: `${arch}-18`, captainCard: capCard(arch, 18) };
+    const without = { userId: 'N', deck: deckB, copies: copies(deckB), captain: `${foeArch}-19`, captainCard: capCard(foeArch, 19) };
     const s = engine.createMatch({ id: `c${m}`, seed: 9000 + m, players: capSide === 'A' ? { A: withCap, B: without } : { A: without, B: withCap } });
     while (s.status === 'running') {
       goodAct(s, 'A', rand);   // bon joueur des deux côtés : un style de jeu se juge bien joué
@@ -416,7 +415,7 @@ for (const [spec, arch] of Object.entries(SPEC_ARCH)) {
 }
 
 if (section('captains')) {
-console.log(`\n🎖 Capitaines : deck avec Capitaine (7 poses) contre deck sans (8 poses), ${MATCHES} combats\n`);
+console.log(`\n🎖 Capitaines : chaque Capitaine contre les 5 autres (9e carte, 8 poses chacun), ${MATCHES} combats\n`);
 for (const arch of ALL) {
   const rate = captainRate(arch);
   const bad = rate < 40 || rate > 65;

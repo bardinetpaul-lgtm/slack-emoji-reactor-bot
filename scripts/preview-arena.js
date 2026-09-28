@@ -123,10 +123,13 @@ function startCombat(game) {
   const bot = shuffled(media.getAllMedia().filter((m) => !mine.includes(m))).slice(0, 8).map((m) => ({ ...m, count: 2 }));
   const deck = (cards) => cards.map((m) => ({ url: m.url, title: m.title, rarity: m.rarity, rented: Boolean(m.rented) }));
   const copies = (cards) => Object.fromEntries(cards.map((m) => [m.url, m.count]));
+  const capMedia = game.captain && game.collection.find((m) => m.url === game.captain);
+  const capCard = capMedia ? { url: capMedia.url, title: capMedia.title, rarity: capMedia.rarity } : null;
   game.state = engine.createMatch({
     id: 'preview', seed: Math.floor(Math.random() * 1e9),
     players: {
-      A: { userId: 'Toi', deck: deck(mine), copies: copies(mine), captain: game.captain },
+      // 🎖 Capitaine : 9e carte de la collection (hors deck)
+      A: { userId: 'Toi', deck: deck(mine), copies: copies(mine), captain: game.captain, captainCard: capCard },
       B: { userId: 'Bot', deck: deck(bot), copies: copies(bot), captain: bot[1].url },
     },
   });

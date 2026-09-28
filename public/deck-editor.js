@@ -2,7 +2,8 @@
 //  🃏 Éditeur de deck de l'Arène (DA « Editeur de deck »)
 //
 //  À gauche : 3 decks enregistrés (onglets), les 8 emplacements du
-//  deck actif (vraies images des cartes), 🎖 Capitaine, coût moyen,
+//  deck actif (vraies images des cartes), 🎖 Capitaine (9e carte, choisie
+//  dans la collection, EN PLUS des 8 : jamais posée), coût moyen,
 //  archétypes, alerte, 🛒 cartes mystère (préparation), « Vider » et
 //  « Prêt » (préparation) ou enregistrement auto.
 //  À droite : toute la collection (vraies images), filtres par
@@ -70,7 +71,7 @@
       'Chaque groupe va vers la cible LA PLUS PROCHE : un ennemi repéré, sinon la tour ennemie la plus proche (le 🛡 Tank, lui, ne vise que les bâtiments). À pied, on traverse la rivière par un des 2 ponts ; l’🐝 Essaim vole.',
       'Les poses adverses s’affichent sur le terrain (🏹 Tireur…) et dans le bandeau en haut du terrain.',
       'Tu poses où tu veux dans ta moitié, et autour d’une tour adverse détruite. Tes 8 cartes sont en main dès le début.',
-      'La rareté (cadre coloré) renforce les PV : Rare +4 %, Épique +7 %, Légendaire +10 %. Les Épiques et Légendaires ont en plus une spécialité ✨.',
+      'La rareté (cadre coloré) renforce les PV : Rare +6 %, Épique +11 %, Légendaire +16 %. Les Épiques et Légendaires ont en plus une spécialité ✨.',
       'Une pose apparaît 0,5 s après avoir été jouée.',
     ].forEach((t) => rules.append(el('li', null, t)));
     box.append(list, rules);
@@ -125,16 +126,20 @@
         const used = {};
         // garde un emplacement tant qu'il reste un exemplaire pour le couvrir
         const cards = d.cards.filter((u) => byUrl[u] && (used[u] = (used[u] || 0) + 1) <= byUrl[u].copies);
-        return { name: d.name, cards, captain: d.captain && cards.includes(d.captain) ? d.captain : null };
+        return { name: d.name, cards, captain: d.captain && byUrl[d.captain] ? d.captain : null };
       }),
       active: opts.active || 0,
       filter: 'all',
       sort: 'cost',
       ready: false,
+      pickCaptain: false,   // 🎖 « Choisir un Capitaine » : la prochaine carte touchée dans la collection
     };
     let saveTimer = null;
 
     const current = () => state.decks[state.active];
+    const inDeck = (d, url) => d.cards.filter((u) => u === url).length;
+    // 🎖 le Capitaine occupe un exemplaire, en plus de ceux du deck
+    const captainOk = (d, url) => Boolean(byUrl[url]) && byUrl[url].copies >= inDeck(d, url) + 1;
     const realCards = () => current().cards.filter((u) => !isToken(u)).map((u) => byUrl[u]).filter(Boolean);
     const tokens = () => current().cards.filter(isToken);
     const shopCost = () => tokens().reduce((s, t) => s + ((shop && shop.prices[tokenRarity(t)]) || 0), 0);
@@ -153,7 +158,7 @@
         opts.onReady(false, null, null);
       }
       const d = current();
-      if (d.captain && !d.cards.includes(d.captain)) d.captain = null;
+      if (d.captain && !captainOk(d, d.captain)) d.captain = null;
       clearTimeout(saveTimer);
       saveTimer = setTimeout(() => opts.onSave && opts.onSave({ decks: state.decks, active: state.active }), 400);
       render();
@@ -186,9 +191,8 @@
       const head = el('div', 'de-deck-head');
       head.append(el('h2', null, d.name), el('span', 'de-count', `${d.cards.length}/8 cartes`));
 
-      // 8 emplacements (le Capitaine est marqué ; une carte mystère reste cachée)
+      // 8 emplacements (une carte mystère reste cachée)
       const slots = el('div', 'de-slots');
-      let captainMarked = false;
       for (let i = 0; i < DECK_SIZE; i += 1) {
         const u = d.cards[i];
         const wrap = el('div', 'de-slot');
@@ -209,9 +213,6 @@
           wrap.append(b);
         } else {
           const c = byUrl[u];
-          const isCap = !captainMarked && d.captain === u;
-          if (isCap) captainMarked = true;
-          if (isCap) b.classList.add('captain');
           b.append(cardArt(c), el('span', 'de-cost', String(c.cost)));
           decorate(b, c, { compact: true });
           const sb = specBadge(c);
@@ -221,16 +222,7 @@
             d.cards = d.cards.filter((_, j) => j !== i);
             changed();
           });
-          const star = el('button', `de-star${isCap ? ' on' : ''}`, '🎖');
-          star.type = 'button';
-          star.title = isCap ? 'Retirer le Capitaine' : `Choisir comme Capitaine (${captains[c.archetype] ? captains[c.archetype].style : ''})`;
-          star.setAttribute('aria-pressed', String(isCap));
-          star.addEventListener('click', (e) => {
-            e.stopPropagation();
-            d.captain = isCap ? null : u;
-            changed();
-          });
-          wrap.append(b, star);
+          wrap.append(b);
         }
         slots.append(wrap);
       }
@@ -246,20 +238,44 @@
       mixBox.append(el('span', 'de-stat-label', 'Archétypes'), mix);
       stats.append(avgBox, mixBox);
 
-      // 🎖 Capitaine
-      const capBox = el('div', 'de-captain');
+      // 🎖 Capitaine : 9e carte, en plus des 8 (choisie dans la collection)
+      const capBox = el('div', `de-captain${state.pickCaptain ? ' picking' : ''}`);
       const cap = d.captain && byUrl[d.captain];
       const capInfo = cap && captains[cap.archetype];
+      const capRow = el('div', 'de-cap-row');
+      const capCard = el('button', 'de-card de-cap-card');
+      capCard.type = 'button';
+      if (cap) {
+        capCard.append(cardArt(cap));
+        decorate(capCard, cap, { compact: true });
+        capCard.title = `${cap.title} — toucher pour retirer le Capitaine`;
+        capCard.setAttribute('aria-label', `Retirer le Capitaine ${cap.title}`);
+        capCard.addEventListener('click', () => { d.captain = null; state.pickCaptain = false; changed(); });
+      } else {
+        capCard.classList.add('empty');
+        capCard.append(el('span', 'de-plus', '🎖'));
+        capCard.setAttribute('aria-label', 'Choisir un Capitaine');
+        capCard.addEventListener('click', () => { state.pickCaptain = !state.pickCaptain; render(); });
+      }
+      const capText = el('div', 'de-cap-text');
       if (capInfo) {
-        capBox.append(
+        capText.append(
           el('span', 'de-stat-label', `🎖 Capitaine · ${capInfo.style}`),
           el('span', 'de-cap-line', capInfo.passive),
           el('span', 'de-cap-line', `Pouvoir (1× par combat) — ${capInfo.power.label} : ${capInfo.power.desc}`),
-          el('span', 'de-cap-note', 'Ton Capitaine n’est jamais posé : il ne risque rien, mais tu as une pose de moins.'),
         );
       } else {
-        capBox.append(el('span', 'de-stat-label', '🎖 Capitaine'), el('span', 'de-cap-note', 'Touche 🎖 sur une carte du deck pour en faire ton Capitaine : un style de jeu, un pouvoir, et une carte jamais risquée.'));
+        capText.append(el('span', 'de-stat-label', '🎖 Capitaine'), el('span', 'de-cap-line', 'Un style de jeu : un bonus permanent + un pouvoir à utiliser une fois par combat.'));
       }
+      const pick = el('button', 'de-btn ghost de-cap-pick', state.pickCaptain ? 'Annuler' : cap ? 'Changer de Capitaine' : 'Choisir un Capitaine');
+      pick.type = 'button';
+      pick.setAttribute('aria-pressed', String(state.pickCaptain));
+      pick.addEventListener('click', () => { state.pickCaptain = !state.pickCaptain; render(); });
+      capText.append(pick);
+      capRow.append(capCard, capText);
+      capBox.append(capRow, el('span', 'de-cap-note', state.pickCaptain
+        ? '👉 Touche une carte de ta collection pour en faire ton Capitaine.'
+        : 'Il vient EN PLUS de tes 8 cartes : jamais posé, donc jamais risqué.'));
 
       const parts = [el('div', 'de-kicker', 'Vos decks'), tabs, head, slots, stats, capBox];
 
@@ -291,7 +307,7 @@
       const actions = el('div', 'de-actions');
       const clear = el('button', 'de-btn ghost', 'Vider');
       clear.type = 'button';
-      clear.addEventListener('click', () => { d.cards = []; d.captain = null; changed(); });
+      clear.addEventListener('click', () => { d.cards = []; changed(); });
       actions.append(clear);
       const full = d.cards.length === DECK_SIZE;
       if (opts.mode === 'prep') {
@@ -354,10 +370,13 @@
       list.forEach((c) => {
         const n = inDeckCount[c.url] || 0;
         const on = n > 0;
-        const can = n < c.copies && !deckFull;
-        const b = el('button', `de-card${on ? ' in-deck' : ''}`);
+        const isCap = d.captain === c.url;
+        const can = n + (isCap ? 1 : 0) < c.copies && !deckFull;
+        const canCap = !isCap && c.copies >= n + 1;
+        const picking = state.pickCaptain;
+        const b = el('button', `de-card${on ? ' in-deck' : ''}${isCap ? ' captain' : ''}${picking && canCap ? ' pickable' : ''}`);
         b.type = 'button';
-        b.disabled = !(can || on);
+        b.disabled = picking ? !canCap : !(can || on);
         b.setAttribute('aria-pressed', String(on));
         b.setAttribute('aria-label', `${c.title}, ${RARITIES[c.rarity] || RARITIES.common}, ${ARCH_LABELS[c.archetype]}, coût ${c.cost}, ${c.copies} exemplaire(s), ${n} dans le deck`);
         b.append(cardArt(c), el('span', 'de-cost', String(c.cost)), el('span', 'de-copies', `×${c.copies}`));
@@ -367,7 +386,16 @@
         const sb = specBadge(c);
         if (sb) b.append(sb);
         if (on) b.append(el('span', 'de-badge', n > 1 ? `Deck ×${n}` : 'Deck'));
+        if (isCap) b.append(el('span', 'de-cap-badge', '🎖'));
+        if (picking) b.title = canCap ? `${c.title}\n→ En faire mon Capitaine (${captains[c.archetype] ? captains[c.archetype].style : ''})` : `${c.title}\nTous ses exemplaires sont déjà dans le deck`;
         b.addEventListener('click', () => {
+          if (state.pickCaptain) {                        // 🎖 choix du Capitaine
+            if (!canCap) return;
+            d.captain = c.url;
+            state.pickCaptain = false;
+            changed();
+            return;
+          }
           const cards = d.cards;
           if (can) d.cards = [...cards, c.url];          // un emplacement de plus
           else if (on) {                                 // plus d'exemplaire libre : on en retire un

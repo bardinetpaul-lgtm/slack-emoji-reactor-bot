@@ -45,9 +45,9 @@ const ARCHETYPES = {
 
 const RARITY_MODS = {
   common:    { mult: 1,    cost: 0 },
-  rare:      { mult: 1.05, cost: 0 },
-  epic:      { mult: 1.09, cost: 0 },
-  legendary: { mult: 1.13, cost: 0 },
+  rare:      { mult: 1.06, cost: 0 },
+  epic:      { mult: 1.11, cost: 0 },
+  legendary: { mult: 1.16, cost: 0 },
 };
 
 // attaquant → archétype qu'il contre

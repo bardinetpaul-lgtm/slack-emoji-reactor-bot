@@ -30,7 +30,7 @@
 //  chaque emplacement se joue UNE fois par combat.
 //
 //  Mécaniques de style de jeu :
-//    🎖 Capitaine  : une carte du deck jamais posée → passif + pouvoir 1×
+//    🎖 Capitaine  : une 9e carte HORS du deck, jamais posée → passif + pouvoir 1×
 //    🏳 Rappel     : un groupe retourne à sa tour la plus proche ; sorti
 //                    du terrain, sa carte est sauvée (même en cas de défaite)
 //    🔥 Rage       : perdre une tour → +2 élixir et +10 % de dégâts 10 s
@@ -103,7 +103,10 @@ function shuffle(state, list) {
 // ─────────────────────────────────────────────
 // 🏗️ Création d'un combat
 //    players.X = { userId, deck: [{ url, title, rarity }], copies: { url: n },
-//                  captain?: url (une carte du deck) }
+//                  captain?: url, captainCard?: { url, title, rarity } }
+//    Le Capitaine est une 9e carte, en PLUS des 8 du deck : il ne prend
+//    aucune pose (2026-09-28 : avec tout le deck en main, perdre une pose
+//    pour lui coûtait trop cher).
 // ─────────────────────────────────────────────
 
 function createMatch({ id, seed = 1, players }) {
@@ -141,14 +144,12 @@ function createMatch({ id, seed = 1, players }) {
       }
     }
 
-    // 🎖 Capitaine : retire un emplacement de sa carte (jamais posée)
+    // 🎖 Capitaine : une 9e carte, hors du deck (jamais posée, aucune pose en moins)
     let captain = null;
-    const capIdx = p.captain ? slots.indexOf(p.captain) : -1;
-    if (capIdx >= 0) {
-      slots.splice(capIdx, 1);
-      copies[p.captain] -= 1;
-      const s = cards[p.captain];
-      captain = { url: p.captain, title: s.title, rarity: s.rarity, archetype: s.archetype, power: CAPTAINS[s.archetype].power.key, used: false };
+    const capCard = p.captain ? (p.captainCard && p.captainCard.url === p.captain ? p.captainCard : p.deck.find((c) => c.url === p.captain)) : null;
+    if (capCard) {
+      const s = getCardStats(capCard);
+      captain = { url: capCard.url, title: s.title, rarity: s.rarity, archetype: s.archetype, power: CAPTAINS[s.archetype].power.key, used: false };
     }
     const arch = captain && captain.archetype;
     if (arch === 'sort') {

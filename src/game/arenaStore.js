@@ -73,8 +73,8 @@ function normalizeDecks(raw) {
     // une même carte peut occuper plusieurs emplacements (vérifié contre la collection au combat)
     // 🛒 les cartes mystère (« shop:… ») valent pour un combat : jamais enregistrées
     const cards = (Array.isArray(d.cards) ? d.cards : []).filter((u) => typeof u === 'string' && u && !u.startsWith('shop:')).slice(0, DECK_MAX_CARDS);
-    // 🎖 Capitaine : une des cartes du deck (sinon aucun)
-    const captain = typeof d.captain === 'string' && cards.includes(d.captain) ? d.captain : null;
+    // 🎖 Capitaine : une 9e carte, hors du deck (possession vérifiée au combat)
+    const captain = typeof d.captain === 'string' && d.captain && !d.captain.startsWith('shop:') ? d.captain : null;
     return { name, cards, captain };
   });
   const active = !legacy && raw && Number.isInteger(raw.active) && raw.active >= 0 && raw.active < DECK_SLOTS ? raw.active : 0;

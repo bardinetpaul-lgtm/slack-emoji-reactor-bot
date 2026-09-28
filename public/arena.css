@@ -216,9 +216,6 @@ body.wide .top { display: none; }
 /* Éditeur : Capitaine, spécialités, cartes mystère */
 .de-slot { position: relative; }
 .de-slot .de-card { width: 100%; }
-.de-star { position: absolute; right: -6px; top: -6px; width: 26px; height: 26px; border-radius: 50%; border: none; cursor: pointer; background: var(--ink); font-size: 13px; opacity: .55; }
-.de-star.on { opacity: 1; background: var(--pink); }
-.de-star:focus-visible { outline: 3px solid var(--blue); }
 .de-card.captain { box-shadow: 0 0 0 3px var(--pink); }
 .de-spec { position: absolute; right: 6px; top: 6px; width: 22px; height: 22px; border-radius: 50%; background: var(--ink); display: flex; align-items: center; justify-content: center; font-size: 12px; }
 .de-slot .de-spec { top: auto; bottom: 6px; }
@@ -406,3 +403,15 @@ body.wide .top { display: none; }
 /* 🃏 Tout le deck en main (2026-09-28) : 8 cartes, 4 par rangée */
 .hand { grid-template-columns: repeat(4, 1fr); row-gap: 12px; }
 #hand .card { height: 92px; }
+
+/* 🎖 Capitaine : 9e carte, hors du deck */
+.de-cap-row { display: flex; gap: 14px; align-items: flex-start; }
+.de-cap-card { width: 78px; flex: none; }
+.de-cap-card.empty { background: var(--i7); font-size: 22px; cursor: pointer; }
+.de-cap-card.empty .de-plus { color: var(--cream); border-color: var(--muted); }
+.de-cap-text { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.de-cap-pick { align-self: flex-start; padding: 8px 12px; font-size: 13px; }
+.de-captain.picking { box-shadow: 0 0 0 2px var(--pink); }
+.de-card.pickable { box-shadow: 0 0 0 3px var(--pink); cursor: pointer; }
+.de-card.captain { box-shadow: 0 0 0 3px var(--cream), 0 0 0 6px var(--pink); }
+.de-cap-badge { position: absolute; left: 6px; top: 22px; z-index: 4; width: 24px; height: 24px; border-radius: 50%; background: var(--pink); display: flex; align-items: center; justify-content: center; font-size: 13px; }

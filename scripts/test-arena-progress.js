@@ -80,7 +80,7 @@ check('garde-fous : 8 cartes max, nom court, index valide, toujours 3 decks', d2
 fs.writeFileSync(path.join(TMP, 'data', 'arena.json'), JSON.stringify({ decks: { UOLD: ['a', 'b', 'c'] } }));
 arenaStore.setDecks('UCAP', { active: 0, decks: [{ name: 'C', cards: ['a', 'b'], captain: 'b' }, { cards: ['x'], captain: 'zz' }, {}] });
 check('Capitaine enregistré avec le deck', arenaStore.getCaptain('UCAP') === 'b');
-check('Capitaine hors du deck ignoré', arenaStore.getDecks('UCAP').decks[1].captain === null);
+check('Capitaine hors du deck gardé (9e carte, possession vérifiée au combat)', arenaStore.getDecks('UCAP').decks[1].captain === 'zz');
 const old = arenaStore.getDecks('UOLD');
 check('ancien format (un seul deck) repris en Deck 1', old.decks[0].cards.join() === 'a,b,c' && old.active === 0);
 
@@ -96,8 +96,10 @@ matches.setReady(m.id, 'P1');
 check('prêt', matches.getMatch(m.id).players.A.ready === true);
 matches.setReady(m.id, 'P1', false);
 check('« Prêt · annuler »', matches.getMatch(m.id).players.A.ready === false);
-const cap = matches.setDeck(m.id, 'P1', ['x0', 'x1', 'x2', 'x3', 'x4', 'x5', 'x6', 'x7'], 'x3');
-check('« Prêt » avec Capitaine : accepté et gardé', cap.ok && matches.getMatch(m.id).players.A.captain === 'x3' && arenaStore.getCaptain('P1') === 'x3');
+const cap = matches.setDeck(m.id, 'P1', ['x0', 'x1', 'x2', 'x3', 'x4', 'x5', 'x6', 'x7'], 'x9');
+check('« Prêt » avec Capitaine (9e carte, hors deck) : accepté et gardé', cap.ok && matches.getMatch(m.id).players.A.captain === 'x9' && arenaStore.getCaptain('P1') === 'x9');
+matches.setDeck(m.id, 'P1', ['x0', 'x1', 'x2', 'x3', 'x4', 'x5', 'x6', 'x7'], 'x3');
+check('Capitaine déjà dans le deck sans exemplaire en plus : refusé', matches.getMatch(m.id).players.A.captain === null);
 const m2 = matches.createMatchFor('P1', 'P2', T0, {});
 check('sans arène précisée : le jardin', !m2.ok || matches.getMatch(m2.id).arena === 'jardin');
 

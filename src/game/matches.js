@@ -101,6 +101,18 @@ function createMatchFor(userA, userB, now = Date.now(), { arena } = {}) {
 // 🃏 Préparation
 // ─────────────────────────────────────────────
 
+/**
+ * 🎖 Capitaine valable ? Une carte POSSÉDÉE, en plus des 8 du deck : s'il s'agit
+ * aussi d'une carte du deck, il faut un exemplaire de plus que ses emplacements.
+ */
+function captainOf(collection, urls, captain) {
+  if (typeof captain !== 'string' || !captain) return null;
+  const owned = collection.find((c) => c.url === captain);
+  if (!owned) return null;
+  const inDeck = urls.filter((u) => u === captain).length;
+  return owned.count >= inDeck + 1 ? captain : null;
+}
+
 function setDeck(id, userId, urls, captain = null) {
   const match = getMatch(id);
   const side = match && sideOf(match, userId);
@@ -109,7 +121,7 @@ function setDeck(id, userId, urls, captain = null) {
   const check = deckRules.validateDeck(collections.getCollection(userId), urls);
   if (!check.ok) return check;
   match.players[side].deckUrls = urls.slice();
-  match.players[side].captain = captain && urls.includes(captain) ? captain : null;
+  match.players[side].captain = captainOf(collections.getCollection(userId), urls, captain);
   match.players[side].replaced = [];
   arenaStore.setDeck(userId, urls.filter((u) => !shop.isToken(u)), match.players[side].captain);   // devient le deck par défaut (sans les achats)
   broadcast(match);
@@ -211,8 +223,9 @@ function startMatch(match, now) {
       }
     }
     p.deckUrls = urls;
-    const captain = p.captain && urls.includes(p.captain) ? p.captain : null;
-    players[side] = { userId: p.userId, deck, copies, captain };
+    const captain = captainOf(collection, urls, p.captain);
+    const captainCard = captain ? { url: captain, title: byUrl[captain].title, rarity: byUrl[captain].rarity } : null;
+    players[side] = { userId: p.userId, deck, copies, captain, captainCard };
   }
   match.engine = engine.createMatch({ id: match.id, seed: crypto.randomInt(0, 2 ** 31), players });
   match.status = 'running';

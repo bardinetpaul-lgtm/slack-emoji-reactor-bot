@@ -216,7 +216,7 @@
       art: () => row(el('span', 'tu-big', '🎖'), el('span', 'tu-big', '🏳'), el('span', 'tu-big', '🔥')),
       body: () => [
         bullets([
-          ['🎖 Capitaine :', 'dans l’éditeur, touche 🎖 sur une carte du deck. Elle n’est jamais posée (donc jamais risquée) et te donne un bonus permanent + un pouvoir à utiliser une fois par combat.'],
+          ['🎖 Capitaine :', 'dans l’éditeur, « Choisir un Capitaine » puis une carte de ta collection. C’est une 9e carte, EN PLUS de tes 8 : jamais posée (donc jamais risquée), elle te donne un bonus permanent + un pouvoir à utiliser une fois par combat.'],
           ['🏳 Rappel :', 'sans carte choisie, touche un de tes groupes. Il fait demi-tour ; s’il rejoint ta tour, sa carte est sauvée, même si tu perds.'],
           ['🔥 Rage :', 'perdre une tour te donne +2 élixir et +10 % de dégâts pendant 10 s. Rien n’est joué d’avance.'],
         ]),

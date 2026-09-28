@@ -45,9 +45,9 @@ donnés par personnage.
 | Rareté | Multiplicateur stats | Coût |
 |---|---|---|
 | ⚪ Commune | ×1,0 | +0 |
-| 🔵 Rare | ×1,06 | +0 |
-| 🟣 Épique | ×1,13 | +0 |
-| 🟡 Légendaire | ×1,2 | +0 |
+| 🔵 Rare | ×1,06 (PV) | +0 |
+| 🟣 Épique | ×1,11 (PV) | +0 |
+| 🟡 Légendaire | ×1,16 (PV) | +0 |
 
 Pour la **Pompe**, la rareté multiplie PV et durée de vie, **jamais la cadence de production**.
 Pour l'**Essaim**, le bonus de rareté est réduit de moitié (ses 3 unités en profitent chacune).
@@ -183,19 +183,23 @@ Pour y arriver, **la rareté ne renforce que les PV** (×1,04 / ×1,07 / ×1,10)
 les épiques / légendaires ont en plus une **Spécialité**.
 
 ### 🎖 Capitaine
-Une carte du deck est désignée Capitaine : **jamais posée** (donc jamais risquée), elle occupe un
-emplacement (7 poses au lieu de 8) et donne un passif + un **pouvoir utilisable une fois** :
+**9e carte, hors du deck** (2026-09-28, décision de Paul) : choisie dans sa collection **en plus des
+8 cartes**, **jamais posée** (donc jamais risquée) ; elle donne un passif + un **pouvoir utilisable une
+fois**. Tout le monde garde ses 8 poses. Il faut posséder la carte (un exemplaire de plus si elle est
+aussi dans le deck). Avant : une carte du deck (7 poses) — avec tout le deck en main, un Capitaine ne
+gagnait plus que 19–24 % sans bonus.
 
-| Capitaine | Style | Passif | Pouvoir |
+| Capitaine | Style | Passif | Pouvoir (au point touché, rayon 16) |
 |---|---|---|---|
-| Tank | Siège | Tanks +15 % PV | Rempart : ma tour la plus proche du point touché invulnérable 4 s |
-| Guerrier | Rush | unités +25 % vitesse, +15 % dégâts | Charge : mes unités de la zone, vitesse ×2 et dégâts +20 % pendant 3 s |
-| Tireur | Contrôle | tours +8 % portée | Salve : 200 dégâts aux ennemis de la zone |
+| Tank | Siège | Tanks +50 % PV | Rempart : ma tour la plus proche invulnérable 10 s |
+| Guerrier | Rush | unités +35 % vitesse, +30 % dégâts | Charge : mes unités de la zone, vitesse ×2 et dégâts +40 % pendant 6 s |
+| Tireur | Contrôle | tours +10 % portée | Salve : 200 dégâts aux ennemis de la zone |
 | Essaim | Nuée | Essaims +2 abeilles | Renforts : 4 abeilles gratuites |
-| Pompe | Économie | +2 élixir au départ, recharge +10 %, élixir jusqu'à 12 | Surchauffe : élixir ×2 pendant 12 s |
+| Pompe | Économie | +2 élixir au départ, recharge +5 %, élixir jusqu'à 11 | Surchauffe : élixir ×2 pendant 6 s |
 | Sort | Magie | Écho : chaque Sort se relance une fois gratuitement (sans carte en jeu), −1 élixir | Gel : ennemis de la zone figés 3 s |
 
-Chaque Capitaine gagne entre 41 % et 60 % contre un deck sans Capitaine (bons joueurs des deux côtés).
+Simulation (2026-09-28, 200 combats par ligne, bons joueurs) : chaque Capitaine contre les cinq autres
+gagne entre 43 % et 64 % (Siège 44, Rush 51, Contrôle 63, Nuée 56, Magie 49, Économie 43).
 
 ### 🏳 Rappel
 Toucher un de ses groupes le fait **faire demi-tour** (il ne combat plus, reste vulnérable). Arrivé à sa

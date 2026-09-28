@@ -58,8 +58,9 @@ const give = (s, side, urls) => { s.players[side].hand = urls.slice(); s.players
 {
   check('6 capitaines, un par archétype', Object.keys(captains.CAPTAINS).sort().join() === [...ARCHS].sort().join());
   const s = match(player('UA', DECK_A, { captain: 'tank1' }));
-  check('le Capitaine ne se pose jamais : 7 emplacements jouables', s.players.A.hand.length === 7
-    && !s.players.A.hand.includes('tank1'));
+  check('le Capitaine (9e carte) ne prend aucune pose : 8 emplacements jouables', s.players.A.hand.length === 8);
+  const out = match({ ...player('UA', DECK_A), captain: 'tank3', captainCard: { url: 'tank3', title: 'tank3', rarity: 'common' } });
+  check('Capitaine hors du deck : accepté (9e carte), deck intact', out.players.A.captain && out.players.A.captain.archetype === 'tank' && out.players.A.hand.length === 8 && !out.players.A.hand.includes('tank3'));
   check('vue : Capitaine, pouvoir et état', engine.publicState(s, 'A').players.A.captain.power === 'rempart' && engine.publicState(s, 'A').players.A.captain.used === false);
   check('sans Capitaine : 8 emplacements', match().players.A.hand.length === 8);
   check('Capitaine hors deck ignoré', match(player('UA', DECK_A, { captain: 'nope' })).players.A.captain === null);
@@ -68,7 +69,7 @@ const give = (s, side, urls) => { s.players[side].hand = urls.slice(); s.players
   const pompe = match(player('UA', DECK_A, { captain: 'pompe1' }));
   check(`Économie (Pompe) : +${TUNING.startElixir} élixir au départ`, pompe.players.A.elixir === 5 + TUNING.startElixir);
   run(pompe, 20000);
-  check('Économie (Pompe) : élixir jusqu’à 12', pompe.players.A.elixir === 12 && engine.publicState(pompe, 'A').players.A.elixirMax === 12);
+  check(`Économie (Pompe) : élixir jusqu’à ${TUNING.elixirMax}`, pompe.players.A.elixir === TUNING.elixirMax && engine.publicState(pompe, 'A').players.A.elixirMax === TUNING.elixirMax);
   const sortC = match(player('UA', DECK_A, { captain: 'sort1' }));
   check('Magie (Sort) : Sorts à −1 élixir', engine.cardStats(sortC, 'A', 'sort1').cost === cards.getCardStats(card('sort1')).cost - 1);
   const echo = match(player('UA', ['sort1', 'sort2', 'guerrier1', 'guerrier2', 'tireur1', 'tireur2', 'tank1', 'essaim1'], { captain: 'sort1' }));
