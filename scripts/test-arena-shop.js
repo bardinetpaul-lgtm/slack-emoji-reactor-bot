@@ -80,7 +80,7 @@ check('lancement : 65 crédits débités', credits.getBalance('UA') === 35);
 const side = g.players.A.userId === 'UA' ? 'A' : 'B';
 const rented = Object.values(g.engine.players[side].cards).filter((c) => c.rented);
 check('combat : 2 cartes achetées dans le deck, une légendaire et une épique', rented.length === 2 && rented.some((c) => c.rarity === 'legendary') && rented.some((c) => c.rarity === 'epic'));
-check('combat : révélées dans le cycle (main ou file)', rented.every((c) => g.engine.players[side].hand.concat(g.engine.players[side].queue).includes(c.url)));
+check('combat : révélées dans la main', rented.every((c) => g.engine.players[side].hand.includes(c.url)));
 // on pose la carte achetée si elle est en main, puis on abandonne
 const r = rented.find((c) => g.engine.players[side].hand.includes(c.url));
 if (r) {
@@ -118,7 +118,7 @@ const pg = matches.getMatch(p.id);
 const ps = pg.players.A.userId === 'UA' ? 'A' : 'B';
 const pr = Object.values(pg.engine.players[ps].cards).filter((c) => c.rented);
 check('solde 30 : l\'épique (25) passe, la légendaire (40) saute', pr.length === 1 && pr[0].rarity === 'epic' && credits.getBalance('UA') === 5);
-check('solde insuffisant : deck quand même complet', pg.engine.players[ps].hand.length + pg.engine.players[ps].queue.length === 8);
+check('solde insuffisant : deck quand même complet', pg.engine.players[ps].hand.length === 8);
 
 matches.stop();
 fs.rmSync(TMP, { recursive: true, force: true });

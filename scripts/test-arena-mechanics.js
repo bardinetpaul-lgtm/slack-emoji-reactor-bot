@@ -57,10 +57,10 @@ const give = (s, side, urls) => { s.players[side].hand = urls.slice(); s.players
 {
   check('6 capitaines, un par archétype', Object.keys(captains.CAPTAINS).sort().join() === [...ARCHS].sort().join());
   const s = match(player('UA', DECK_A, { captain: 'tank1' }));
-  check('le Capitaine ne se pose jamais : 7 emplacements jouables', s.players.A.hand.length + s.players.A.queue.length === 7
-    && !s.players.A.hand.includes('tank1') && !s.players.A.queue.includes('tank1'));
+  check('le Capitaine ne se pose jamais : 7 emplacements jouables', s.players.A.hand.length === 7
+    && !s.players.A.hand.includes('tank1'));
   check('vue : Capitaine, pouvoir et état', engine.publicState(s, 'A').players.A.captain.power === 'rempart' && engine.publicState(s, 'A').players.A.captain.used === false);
-  check('sans Capitaine : 8 emplacements', match().players.A.hand.length + match().players.A.queue.length === 8);
+  check('sans Capitaine : 8 emplacements', match().players.A.hand.length === 8);
   check('Capitaine hors deck ignoré', match(player('UA', DECK_A, { captain: 'nope' })).players.A.captain === null);
 
   // Passifs
@@ -153,17 +153,17 @@ const give = (s, side, urls) => { s.players[side].hand = urls.slice(); s.players
   give(chg, 'A', ['guerrier2']);
   engine.applyAction(chg, 'A', { type: 'deploy', url: 'guerrier2', lane: 1 });
   run(chg, 1000);
-  const ya = chg.units[0].y;
-  engine.applyAction(chg, 'A', { type: 'power', lane: 1 });
+  const at = { x: chg.units[0].x, y: chg.units[0].y };
+  engine.applyAction(chg, 'A', { type: 'power', x: chg.units[0].x, depth: chg.units[0].y });   // au point du groupe
   run(chg, 1000);
-  const fast = chg.units[0].y - ya;
+  const fast = engine.distance(chg.units[0], at);
   const cmp = match(player('UA', DECK_A, { captain: 'guerrier1' }));
   give(cmp, 'A', ['guerrier2']);
   engine.applyAction(cmp, 'A', { type: 'deploy', url: 'guerrier2', lane: 1 });
   run(cmp, 1000);
-  const yb = cmp.units[0].y;
+  const bt = { x: cmp.units[0].x, y: cmp.units[0].y };
   run(cmp, 1000);
-  check('Charge : le couloir fonce (vitesse ×2)', fast > (cmp.units[0].y - yb) * 1.8);
+  check('Charge : le groupe touché fonce (vitesse ×2)', fast > engine.distance(cmp.units[0], bt) * 1.8);
 }
 
 // ═══ 🏳 Rappel ═══

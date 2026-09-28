@@ -2,10 +2,10 @@
 //  📦 ENVOI DIFFÉRENTIEL DES ÉTATS DE COMBAT (serveur + navigateur)
 //
 //  10 états par seconde et par joueur : on n'envoie que ce qui bouge.
-//    • unité : décrite UNE fois à son apparition (camp, couloir,
+//    • unité : décrite UNE fois à son apparition (camp,
 //      archétype, PV max, place dans le groupe…), puis
-//      [id, y, pv, états] (états = gelée / ralentie / bouclier / retraite),
-//      + [.., cible] quand elle frappe (y de sa cible : flèches, coups) ;
+//      [id, x, y, pv, états] (états = gelée / ralentie / bouclier / retraite),
+//      + [.., cibleY, cibleX] quand elle frappe (flèches, coups) ;
 //    • bâtiment : décrit une fois, puis [id, pv, debout, protégé] ;
 //    • main + carte suivante, Capitaine : seulement quand ils changent ;
 //    • le reste (chrono, élixir, poses, événements) tel quel.
@@ -20,7 +20,7 @@
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.ArenaWire = api;
 }(typeof self !== 'undefined' ? self : this, function () {
-  const UNIT_LIVE = ['y', 'hp', 'frozen', 'slowed', 'shield', 'recalling', 'atk'];
+  const UNIT_LIVE = ['x', 'y', 'lane', 'hp', 'frozen', 'slowed', 'shield', 'recalling', 'atk', 'atkX'];
   const BUILDING_LIVE = ['hp', 'alive', 'shielded'];
   // états d'une unité ⇄ masque de bits
   const FLAGS = ['frozen', 'slowed', 'shield', 'recalling'];
@@ -72,8 +72,8 @@
           units.add(u.id);
           (out.un = out.un || []).push(without(u, UNIT_LIVE));
         }
-        const row = [u.id, u.y, u.hp, toMask(u)];
-        if (typeof u.atk === 'number') row.push(u.atk);   // ⚔️ en train de frapper
+        const row = [u.id, u.x, u.y, u.hp, toMask(u)];
+        if (typeof u.atk === 'number') row.push(u.atk, u.atkX);   // ⚔️ en train de frapper
         out.u.push(row);
       }
       units = new Set(us.map((u) => u.id));   // les morts sont oubliés
@@ -125,7 +125,11 @@
         }
       }
 
-      const units = u.map(([id, y, hp, mask, atk]) => ({ ...unitInfo.get(id), y, hp, ...fromMask(mask), atk: typeof atk === 'number' ? atk : null }));
+      const units = u.map(([id, x, y, hp, mask, atk, atkX]) => ({
+        ...unitInfo.get(id), x, y, hp, ...fromMask(mask),
+        lane: x < 33.5 ? 0 : x > 66.5 ? 2 : 1,
+        atk: typeof atk === 'number' ? atk : null, atkX: typeof atkX === 'number' ? atkX : null,
+      }));
       const alive = new Set(u.map(([id]) => id));
       for (const id of unitInfo.keys()) if (!alive.has(id)) unitInfo.delete(id);
 

@@ -84,7 +84,7 @@ register('vampire', {
 register('explosion', {
   onDeath: ({ unit, foesNear, hurt, emit }) => {
     for (const foe of foesNear(T.explosionRadius)) hurt(foe, unit.dps * T.explosionDps);
-    emit({ type: 'explosion', side: unit.side, lane: unit.lane, y: unit.y });
+    emit({ type: 'explosion', side: unit.side, lane: unit.lane, x: unit.x, y: unit.y });
   },
 });
 

@@ -61,16 +61,15 @@
 
   function mapArt({ zone = false, arrows = false } = {}) {
     let m = '<rect x="0" y="0" width="180" height="220" rx="14" fill="#F3EFED"/>';
-    for (const x of [40, 90, 140]) m += `<rect x="${x - 12}" y="0" width="24" height="220" fill="#E5E0DD"/>`;
     if (zone) m += `<rect x="6" y="116" width="168" height="78" rx="8" fill="rgba(28,114,241,.14)" stroke="${BLUE}" stroke-width="1.5" stroke-dasharray="4 4"/>`;
     m += '<rect x="0" y="102" width="180" height="16" fill="#1A201D"/>';
-    for (const x of [40, 90, 140]) m += `<rect x="${x - 10}" y="102" width="20" height="16" fill="#F3EFED" opacity=".9"/>`;
+    for (const x of [50, 130]) m += `<rect x="${x - 11}" y="100" width="22" height="20" rx="4" fill="#E5E0DD"/>`;   // 2 ponts
     for (const x of [40, 90, 140]) m += tower(x, 50, ORANGE) + tower(x, 172, BLUE);
     m += qg(90, 20, ORANGE) + qg(90, 202, BLUE);
     if (arrows) {
-      m += `<path d="M140 150 L140 70" stroke="${BLUE}" stroke-width="3" stroke-linecap="round" marker-end="url(#tu-arrow)"/>`;
+      m += `<path d="M115 150 L130 122 L130 98 L140 70" fill="none" stroke="${BLUE}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#tu-arrow)"/>`;
       m += `<defs><marker id="tu-arrow" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M0 0L10 5L0 10z" fill="${BLUE}"/></marker></defs>`;
-      m += `<circle cx="140" cy="150" r="7" fill="${BLUE}"/>`;
+      m += `<circle cx="115" cy="150" r="7" fill="${BLUE}"/>`;
     }
     return svg(m, '0 0 180 220');
   }
@@ -161,7 +160,7 @@
       body: () => [
         para(['Un duel ', ['en temps réel'], ' de ', ['2 minutes'], ' contre un collègue, avec tes vraies cartes Jeanpip.']),
         para(['🎯 But : ', ['détruire le QG adverse'], '. Sinon, à la fin du temps, celui qui a détruit le plus de ', ['tours'], ' gagne (puis le QG le moins abîmé).']),
-        para(['Le terrain a ', ['3 couloirs'], ', chacun gardé par une tour. Toi en bas (bleu), l’adversaire en haut (orange).']),
+        para(['Chaque camp a ', ['3 tours et un QG'], '. Une ', ['rivière'], ' sépare les camps : on la traverse par ', ['2 ponts'], ' (l’🐝 Essaim, lui, vole). Toi en bas (bleu), l’adversaire en haut (orange).']),
       ],
     },
     {
@@ -169,7 +168,7 @@
       title: 'Ton deck de 8 cartes',
       art: () => row(miniCard('common', 'Commune'), miniCard('rare', 'Rare'), miniCard('epic', 'Épique'), miniCard('legendary', 'Légendaire')),
       body: () => [
-        para(['Ton deck compte ', ['8 cartes'], ', et ', ['chaque carte se joue une seule fois'], ' par combat. En combat, tu as ', ['4 cartes en main'], ' ; la suivante est affichée à gauche.']),
+        para(['Ton deck compte ', ['8 cartes'], ', et ', ['chaque carte se joue une seule fois'], ' par combat. En combat, ', ['tes 8 cartes sont en main'], ' : tu poses celle que tu veux, quand tu as l’élixir.']),
         para(['Le ', ['cadre coloré'], ' indique la rareté : plus elle est haute, plus la carte a de PV. Les Épiques et Légendaires ont en plus une ', ['spécialité ✨'], '.']),
         para(['Tu as une carte en plusieurs exemplaires ? Tu peux la mettre plusieurs fois dans ton deck.']),
       ],
@@ -189,7 +188,7 @@
       art: () => mapArt({ zone: true, arrows: true }),
       body: () => [
         para(['👆 ', ['Touche une carte'], ' puis ', ['l’endroit du terrain'], ' (ou glisse-la directement). Un fantôme montre où ton groupe apparaîtra, en rouge si c’est interdit.']),
-        para(['Tu poses dans ', ['ta moitié (zone bleue)'], '. Quand une tour adverse tombe, tu peux poser plus loin dans ', ['son couloir'], '. Un 💥 Sort se vise ', ['n’importe où'], '.']),
+        para(['Tu poses ', ['où tu veux dans ta moitié'], ' (zone bleue). Quand une tour adverse tombe, tu peux aussi poser ', ['autour d’elle'], '. Un 💥 Sort se vise ', ['n’importe où'], ' et frappe tout de suite : touche le groupe ennemi, il le suit.']),
         para(['Le groupe apparaît ', ['0,5 s'], ' après. Raccourcis : touches ', ['1 à 4'], ', Échap pour annuler.']),
       ],
     },
@@ -206,9 +205,9 @@
       title: 'Qui attaque qui',
       art: cycleArt,
       body: () => [
-        para(['Chaque groupe avance dans son couloir et attaque ', ['l’ennemi le plus proche'], ', même celui qu’il vient de croiser.']),
+        para(['Chaque groupe va vers ', ['la cible la plus proche'], ' : un ennemi repéré, sinon ', ['la tour ennemie la plus proche'], ' (ou le QG). À pied, il passe par le pont le plus court.']),
         para(['Le 🛡 ', ['Tank ignore les troupes'], ' et fonce sur les bâtiments : c’est ton bouclier. Pendant que l’ennemi tape dessus, tes troupes derrière font le travail.']),
-        para(['Les ', ['tours'], ' tirent dans leur couloir. Le ', ['QG'], ' ne tire que sur ce qui entre par une tour tombée. Les poses adverses sont signalées ', ['en orange'], ', et les 4 dernières s’affichent en haut du terrain.']),
+        para(['Les ', ['tours'], ' et le ', ['QG'], ' tirent sur l’ennemi le plus proche à leur portée. Les poses adverses sont signalées ', ['en orange'], ', et les 4 dernières s’affichent en haut du terrain.']),
       ],
     },
     {

@@ -88,20 +88,20 @@ const tower = (s, side, lane) => s.buildings.find((b) => b.side === side && b.ki
   check('Sort visé : épargne le groupe hors zone (devant)', Math.abs(front() - f0) < 1 || front() >= f0 - 5);
 }
 
-// ─── Terrain : point touché → couloir + profondeur ───
+// ─── Terrain : point touché → point du moteur (x absolu + profondeur) ───
 {
   const none = { you: 'A', buildings: [0, 1, 2].map((lane) => ({ side: 'B', kind: 'tower', lane, alive: true })) };
-  const at = board.toBoard(1, 30, 'A');
+  const at = board.toBoard(50, 30, 'A');
   const p = board.pointToDeploy(at.x, at.y, none);
-  check('vue A : point → couloir 1, profondeur ≈ 30', p.ok && p.lane === 1 && Math.abs(p.depth - 30) < 1);
+  check('vue A : point → x ≈ 50, profondeur ≈ 30', p.ok && Math.abs(p.x - 50) < 0.5 && Math.abs(p.depth - 30) < 1);
   const bb = { you: 'B', buildings: [0, 1, 2].map((lane) => ({ side: 'A', kind: 'tower', lane, alive: true })) };
-  const atB = board.toBoard(0, 70, 'B');   // y absolu 70 = profondeur 30 pour B
+  const atB = board.toBoard(17, 70, 'B');   // y absolu 70 = profondeur 30 pour B
   const q = board.pointToDeploy(atB.x, atB.y, bb);
-  check('vue B : même geste, profondeur ≈ 30 et bon couloir', q.ok && q.lane === 0 && Math.abs(q.depth - 30) < 1);
+  check('vue B : même geste, profondeur ≈ 30 et même x absolu', q.ok && Math.abs(q.x - 17) < 0.5 && Math.abs(q.depth - 30) < 1);
   check('rivière : refusée', board.pointToDeploy(180, 320, none).reason === 'zone');
   const spell = board.pointToDeploy(180, 150, none, { spell: true });
   check('Sort : visable n\'importe où, même chez l\'adversaire', spell.ok && spell.depth > 80);
-  check('aller-retour : profondeur → point → profondeur', Math.abs(board.pointToDeploy(board.toBoard(2, 40, 'A').x, board.toBoard(2, 40, 'A').y, none).depth - 40) < 1);
+  check('aller-retour : profondeur → point → profondeur', Math.abs(board.pointToDeploy(board.toBoard(83, 40, 'A').x, board.toBoard(83, 40, 'A').y, none).depth - 40) < 1);
   const ghost = board.renderGhost({ x: 60, y: 450, ok: true, archetype: 'guerrier', sprite: 's1' });
   check('fantôme : aperçu du groupe au point', ghost.includes('#s1') && ghost.includes('data-fx="ghost"'));
   check('fantôme : rouge si interdit', board.renderGhost({ x: 180, y: 320, ok: false, archetype: 'guerrier', sprite: 's1' }).includes('#FF6229'));

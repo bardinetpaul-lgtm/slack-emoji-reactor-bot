@@ -19,7 +19,7 @@
 //  Une carte de combattants pose TOUJOURS un groupe (`count`) : hp et dps
 //  sont PAR personnage (total de la carte = count × valeur).
 //
-//  Unités du terrain : distance en « cases » (couloir de 0 à 100),
+//  Unités du terrain : distance en « cases » (terrain de 0 à 100),
 //  vitesse en cases/s, durées en ms.
 // ═══════════════════════════════════════════════════════════
 

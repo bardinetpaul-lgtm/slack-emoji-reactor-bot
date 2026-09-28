@@ -147,13 +147,13 @@ function botAct(state) {
   const p = state.players.B;
   const events = [];
   if (p.captain && !p.captain.used && state.timeMs > 40000 && Math.random() < 0.01) {
-    events.push(...engine.applyAction(state, 'B', { type: 'power', lane: Math.floor(Math.random() * 3) }).events);
+    events.push(...engine.applyAction(state, 'B', { type: 'power', x: 10 + Math.random() * 80, depth: 20 + Math.random() * 40 }).events);
   }
   const playable = p.hand.filter((u) => engine.cardStats(state, 'B', u).cost <= p.elixir);
   if (!playable.length || Math.random() < 0.9) return events;
   const url = playable[Math.floor(Math.random() * playable.length)];
   const threat = state.units.filter((u) => u.side === 'A').sort((x, y) => y.y - x.y)[0];
-  events.push(...engine.applyAction(state, 'B', { type: 'deploy', url, lane: threat ? threat.lane : Math.floor(Math.random() * 3) }).events);
+  events.push(...engine.applyAction(state, 'B', { type: 'deploy', url, x: threat ? Math.min(92, Math.max(8, threat.x)) : 10 + Math.random() * 80, depth: 15 + Math.random() * 25 }).events);   // pose libre : face à la menace, sinon au hasard
   return events;
 }
 

@@ -402,3 +402,7 @@ body.wide .top { display: none; }
   .tu-roles { grid-template-columns: 1fr; }
   .tu-btn { padding: 10px 12px; font-size: 14px; }
 }
+
+/* 🃏 Tout le deck en main (2026-09-28) : 8 cartes, 4 par rangée */
+.hand { grid-template-columns: repeat(4, 1fr); row-gap: 12px; }
+#hand .card { height: 92px; }

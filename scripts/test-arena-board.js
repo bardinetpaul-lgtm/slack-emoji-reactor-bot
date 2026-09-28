@@ -18,16 +18,17 @@ function check(label, cond) {
   if (!cond) failures += 1;
 }
 const near = (a, b, tol = 0.5) => Math.abs(a - b) <= tol;
+const COL = [17, 50, 83];   // x du moteur des trois tours
 
-// 📐 Placement (plan de la DA : couloirs x = 60 / 180 / 300)
-check('mes tours en bas (DA : y ≈ 500)', near(board.toBoard(0, 15, 'A').y, 504, 1) && near(board.toBoard(0, 15, 'A').x, 60));
-check('mon QG = tour principale en bas (y = 592)', near(board.toBoard(1, 5, 'A').y, 592));
-check('tours adverses en haut (y ≈ 146)', near(board.toBoard(2, 85, 'A').y, 146, 1));
-check('QG adverse en haut (y = 56)', near(board.toBoard(1, 95, 'A').y, 56));
-check('rivière au milieu (y = 320)', near(board.toBoard(1, 50, 'A').y, 320));
-check('vue du joueur B : son camp en bas aussi', near(board.toBoard(0, 85, 'B').y, board.toBoard(0, 15, 'A').y));
-check('vue du joueur B : couloirs en miroir', near(board.toBoard(0, 50, 'B').x, 300) && near(board.toBoard(2, 50, 'B').x, 60));
-check('ordre monotone : plus on avance, plus on monte', board.toBoard(1, 30, 'A').y > board.toBoard(1, 60, 'A').y);
+// 📐 Placement (plan de la DA : tours en x = 60 / 180 / 300)
+check('mes tours en bas (DA : y ≈ 500)', near(board.toBoard(COL[0], 15, 'A').y, 504, 1) && near(board.toBoard(COL[0], 15, 'A').x, 60));
+check('mon QG = tour principale en bas (y = 592)', near(board.toBoard(COL[1], 5, 'A').y, 592));
+check('tours adverses en haut (y ≈ 146)', near(board.toBoard(COL[2], 85, 'A').y, 146, 1));
+check('QG adverse en haut (y = 56)', near(board.toBoard(COL[1], 95, 'A').y, 56));
+check('rivière au milieu (y = 320)', near(board.toBoard(COL[1], 50, 'A').y, 320));
+check('vue du joueur B : son camp en bas aussi', near(board.toBoard(COL[0], 85, 'B').y, board.toBoard(COL[0], 15, 'A').y));
+check('vue du joueur B : terrain en miroir', near(board.toBoard(COL[0], 50, 'B').x, 300) && near(board.toBoard(COL[2], 50, 'B').x, 60));
+check('ordre monotone : plus on avance, plus on monte', board.toBoard(COL[1], 30, 'A').y > board.toBoard(COL[1], 60, 'A').y);
 
 // 🏞️ Arènes de la DA
 check('trois arènes', JSON.stringify(Object.keys(board.ARENAS)) === JSON.stringify(['jardin', 'port', 'serveurs']));
@@ -44,19 +45,19 @@ const view = {
   you: 'A',
   remainingMs: 72000,
   buildings: [
-    { id: 1, side: 'A', kind: 'tower', lane: 0, y: 15, hp: 600, maxHp: 600, alive: true },
-    { id: 2, side: 'B', kind: 'tower', lane: 0, y: 85, hp: 200, maxHp: 600, alive: true },
-    { id: 3, side: 'B', kind: 'tower', lane: 2, y: 85, hp: 0, maxHp: 600, alive: false },
-    { id: 4, side: 'B', kind: 'qg', lane: null, y: 95, hp: 2000, maxHp: 2000, alive: true },
-    { id: 5, side: 'A', kind: 'pompe', lane: 1, y: 18, hp: 500, maxHp: 500, alive: true, url: 'p' },
+    { id: 1, side: 'A', kind: 'tower', lane: 0, x: 17, y: 15, hp: 600, maxHp: 600, alive: true },
+    { id: 2, side: 'B', kind: 'tower', lane: 0, x: 17, y: 85, hp: 200, maxHp: 600, alive: true },
+    { id: 3, side: 'B', kind: 'tower', lane: 2, x: 83, y: 85, hp: 0, maxHp: 600, alive: false },
+    { id: 4, side: 'B', kind: 'qg', lane: null, x: 50, y: 95, hp: 2000, maxHp: 2000, alive: true },
+    { id: 5, side: 'A', kind: 'pompe', lane: 1, x: 50, y: 18, hp: 500, maxHp: 500, alive: true, url: 'p' },
   ],
   units: [
-    { id: 10, side: 'A', lane: 1, y: 40, hp: 100, maxHp: 170, archetype: 'guerrier', url: 'g', slot: 0, packSize: 3 },
-    { id: 11, side: 'B', lane: 1, y: 60, hp: 105, maxHp: 105, archetype: 'essaim', url: 'e', slot: 0, packSize: 6 },
-    { id: 12, side: 'B', lane: 1, y: 61, hp: 105, maxHp: 105, archetype: 'essaim', url: 'e', slot: 1, packSize: 6 },
-    { id: 13, side: 'B', lane: 1, y: 62, hp: 105, maxHp: 105, archetype: 'essaim', url: 'e', slot: 2, packSize: 6 },
+    { id: 10, side: 'A', lane: 1, x: 50, y: 40, hp: 100, maxHp: 170, archetype: 'guerrier', url: 'g', slot: 0, packSize: 3 },
+    { id: 11, side: 'B', lane: 1, x: 50, y: 60, hp: 105, maxHp: 105, archetype: 'essaim', url: 'e', slot: 0, packSize: 6 },
+    { id: 12, side: 'B', lane: 1, x: 50, y: 61, hp: 105, maxHp: 105, archetype: 'essaim', url: 'e', slot: 1, packSize: 6 },
+    { id: 13, side: 'B', lane: 1, x: 50, y: 62, hp: 105, maxHp: 105, archetype: 'essaim', url: 'e', slot: 2, packSize: 6 },
   ],
-  pending: [{ side: 'B', url: 'g2', lane: 0, archetype: 'tireur' }],
+  pending: [{ side: 'B', url: 'g2', lane: 0, x: 17, y: 80, archetype: 'tireur' }],
 };
 const sprites = { g: 's1', e: 's2', p: 's3', g2: 's4' };
 const svg = board.renderScene(view, { arena: 'port', sprites });
@@ -71,7 +72,7 @@ check('scène : barre de vie de la tour abîmée', svg.includes('#FF6229') && sv
 check('scène : aucune valeur cassée', !/NaN|undefined/.test(svg));
 
 // 🚶 Marche et formations
-const walker = { id: 20, side: 'A', lane: 0, y: 30, hp: 170, maxHp: 170, archetype: 'guerrier', url: 'w', slot: 1, packSize: 3, moving: true };
+const walker = { id: 20, side: 'A', lane: 0, x: 17, y: 30, hp: 170, maxHp: 170, archetype: 'guerrier', url: 'w', slot: 1, packSize: 3, moving: true };
 const wv = { you: 'A', buildings: [], units: [walker] };
 const wsprites = { w: { id: 'w1', walk: 'step' } };
 const f1 = board.renderDynamic(wv, { sprites: wsprites, time: 0 });
@@ -116,47 +117,58 @@ check('effets : flèche, obus et impact dessinés', shots.includes('data-fx="arr
   const live = { innerHTML: '' };
   const svgEl = { setAttribute() {}, innerHTML: '', querySelector: (q) => (q === '[data-live]' ? live : { innerHTML: '' }) };
   const r = board.createRenderer(svgEl, { arena: 'jardin', symbols: '', sprites: { a: { id: 'a1', walk: 'step' } } });
-  const archer = { id: 7, side: 'A', lane: 1, y: 40, hp: 115, maxHp: 115, archetype: 'tireur', url: 'a', slot: 0, packSize: 3, atk: 52 };
+  const archer = { id: 7, side: 'A', lane: 1, x: 50, y: 40, hp: 115, maxHp: 115, archetype: 'tireur', url: 'a', slot: 0, packSize: 3, atk: 52 };
   r.push({ you: 'A', status: 'running', units: [archer], buildings: [], events: [] });
   tickCb(performance.now() + 50);
   check('animation : un Tireur qui attaque décoche une flèche', live.innerHTML.includes('data-fx="arrow"'));
   r.stop();
 }
 
-// 👆 Menu de pose : point touché → couloir (DA « Combat - Menu de pose »)
-const noBreach = { you: 'A', buildings: [0, 1, 2].map((lane) => ({ side: 'B', kind: 'tower', lane, alive: true })) };
-check('pose : moitié basse, couloir gauche', board.pointToDeploy(50, 500, noBreach).ok && board.pointToDeploy(50, 500, noBreach).lane === 0 && !board.pointToDeploy(50, 500, noBreach).forward);
-check('pose : couloir le plus proche du point', board.pointToDeploy(200, 400, noBreach).lane === 1 && board.pointToDeploy(340, 620, noBreach).lane === 2);
+// 👆 Menu de pose : point touché → point du moteur (pose libre)
+const towers = (side, dead = []) => [0, 1, 2].map((lane) => ({ side, kind: 'tower', lane, x: COL[lane], y: side === 'B' ? 85 : 15, alive: !dead.includes(lane) }));
+const noBreach = { you: 'A', buildings: towers('B') };
+const p1 = board.pointToDeploy(50, 500, noBreach);
+check('pose : ma moitié, au point touché (x absolu, profondeur)', p1.ok && Math.abs(board.planX(p1.x) - 50) < 1 && Math.abs(p1.depth - board.unmapY(500)) < 0.2 && !p1.forward);
+check('pose : n’importe où en largeur (entre les tours aussi)', board.pointToDeploy(120, 450, noBreach).ok && board.pointToDeploy(240, 450, noBreach).ok);
 check('refus : rivière', board.pointToDeploy(180, 320, noBreach).reason === 'zone');
-check('refus : moitié adverse sans brèche', board.pointToDeploy(60, 240, noBreach).reason === 'no_breach');
-const breach = { you: 'A', buildings: [{ side: 'B', kind: 'tower', lane: 0, alive: false }, { side: 'B', kind: 'tower', lane: 1, alive: true }, { side: 'B', kind: 'tower', lane: 2, alive: true }] };
-check('brèche : pose avancée dans le couloir ouvert', board.pointToDeploy(60, 240, breach).ok && board.pointToDeploy(60, 240, breach).lane === 0 && board.pointToDeploy(60, 240, breach).forward);
-check('brèche : pas ailleurs', board.pointToDeploy(300, 240, breach).reason === 'no_breach');
-const breachB = { you: 'B', buildings: [{ side: 'A', kind: 'tower', lane: 0, alive: false }, { side: 'A', kind: 'tower', lane: 1, alive: true }, { side: 'A', kind: 'tower', lane: 2, alive: true }] };
-check('joueur B : couloirs en miroir pour la pose', board.pointToDeploy(300, 500, breachB).lane === 0 && board.pointToDeploy(300, 240, breachB).forward === true);
+check('refus : bord du terrain', board.pointToDeploy(2, 500, noBreach).reason === 'zone');
+check('refus : moitié adverse sans brèche', board.pointToDeploy(60, 200, noBreach).reason === 'no_breach');
+const breach = { you: 'A', buildings: towers('B', [0]) };
+check('brèche : pose autour de la tour tombée', board.pointToDeploy(60, 170, breach).ok && board.pointToDeploy(60, 170, breach).forward);
+check('brèche : pas loin d’elle', board.pointToDeploy(300, 170, breach).reason === 'no_breach');
+const breachB = { you: 'B', buildings: towers('A', [0]) };
+const pb = board.pointToDeploy(300, 170, breachB);
+check('joueur B : terrain en miroir (x absolu) pour la pose', pb.ok && Math.abs(pb.x - 17) < 3 && board.pointToDeploy(60, 500, breachB).x > 80);
 const zones = board.renderZones(breach);
 check('zones : moitié + brèche en pointillé bleu', (zones.match(/<path/g) || []).length === 2 && zones.includes('#1C72F1') && zones.includes('6 5'));
 check('zones : sans brèche, seulement ma moitié', (board.renderZones(noBreach).match(/<path/g) || []).length === 1);
+// 💥 Sort : on vise le corps d'un ennemi → le Sort colle à son groupe
+const foeAt = { you: 'A', buildings: towers('B'), units: [{ id: 5, side: 'B', x: 40, y: 62, archetype: 'guerrier' }] };
+const body = board.toBoard(40, 62, 'A');
+const aim = board.pointToDeploy(body.x + 6, body.y - 18, foeAt, { spell: true });
+check('Sort : visé sur le corps → centré sur le groupe ennemi', aim.ok && Math.abs(aim.x - 40) < 0.01 && Math.abs(aim.depth - 62) < 0.01);
+check('Sort : loin de tout ennemi → au point touché', Math.abs(board.pointToDeploy(300, 150, foeAt, { spell: true }).x - board.engineX(300)) < 0.2);
 
-// 🎖 Pouvoir : couloir touché · 🏳 Rappel : groupe touché
-check('pouvoir : couloir le plus proche du point (vue A)', board.laneAtPoint(50, { you: 'A' }) === 0 && board.laneAtPoint(310, { you: 'A' }) === 2);
-check('pouvoir : couloirs en miroir (vue B)', board.laneAtPoint(50, { you: 'B' }) === 2);
+// 🎖 Pouvoir : point touché · 🏳 Rappel : groupe touché
+const pw = board.pointToPower(60, 500, { you: 'A' });
+check('pouvoir : point du moteur touché (vue A)', Math.abs(pw.x - 17) < 0.5 && Math.abs(pw.depth - board.unmapY(500)) < 0.2);
+check('pouvoir : en miroir (vue B)', Math.abs(board.pointToPower(60, 500, { you: 'B' }).x - 83) < 0.5);
 const rv = { you: 'A', units: [
-  { id: 1, side: 'A', lane: 0, y: 30, poseId: 7, slot: 0, packSize: 3, archetype: 'guerrier' },
-  { id: 2, side: 'B', lane: 0, y: 32, poseId: 8, slot: 0, packSize: 3, archetype: 'guerrier' },
-  { id: 3, side: 'A', lane: 2, y: 30, poseId: 9, slot: 0, packSize: 3, archetype: 'guerrier', recalling: true },
+  { id: 1, side: 'A', lane: 0, x: 17, y: 30, poseId: 7, slot: 0, packSize: 3, archetype: 'guerrier' },
+  { id: 2, side: 'B', lane: 0, x: 17, y: 32, poseId: 8, slot: 0, packSize: 3, archetype: 'guerrier' },
+  { id: 3, side: 'A', lane: 2, x: 83, y: 30, poseId: 9, slot: 0, packSize: 3, archetype: 'guerrier', recalling: true },
 ] };
-const at = board.toBoard(0, 30, 'A');
+const at = board.toBoard(COL[0], 30, 'A');
 check('rappel : toucher mon groupe le désigne', board.unitAtPoint(at.x, at.y, rv, 'A') && board.unitAtPoint(at.x, at.y, rv, 'A').poseId === 7);
-check('rappel : jamais un groupe adverse', !board.unitAtPoint(board.toBoard(0, 32, 'A').x, board.toBoard(0, 32, 'A').y - 60, rv, 'A'));
-check('rappel : un groupe déjà en retraite est ignoré', !board.unitAtPoint(board.toBoard(2, 30, 'A').x, board.toBoard(2, 30, 'A').y, rv, 'A'));
+check('rappel : jamais un groupe adverse', !board.unitAtPoint(board.toBoard(COL[0], 32, 'A').x, board.toBoard(COL[0], 32, 'A').y - 60, rv, 'A'));
+check('rappel : un groupe déjà en retraite est ignoré', !board.unitAtPoint(board.toBoard(COL[2], 30, 'A').x, board.toBoard(COL[2], 30, 'A').y, rv, 'A'));
 check('rappel : rien à toucher loin des groupes', board.unitAtPoint(180, 600, rv, 'A') === null);
 
 // ✨ États visibles
-const fv = { you: 'A', buildings: [{ id: 1, side: 'A', kind: 'tower', lane: 0, y: 15, hp: 600, maxHp: 600, alive: true, shielded: true }], units: [
-  { id: 1, side: 'B', lane: 1, y: 60, hp: 10, maxHp: 10, archetype: 'guerrier', url: 'g', slot: 0, packSize: 3, frozen: true },
-  { id: 2, side: 'B', lane: 1, y: 60, hp: 10, maxHp: 10, archetype: 'guerrier', url: 'g', slot: 1, packSize: 3, shield: true },
-  { id: 3, side: 'A', lane: 1, y: 30, hp: 10, maxHp: 10, archetype: 'guerrier', url: 'g', slot: 0, packSize: 3, recalling: true },
+const fv = { you: 'A', buildings: [{ id: 1, side: 'A', kind: 'tower', lane: 0, x: 17, y: 15, hp: 600, maxHp: 600, alive: true, shielded: true }], units: [
+  { id: 1, side: 'B', lane: 1, x: 50, y: 60, hp: 10, maxHp: 10, archetype: 'guerrier', url: 'g', slot: 0, packSize: 3, frozen: true },
+  { id: 2, side: 'B', lane: 1, x: 50, y: 60, hp: 10, maxHp: 10, archetype: 'guerrier', url: 'g', slot: 1, packSize: 3, shield: true },
+  { id: 3, side: 'A', lane: 1, x: 50, y: 30, hp: 10, maxHp: 10, archetype: 'guerrier', url: 'g', slot: 0, packSize: 3, recalling: true },
 ] };
 const fs2 = board.renderDynamic(fv, { sprites: { g: 's1' } });
 check('gel : anneau bleu', fs2.includes('data-fx="frozen"'));

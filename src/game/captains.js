@@ -10,22 +10,22 @@ const CAPTAINS = {
   tank: {
     style: 'Siège',
     passive: 'Tes Tanks ont +15 % de PV.',
-    power: { key: 'rempart', label: 'Rempart', lane: true, desc: 'La tour du couloir choisi est invulnérable 4 s.' },
+    power: { key: 'rempart', label: 'Rempart', lane: true, desc: 'Ta tour la plus proche du point touché est invulnérable 4 s.' },
   },
   guerrier: {
     style: 'Rush',
     passive: 'Tes unités avancent 25 % plus vite et frappent 15 % plus fort.',
-    power: { key: 'charge', label: 'Charge', lane: true, desc: 'Tes unités du couloir foncent 3 s (vitesse ×2, dégâts +20 %).' },
+    power: { key: 'charge', label: 'Charge', lane: true, desc: 'Tes unités autour du point touché foncent 3 s (vitesse ×2, dégâts +20 %).' },
   },
   tireur: {
     style: 'Contrôle',
     passive: 'Tes tours tirent 20 % plus loin.',
-    power: { key: 'salve', label: 'Salve', lane: true, desc: '200 dégâts à toutes les unités ennemies du couloir.' },
+    power: { key: 'salve', label: 'Salve', lane: true, desc: '200 dégâts à toutes les unités ennemies autour du point touché.' },
   },
   essaim: {
     style: 'Nuée',
     passive: 'Tes Essaims ont deux abeilles de plus.',
-    power: { key: 'renforts', label: 'Renforts', lane: true, desc: '4 abeilles gratuites dans le couloir (aucune carte engagée).' },
+    power: { key: 'renforts', label: 'Renforts', lane: true, desc: '4 abeilles gratuites au point touché (aucune carte engagée).' },
   },
   pompe: {
     style: 'Économie',
@@ -35,7 +35,7 @@ const CAPTAINS = {
   sort: {
     style: 'Magie',
     passive: 'Écho : chaque Sort se relance une seconde fois, gratuitement (sans carte en jeu), et coûte 1 élixir de moins.',
-    power: { key: 'gel', label: 'Gel', lane: true, desc: 'Les unités ennemies du couloir sont figées 3 s.' },
+    power: { key: 'gel', label: 'Gel', lane: true, desc: 'Les unités ennemies autour du point touché sont figées 3 s.' },
   },
 };
 

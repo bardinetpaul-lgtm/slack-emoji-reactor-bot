@@ -67,9 +67,9 @@
     [
       'Qui frappe fort qui : ⚔️ Guerrier > 🏹 Tireur > 🐝 Essaim > 🛡 Tank, et 💥 Sort > 🐝 Essaim (×1,5). Dans l’autre sens, les coups ne font que ×0,67 (un Tireur qui tape un Guerrier, un Guerrier qui tape un Tank…).',
       'Le 🛡 Tank ne frappe jamais les troupes : il sert de bouclier. Pendant que les ennemis s’acharnent sur lui, tes Tireurs et Guerriers derrière font le travail.',
-      'Chaque groupe avance dans son couloir et attaque l’ennemi LE PLUS PROCHE, même celui qu’il vient de croiser (sauf le 🛡 Tank).',
+      'Chaque groupe va vers la cible LA PLUS PROCHE : un ennemi repéré, sinon la tour ennemie la plus proche (le 🛡 Tank, lui, ne vise que les bâtiments). À pied, on traverse la rivière par un des 2 ponts ; l’🐝 Essaim vole.',
       'Les poses adverses s’affichent sur le terrain (🏹 Tireur…) et dans le bandeau en haut du terrain.',
-      'Une tour ne tire que dans son couloir. Tant qu’elle tient, tu ne peux poser que dans ta moitié.',
+      'Tu poses où tu veux dans ta moitié, et autour d’une tour adverse détruite. Tes 8 cartes sont en main dès le début.',
       'La rareté (cadre coloré) renforce les PV : Rare +4 %, Épique +7 %, Légendaire +10 %. Les Épiques et Légendaires ont en plus une spécialité ✨.',
       'Une pose apparaît 0,5 s après avoir été jouée.',
     ].forEach((t) => rules.append(el('li', null, t)));

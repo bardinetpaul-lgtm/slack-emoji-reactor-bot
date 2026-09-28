@@ -28,7 +28,7 @@
   const REFUSALS = {
     elixir: 'Pas assez d’élixir',
     zone: 'Hors de votre zone de pose',
-    no_breach: 'La tour adverse de ce couloir tient encore : pose dans ta moitié',
+    no_breach: 'Chez l’adversaire, seulement autour d’une tour détruite',
     lane: 'Hors de votre zone de pose',
     pump_active: 'Une seule Pompe à la fois',
     not_in_hand: 'Cette carte n’est plus en main',
@@ -45,7 +45,7 @@
   let renderer = null;
   let view = null;
   let selected = null;      // { index, url } de l'emplacement choisi en main
-  let powerArmed = false;   // 🎖 pouvoir en attente d'un couloir
+  let powerArmed = false;   // 🎖 pouvoir en attente d'un point
   let handKey = '';
   let pillTimer = null;
   let editor = null;
@@ -174,7 +174,7 @@
     const me = v.players[v.you];
     const hand = me.hand || [];
     if (selected && (!hand[selected.index] || hand[selected.index].url !== selected.url)) selectCard(null);
-    const key = JSON.stringify([hand.map((c) => [c.url, c.copies, (blockOf(c, v) || {}).reason || null, c.echo]), selected, me.next && me.next.url]);
+    const key = JSON.stringify([hand.map((c) => [c.url, c.copies, (blockOf(c, v) || {}).reason || null, c.echo]), selected]);
     if (key === handKey) { updateCharge(v); return; }
     handKey = key;
 
@@ -220,9 +220,6 @@
       return b;
     }));
 
-    const next = $('next-card');
-    next.replaceChildren();
-    if (me.next) next.append(cardFace(me.next), costBadge(me.next.cost));
     updateCharge(v);
   }
 
@@ -302,7 +299,7 @@ ${DeckEditor.roleText(e.archetype)}`;
       const def = texts[cap.archetype].power;
       btn.hidden = false;
       btn.disabled = cap.used;
-      btn.textContent = cap.used ? `🎖 ${def.label} · utilisé` : powerArmed ? `🎖 ${def.label} · touche un couloir` : `🎖 ${def.label}`;
+      btn.textContent = cap.used ? `🎖 ${def.label} · utilisé` : powerArmed ? `🎖 ${def.label} · touche le terrain` : `🎖 ${def.label}`;
       btn.title = `${texts[cap.archetype].style} — ${def.desc}`;
       btn.classList.toggle('armed', powerArmed);
     } else {
@@ -349,11 +346,11 @@ ${DeckEditor.roleText(e.archetype)}`;
     const yPct = (y / ArenaBoard.H) * 100;
     const live = (renderer && renderer.current()) || view;
 
-    // 🎖 Pouvoir armé : le couloir le plus proche du point touché
+    // 🎖 Pouvoir armé : au point touché
     if (powerArmed) {
-      const lane = ArenaBoard.laneAtPoint(x, live);
+      const at = ArenaBoard.pointToPower(x, y, live);
       armPower(false);
-      const res = await send({ type: 'power', lane });
+      const res = await send({ type: 'power', x: at.x, depth: at.depth });
       if (!res.ok) flash(res.reason, yPct);
       return undefined;
     }
@@ -373,7 +370,7 @@ ${DeckEditor.roleText(e.archetype)}`;
     return deployAt(x, y);
   });
 
-  /** Pose la carte choisie au point (x, y) du plan : couloir + profondeur exacts. */
+  /** Pose la carte choisie au point (x, y) du plan (point exact du moteur). */
   async function deployAt(x, y) {
     const yPct = (y / ArenaBoard.H) * 100;
     const live = (renderer && renderer.current()) || view;
@@ -387,7 +384,7 @@ ${DeckEditor.roleText(e.archetype)}`;
 
     const { url } = selected;
     selectCard(null);
-    const res = await send({ type: 'deploy', url, lane: spot.lane, depth: spot.depth });
+    const res = await send({ type: 'deploy', url, x: spot.x, depth: spot.depth });
     if (!res.ok) flash(res.reason, yPct);
     return undefined;
   }
@@ -409,10 +406,11 @@ ${DeckEditor.roleText(e.archetype)}`;
     if (!pt || !card) { renderer.setGhost(null); return; }
     const live = renderer.current() || view;
     const spot = ArenaBoard.pointToDeploy(pt.x, pt.y, live, { spell: card.archetype === 'sort' });
-    const laneX = ArenaBoard.toBoard(spot.lane, 50, view.you).x;   // le groupe apparaît au centre du couloir
+    // le groupe apparaît au point exact (un Sort « colle » au groupe ennemi visé)
+    const at = ArenaBoard.toBoard(spot.x, view.you === 'B' ? 100 - spot.depth : spot.depth, view.you);
     const sprite = setup && setup.sprites && setup.sprites[card.url];
     renderer.setGhost({
-      x: laneX, y: pt.y, ok: spot.ok && card.cost <= me.elixir, archetype: card.archetype,
+      x: at.x, y: at.y, ok: spot.ok && card.cost <= me.elixir, archetype: card.archetype,
       sprite: sprite && (typeof sprite === 'string' ? sprite : sprite.id),
     });
   }

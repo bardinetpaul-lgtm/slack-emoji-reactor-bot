@@ -81,23 +81,18 @@ const qg = (state, side) => state.buildings.find((b) => b.side === side && b.kin
   check('double élixir la dernière minute : +1 en 1,4 s', Math.abs(d.players.A.elixir - 1) < 0.01);
 }
 
-// ─── 🃏 Main et cycle ───
+// ─── 🃏 Tout le deck en main ───
 {
   const s = newMatch();
-  check('main de 4 cartes', s.players.A.hand.length === 4);
-  check('file de 4 cartes', s.players.A.queue.length === 4);
-  const played = s.players.A.hand.find((u) => engine.cardStats(s, 'A', u).cost <= 5);
-  const next = s.players.A.queue[0];
+  check('les 8 cartes du deck sont jouables d\'emblée', s.players.A.hand.length === 8 && new Set(s.players.A.hand).size === 8);
+  const played = s.players.A.hand.find((u) => engine.cardStats(s, 'A', u).cost <= 5 && engine.cardStats(s, 'A', u).archetype !== 'sort');
   const r = engine.applyAction(s, 'A', { type: 'deploy', url: played, lane: 1 });
   check('pose acceptée', r.ok);
-  check('la carte suivante de la file arrive en main', s.players.A.hand.includes(next) && s.players.A.hand.length === 4);
-  check('carte sans exemplaire restant : sort du cycle', !s.players.A.queue.includes(played) && !s.players.A.hand.includes(played));
+  check('carte posée : elle quitte la main, les 7 autres restent', !s.players.A.hand.includes(played) && s.players.A.hand.length === 7);
 
   const c = newMatch({ A: player('UA', DECK_A, { guerrier1: 2 }) });
-  forceHand(c, 'A', ['guerrier1', 'guerrier2', 'tireur1', 'tireur2']);
-  c.players.A.queue = ['tank1', 'essaim1', 'sort1', 'pompe1'];
   engine.applyAction(c, 'A', { type: 'deploy', url: 'guerrier1', lane: 0 });
-  check('×1 dans le deck : une fois dépensée, elle ne revient pas (même avec 2 exemplaires possédés)', !c.players.A.queue.includes('guerrier1') && !c.players.A.hand.includes('guerrier1'));
+  check('×1 dans le deck : une fois dépensée, elle ne revient pas (même avec 2 exemplaires possédés)', !c.players.A.hand.includes('guerrier1'));
   check('×1 dans le deck : 0 pose restante', c.players.A.copies.guerrier1 === 0);
   let poses = 1;
   for (let i = 0; i < 20; i += 1) {
@@ -114,7 +109,7 @@ const qg = (state, side) => state.buildings.find((b) => b.side === side && b.kin
 {
   const deck3 = ['guerrier1', 'guerrier1', 'guerrier1', 'tireur1', 'tireur2', 'tank1', 'essaim1', 'sort1'];
   const s = engine.createMatch({ id: 'd3', seed: 5, players: { A: player('UA', deck3.map((u) => ({ url: u, title: u, rarity: 'common' })), { guerrier1: 3 }), B: player('UB', DECK_B) } });
-  check('×3 sur 3 emplacements : 8 cartes dans le cycle', s.players.A.hand.length + s.players.A.queue.length === 8);
+  check('×3 sur 3 emplacements : 8 cartes en main', s.players.A.hand.length === 8);
   let uses = 0;
   for (let i = 0; i < 30; i += 1) {
     s.players.A.elixir = 10;
@@ -124,10 +119,10 @@ const qg = (state, side) => state.buildings.find((b) => b.side === side && b.kin
     run(s, 500);
   }
   check('×3 sur 3 emplacements : posée exactement 3 fois', uses === 3 && s.players.A.copies.guerrier1 === 0);
-  check('plus d\'exemplaire : la carte a quitté main et file', !s.players.A.hand.includes('guerrier1') && !s.players.A.queue.includes('guerrier1'));
+  check('plus d\'exemplaire : la carte a quitté la main', !s.players.A.hand.includes('guerrier1'));
   const deck2 = ['guerrier1', 'guerrier1', 'tireur1', 'tireur2', 'tank1', 'essaim1', 'sort1', 'pompe1'];
   const s2 = engine.createMatch({ id: 'd2', seed: 5, players: { A: player('UA', deck2.map((u) => ({ url: u, title: u, rarity: 'common' })), { guerrier1: 1 }), B: player('UB', DECK_B) } });
-  check('2 emplacements mais 1 seul exemplaire : 1 seul emplacement jouable', s2.players.A.hand.concat(s2.players.A.queue).filter((u) => u === 'guerrier1').length === 1);
+  check('2 emplacements mais 1 seul exemplaire : 1 seul emplacement jouable', s2.players.A.hand.filter((u) => u === 'guerrier1').length === 1);
 }
 
 // ─── 🚫 Refus ───
@@ -137,7 +132,8 @@ const qg = (state, side) => state.buildings.find((b) => b.side === side && b.kin
   s.players.A.elixir = 4;
   check('refus : élixir insuffisant', engine.applyAction(s, 'A', { type: 'deploy', url: 'tank1', lane: 0 }).reason === 'elixir');
   check('refus : carte pas en main', engine.applyAction(s, 'A', { type: 'deploy', url: 'tireur1', lane: 0 }).reason === 'not_in_hand');
-  check('refus : couloir invalide', engine.applyAction(s, 'A', { type: 'deploy', url: 'guerrier1', lane: 3 }).reason === 'lane');
+  check('refus : sans point de pose', engine.applyAction(s, 'A', { type: 'deploy', url: 'guerrier1', lane: 3 }).reason === 'lane');
+  check('refus : au bord du terrain', engine.applyAction(s, 'A', { type: 'deploy', url: 'guerrier1', x: 1, depth: 20 }).reason === 'zone');
   check('refus : pose avancée sans brèche', engine.applyAction(s, 'A', { type: 'deploy', url: 'guerrier1', lane: 0, forward: true }).reason === 'no_breach');
   s.players.A.elixir = 10;
   s.players.A.copies.pompe1 = 2;
@@ -186,19 +182,20 @@ const qg = (state, side) => state.buildings.find((b) => b.side === side && b.kin
 // ─── 🔓 Brèche, pose avancée, dégâts au QG ───
 {
   const s = newMatch();
-  tower(s, 'B', 1).hp = 1;
+  tower(s, 'B', 0).hp = 1;
   forceHand(s, 'A', ['guerrier1', 'guerrier2', 'tireur1', 'tireur2']);
-  engine.applyAction(s, 'A', { type: 'deploy', url: 'tireur1', lane: 1 });
+  engine.applyAction(s, 'A', { type: 'deploy', url: 'tireur1', lane: 0 });
   run(s, 15000);
-  check('tour B couloir 1 détruite', !tower(s, 'B', 1).alive);
+  check('les Tireurs passent le pont et abattent la tour la plus proche (gauche)', !tower(s, 'B', 0).alive);
   check('compteur de tours détruites', engine.towersDestroyed(s, 'B') === 1);
   s.players.A.elixir = 10;
   forceHand(s, 'A', ['guerrier1', 'guerrier2', 'tireur2', 'tank1']);
-  check('pose avancée autorisée après la brèche', engine.applyAction(s, 'A', { type: 'deploy', url: 'guerrier1', lane: 1, forward: true }).ok);
+  check('refus : chez l\'adversaire, loin de la tour tombée', engine.applyAction(s, 'A', { type: 'deploy', url: 'guerrier1', x: 80, depth: 70 }).reason === 'no_breach');
+  check('pose avancée autorisée autour de la tour tombée', engine.applyAction(s, 'A', { type: 'deploy', url: 'guerrier1', x: 35, depth: 91 }).ok);
   run(s, 1000);
   check('unité avancée apparue au-delà de la rivière', s.units.some((u) => u.side === 'A' && u.y >= 60 && u.archetype === 'guerrier'));
   run(s, 6000);
-  check('le QG B prend des dégâts', qg(s, 'B').hp < 2000);
+  check('elle attaque le bâtiment le plus proche : le QG B', qg(s, 'B').hp < 2000);
 }
 
 // ─── 💥 Sort ───
@@ -274,7 +271,7 @@ const qg = (state, side) => state.buildings.find((b) => b.side === side && b.kin
   tower(s, 'B', 0).hp = 0;
   tower(s, 'B', 0).alive = false;
   forceHand(s, 'A', ['guerrier1', 'guerrier2', 'tireur1', 'tireur2']);
-  engine.applyAction(s, 'A', { type: 'deploy', url: 'guerrier1', lane: 0, forward: true });
+  engine.applyAction(s, 'A', { type: 'deploy', url: 'guerrier1', x: 35, depth: 91 });
   run(s, 20000);
   check('QG détruit → victoire immédiate', s.status === 'ended' && s.result.winner === 'A' && s.result.reason === 'qg');
 
@@ -333,8 +330,8 @@ const qg = (state, side) => state.buildings.find((b) => b.side === side && b.kin
 {
   const s = newMatch();
   const v = engine.publicState(s, 'A');
-  check('vue publique : ma main visible', Array.isArray(v.players.A.hand) && v.players.A.hand.length === 4);
-  check('vue publique : main adverse cachée', v.players.B.hand === undefined && v.players.B.handCount === 4);
+  check('vue publique : mes 8 cartes visibles', Array.isArray(v.players.A.hand) && v.players.A.hand.length === 8);
+  check('vue publique : main adverse cachée', v.players.B.hand === undefined && v.players.B.handCount === 8);
   check('vue publique : élixir adverse visible', typeof v.players.B.elixir === 'number');
 }
 
