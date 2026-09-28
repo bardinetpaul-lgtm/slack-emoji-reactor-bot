@@ -136,13 +136,32 @@ Une pose encore en train d'apparaître (délai de 0,5 s) à la fin compte aussi 
 
 ## 🎨 Rendu (DA Claude Design)
 
-- **Personnages** : `src/game/characters.js`, un par Jeanpip (graine = URL), DA « Personnages - 125 cartes ».
+- **Personnages** (2026-09-28) : `src/game/characters.js`. **Une DA globale par rôle, habillée par le
+  contenu de la carte** :
+  - ⚔️ Guerrier : fantassin en tunique, épaulières de métal, arme de mêlée qui **s'abat au contact** ;
+  - 🏹 Tireur : cape + carquois, **toujours un arc**, ses **flèches volent** jusqu'à la cible ;
+  - 🐝 Essaim : mini-personnages **ailés qui volent** (ombre au sol, ailes qui battent, piqué en attaque) ;
+  - 🛡 Tank : un **vrai char à chenilles** (chenilles qui défilent, roues qui tournent, obus + recul),
+    le personnage sort de la tourelle ;
+  - la carte apporte : couvre-chef, coupe de cheveux, lunettes, moustache/barbe/bouc, accessoires
+    (pipe, cigare, chaîne, cravate, nœud papillon, écharpe, casque audio, boucle d'oreille, médaille),
+    couleurs (peau, cheveux, couvre-chef, tenue ×2, accent — ramenées dans le style DA), arme.
+- **Look d'une carte** (`src/game/looks.js`, stocké dans `data/card-looks.json`, non versionné) :
+  1. **analyse de la photo par Claude Haiku 4.5** (`src/game/lookAnalyzer.js`, via Microsoft Foundry :
+     `ANTHROPIC_FOUNDRY_API_KEY` + `ANTHROPIC_FOUNDRY_RESOURCE`, ou `ANTHROPIC_API_KEY`) : photo réduite à
+     640 px, réponse contrainte par un schéma JSON puis revalidée ; ~0,2 centime par carte ;
+  2. sans clé ou en échec : traits analysés d'avance pour les 68 cartes d'origine
+     (`src/game/card-traits.json`), couleurs lues dans les pixels (PNG / JPEG), sinon tirage stable.
+- **Quand** : à chaque upload (`/jeanpip-addmedia`, en fond), au démarrage du bot (cartes manquantes, en
+  fond), et **après un merge** : `node scripts/generate-looks.js` (`--force` pour tout refaire).
+  `RULES_VERSION` (looks.js) change quand la lecture change : les looks périmés sont refaits.
 - **Terrain** : `public/arena-board.js`, DA « Arènes » (Le jardin, Le port, La salle serveur), plan 360×640,
   chaque joueur voit son camp en bas (bleu), l'adversaire en haut (orange).
 - **Écran de combat** : `public/arena.html/.css/.js`, DA « Combat - Menu de pose » : toucher une carte,
   puis un point de sa moitié (couloir le plus proche ; chez l'adversaire = pose avancée si brèche).
-- **Animations** : groupes en formation, marche (jambes qui alternent, corps qui se balance ; Tank et
-  robes longues se dandinent sans pas visible), respiration à l'arrêt, anneau de pose, Sorts, chips de dégâts.
+- **Animations** : groupes en formation, marche (jambes qui alternent), vol de l'Essaim, chenilles du Tank,
+  frappes, flèches, obus et impacts (le serveur envoie `atk` = y de la cible frappée), anneau de pose, Sorts,
+  chips de dégâts.
 
 ## 🎭 Styles de jeu et façons de gagner
 

@@ -172,7 +172,7 @@ function compact(view, { keyOf = {}, images = {} } = {}) {
     ...view,
     players,
     buildings: view.buildings.map((b) => ({ ...b, hp: Math.round(b.hp), url: b.url ? key(b.url) : undefined })),
-    units: view.units.map((u) => ({ ...u, y: r2(u.y), hp: Math.round(u.hp), maxHp: Math.round(u.maxHp), url: key(u.url) })),
+    units: view.units.map((u) => ({ ...u, y: r2(u.y), hp: Math.round(u.hp), maxHp: Math.round(u.maxHp), url: key(u.url), atk: typeof u.atk === 'number' ? r2(u.atk) : null })),
     pending: view.pending.map((p) => ({ ...p, url: key(p.url) })),
     // 👁 une pose porte l'image de sa carte (l'adversaire voit ce qui arrive)
     events: (view.events || []).map((e) => {

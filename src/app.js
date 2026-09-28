@@ -7,7 +7,7 @@
 const { App, LogLevel } = require('@slack/bolt');
 require('dotenv').config();
 
-const { getRandomMedia, normalizeRarity } = require('./media');
+const { getRandomMedia, normalizeRarity, getAllMedia } = require('./media');
 const { buildMediaBlocks } = require('./blocks');
 const scores = require('./scores');
 const targets = require('./targets');
@@ -23,6 +23,7 @@ const settings = require('./settings');
 const farm = require('./farm');
 const weeklyGift = require('./weeklyGift');
 const { SPAM_CARDS } = require('./spamCards');
+const looks = require('./game/looks');
 
 // ─────────────────────────────────────────────
 // 🔧 Validation de la configuration
@@ -874,6 +875,7 @@ app.command('/jeanpip-addmedia', async ({ command, ack, client, logger }) => {
     }
 
     const result = adminActions.addMediaToBank(adminId, { url, rarity, title, authorId }, logger);
+    if (result.ok) createCardLook(client, result.media, logger);
     await sendAdminResult(client, adminId, result, logger);
     if (result.ok && authorId) {
       await adminActions.notifyMediaAuthor(client, result, logger);
@@ -1558,6 +1560,7 @@ app.view('admin_addmedia_submit', async ({ ack, body, view, client, logger }) =>
 
   const result = adminActions.addMediaToBank(adminId, { url, rarity, title, authorId }, logger);
   if (!result.ok) return ack(fieldError('url', plain(result.text.split('\n')[1] || result.text)));
+  createCardLook(client, result.media, logger);
 
   await ack();
   try {
@@ -1777,6 +1780,17 @@ async function sendDM(client, userId, message) {
 }
 
 // ─────────────────────────────────────────────
+// 🎭 Personnage d'Arène d'une carte : analyse de sa photo (Claude
+//    Haiku 4.5 si une clé est configurée, sinon ses couleurs), en fond.
+// ─────────────────────────────────────────────
+function createCardLook(client, media, logger) {
+  if (!media) return;
+  looks.ensureLook(media, { client, logger })
+    .then((r) => logger.info(`🎭 Personnage d'Arène de « ${media.title} » : ${r.source}`))
+    .catch((error) => logger.error('❌ Personnage d\'Arène :', error.message));
+}
+
+// ─────────────────────────────────────────────
 // ▶️  Démarrage
 // ─────────────────────────────────────────────
 (async () => {
@@ -1811,6 +1825,11 @@ async function sendDM(client, userId, message) {
   } catch (webError) {
     console.error('❌ Serveur web non démarré :', webError.message);
   }
+
+  // 🎭 Personnages d'Arène : cartes sans look (ou aux règles périmées) faites en fond
+  looks.backfill(getAllMedia(), { client: app.client, logger: console })
+    .then((r) => { if (r.done) console.log(`🎭 Personnages d'Arène : ${r.done} créé(s) — ${r.haiku} analysé(s) par Haiku, ${r.pixels} par leurs couleurs`); })
+    .catch((error) => console.error('❌ Personnages d\'Arène :', error.message));
 
   const currentTargets = targets.getTargets();
 

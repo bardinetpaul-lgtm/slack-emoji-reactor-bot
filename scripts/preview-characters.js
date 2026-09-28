@@ -74,7 +74,7 @@ const html = `<!DOCTYPE html>
   <header style="display:flex;flex-direction:column;gap:20px">
     <div class="kicker">Arène · personnages</div>
     <h1>${cards.length} Jeanpip, <span>${cards.length} personnages.</span></h1>
-    <p>Chaque Jeanpip du catalogue a son personnage, assemblé à partir de son image (son URL). Un nouveau Jeanpip ajouté avec /jeanpip-addmedia a le sien tout de suite.</p>
+    <p>Chaque Jeanpip a son personnage : la DA de son rôle (char, archer, guerrier, essaim ailé), habillée par le contenu de sa photo (couvre-chef, coupe, lunettes, moustache, pipe, couleurs). Un nouveau Jeanpip ajouté avec /jeanpip-addmedia est analysé tout de suite.</p>
   </header>
   <div class="bar">
     ${filters.map(([k, l], i) => `<button data-filter="${k}" class="${i === 0 ? 'on' : ''}">${esc(l)}</button>`).join('')}

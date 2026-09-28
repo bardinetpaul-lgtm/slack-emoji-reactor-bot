@@ -87,6 +87,42 @@ check('formation : chaque membre du groupe a sa place', new Set([0, 1, 2].map(po
 const tank = board.renderDynamic({ ...wv, units: [{ ...walker, archetype: 'tank', url: 't', packSize: 2 }] }, { sprites: { t: { id: 't1', walk: 'sway' } }, time: 100 });
 check('Tank : balancement sans jambes animées', tank.includes('#t1-f') && !tank.includes('#t1-b'));
 
+// 🛡 Char qui roule · 🐝 essaim qui vole · ⚔️ frappe · 🏹 flèches
+const tk = { ...walker, archetype: 'tank', url: 'k', packSize: 2, slot: 0 };
+const roll = (u, time) => board.renderDynamic({ ...wv, units: [u] }, { sprites: { k: { id: 'k1', walk: 'roll' } }, time });
+check('Tank : chenilles et roues dessinées', roll(tk, 0).includes('stroke-dasharray="3 5"') && (roll(tk, 0).match(/rotate\(/g) || []).length >= 4);
+check('Tank : les chenilles défilent en roulant', roll(tk, 0) !== roll(tk, 130));
+check('Tank : immobile, rien ne roule', roll({ ...tk, moving: false }, 0) === roll({ ...tk, moving: false }, 130));
+const fl = { ...walker, archetype: 'essaim', url: 'b', packSize: 6, slot: 0 };
+const fly = (time) => board.renderDynamic({ ...wv, units: [fl] }, { sprites: { b: { id: 'b1', walk: 'fly' } }, time });
+check('Essaim : ailes à part + ombre au sol', fly(0).includes('#b1-w') && fly(0).includes('#b1-f') && fly(0).includes('opacity="0.55"'));
+check('Essaim : les ailes battent', fly(0).match(/scale\(1 ([\d.]+)\)/)[1] !== fly(40).match(/scale\(1 ([\d.]+)\)/)[1]);
+const fighter = (u) => board.renderDynamic({ ...wv, units: [u] }, { sprites: { w: { id: 'w1', walk: 'step' } }, time: 90 });
+check('Guerrier : l\'arme frappe au contact (pivot de la main)', /rotate\([-\d.]+ 16 -22\)/.test(fighter({ ...walker, atk: 34 })));
+check('Guerrier : sans cible, l\'arme ne bouge pas', !/rotate\([-\d.]+ 16 -22\)/.test(fighter({ ...walker, atk: null })));
+const shots = board.renderDynamic({ you: 'A', units: [], buildings: [] }, { fx: [
+  { type: 'arrow', x0: 10, y0: 10, x1: 100, y1: 10, dur: 260, age: 130, color: '#1C72F1' },
+  { type: 'shell', x0: 10, y0: 10, x1: 100, y1: 10, dur: 200, age: 50 },
+  { type: 'hit', x: 50, y: 50, age: 60 },
+] });
+check('effets : flèche, obus et impact dessinés', shots.includes('data-fx="arrow"') && shots.includes('data-fx="hit"') && !/NaN|undefined/.test(shots));
+
+// ⏱ Le moteur d'animation tire une flèche quand un Tireur attaque
+{
+  let tickCb = null;
+  global.requestAnimationFrame = (cb) => { tickCb = cb; return 1; };
+  global.cancelAnimationFrame = () => {};
+  global.performance = global.performance || { now: () => Date.now() };
+  const live = { innerHTML: '' };
+  const svgEl = { setAttribute() {}, innerHTML: '', querySelector: (q) => (q === '[data-live]' ? live : { innerHTML: '' }) };
+  const r = board.createRenderer(svgEl, { arena: 'jardin', symbols: '', sprites: { a: { id: 'a1', walk: 'step' } } });
+  const archer = { id: 7, side: 'A', lane: 1, y: 40, hp: 115, maxHp: 115, archetype: 'tireur', url: 'a', slot: 0, packSize: 3, atk: 52 };
+  r.push({ you: 'A', status: 'running', units: [archer], buildings: [], events: [] });
+  tickCb(performance.now() + 50);
+  check('animation : un Tireur qui attaque décoche une flèche', live.innerHTML.includes('data-fx="arrow"'));
+  r.stop();
+}
+
 // 👆 Menu de pose : point touché → couloir (DA « Combat - Menu de pose »)
 const noBreach = { you: 'A', buildings: [0, 1, 2].map((lane) => ({ side: 'B', kind: 'tower', lane, alive: true })) };
 check('pose : moitié basse, couloir gauche', board.pointToDeploy(50, 500, noBreach).ok && board.pointToDeploy(50, 500, noBreach).lane === 0 && !board.pointToDeploy(50, 500, noBreach).forward);

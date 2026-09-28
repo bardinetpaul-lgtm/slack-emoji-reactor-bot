@@ -609,6 +609,7 @@ function step(state, events) {
   const home = [];
 
   for (const u of state.units) {
+    u.attackY = null;   // ⚔️ y de la cible frappée ce pas-ci (flèches, coups à l'écran)
     if (u.frozenUntil > now) continue;   // 🎖 Gel
     const fx = state.players[u.side].effects;
     const charging = fx.charge && fx.charge.until > now && fx.charge.lane === u.lane;
@@ -634,6 +635,7 @@ function step(state, events) {
       const modified = callHook(state, u, 'onHit', { target, damage: dmg }, events);
       if (typeof modified === 'number') dmg = modified;
       hit(target, dmg);
+      u.attackY = target.y;
     } else {
       u.y += Math.sign(target.y - u.y) * Math.min(speed * dt, dist - u.range);   // vers sa cible, même derrière
     }
@@ -756,6 +758,7 @@ function publicState(state, viewer) {
       id: u.id, side: u.side, lane: u.lane, y: u.y, hp: u.hp, maxHp: u.maxHp, archetype: u.archetype, url: u.url,
       poseId: u.poseId, slot: u.slot, packSize: u.packSize, specialty: u.specialty || null,
       recalling: u.recalling || false, frozen: u.frozenUntil > now, slowed: u.slowUntil > now, shield: u.shield > 0,
+      atk: typeof u.attackY === 'number' ? u.attackY : null,
     })),
     pending: state.pending.map(({ side, url, lane, forward, y, readyAt }) => ({ side, url, lane, forward, y, readyAt, archetype: cardStats(state, side, url).archetype })),
     result: state.result,

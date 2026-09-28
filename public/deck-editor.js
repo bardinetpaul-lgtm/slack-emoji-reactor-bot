@@ -34,10 +34,10 @@
   // ×0,67 à ce qui le contre. Le Tank ne frappant jamais les troupes, son
   // « contre » ne joue que dans un sens : il encaisse mal l'Essaim, bien les Guerriers.
   const ROLES = {
-    tank:     { emoji: '🛡', label: 'Tank',     role: '2 colosses (700 PV) qui ignorent les troupes et foncent sur les tours.', vs: 'Encaisse bien les ⚔️ Guerriers (ils ne lui font que ×0,67). L’🐝 Essaim le fait fondre (×1,5).' },
-    guerrier: { emoji: '⚔️', label: 'Guerrier', role: '3 combattants au corps à corps, polyvalents.', vs: 'Écrase les 🏹 Tireurs (×1,5). Tape mal sur les 🛡 Tanks (×0,67) : laisse plutôt l’Essaim s’en charger.' },
-    tireur:   { emoji: '🏹', label: 'Tireur',   role: '3 tireurs à distance, fragiles : à protéger derrière un Tank.', vs: 'Nettoie l’🐝 Essaim (×1,5). Tape mal sur les ⚔️ Guerriers (×0,67), qui l’écrasent en retour.' },
-    essaim:   { emoji: '🐝', label: 'Essaim',   role: '6 petits très rapides.', vs: 'Fait fondre les 🛡 Tanks (×1,5). Tape mal sur les 🏹 Tireurs (×0,67), qui le nettoient. Craint les 💥 Sorts.' },
+    tank:     { emoji: '🛡', label: 'Tank',     role: '2 chars d’assaut (700 PV) qui ignorent les troupes et foncent sur les tours.', vs: 'Encaisse bien les ⚔️ Guerriers (ils ne lui font que ×0,67). L’🐝 Essaim le fait fondre (×1,5).' },
+    guerrier: { emoji: '⚔️', label: 'Guerrier', role: '3 combattants qui frappent au contact, polyvalents.', vs: 'Écrase les 🏹 Tireurs (×1,5). Tape mal sur les 🛡 Tanks (×0,67) : laisse plutôt l’Essaim s’en charger.' },
+    tireur:   { emoji: '🏹', label: 'Tireur',   role: '3 archers qui tirent de loin, fragiles : à protéger derrière un Tank.', vs: 'Nettoie l’🐝 Essaim (×1,5). Tape mal sur les ⚔️ Guerriers (×0,67), qui l’écrasent en retour.' },
+    essaim:   { emoji: '🐝', label: 'Essaim',   role: '6 petits volants très rapides.', vs: 'Fait fondre les 🛡 Tanks (×1,5). Tape mal sur les 🏹 Tireurs (×0,67), qui le nettoient. Craint les 💥 Sorts.' },
     sort:     { emoji: '💥', label: 'Sort',     role: 'Explose au point visé (zone). Seulement 40 % des dégâts sur les bâtiments.', vs: 'Écrase l’🐝 Essaim (×1,5).' },
     pompe:    { emoji: '⚗️', label: 'Pompe',    role: 'Bâtiment : +1 élixir toutes les 7 s pendant 45 s. Une seule à la fois.', vs: '' },
   };

@@ -61,6 +61,7 @@
   // ─────────────────────────────────────────────
   const C = (x, y, r) => `M${x - r} ${y}a${r} ${r} 0 1 0 ${2 * r} 0a${r} ${r} 0 1 0 ${-2 * r} 0Z`;
   const R = (x, y, w, h, r) => `M${x + r} ${y}h${w - 2 * r}a${r} ${r} 0 0 1 ${r} ${r}v${h - 2 * r}a${r} ${r} 0 0 1 ${-r} ${r}h${-(w - 2 * r)}a${r} ${r} 0 0 1 ${-r} ${-r}v${-(h - 2 * r)}a${r} ${r} 0 0 1 ${r} ${-r}Z`;
+  const E = (x, y, rx, ry) => `M${x - rx} ${y}a${rx} ${ry} 0 1 0 ${2 * rx} 0a${rx} ${ry} 0 1 0 ${-2 * rx} 0Z`;
   const F = (d, fill, st = 'none', sw = 0, da = 'none') => ({ d, fill, st, sw, da });
   const lines = (x0, x1, y0, y1, step, col, sw = 1, vert = false) => {
     let d = '';
@@ -184,7 +185,7 @@
   //    se dandinent sans pas visible (« sway »), respiration à l'arrêt.
   //    sprites[url] = 'id' (personnage figé) ou { id, walk }.
   // ─────────────────────────────────────────────
-  const UNIT_SCALE = { tank: 0.5, guerrier: 0.42, tireur: 0.4, essaim: 0.3, pompe: 0.55 };
+  const UNIT_SCALE = { tank: 0.42, guerrier: 0.42, tireur: 0.4, essaim: 0.32, pompe: 0.55 };
   const FORMATIONS = {
     1: [[0, 0]],
     2: [[-9, -2], [9, 2]],
@@ -196,6 +197,7 @@
   const spriteOf = (raw) => (!raw ? null : typeof raw === 'string' ? { id: raw, walk: 'none' } : raw);
 
   function formationOffset(u) {
+    if (u.archetype === 'tank' && u.packSize === 2) return [[-13, -4], [13, 4]][(u.slot || 0) % 2];   // deux chars côte à côte
     const f = FORMATIONS[u.packSize] || FORMATIONS[1];
     return f[(u.slot || 0) % f.length] || [0, 0];
   }
@@ -219,14 +221,44 @@
     if (u.shield) marks += `<g data-fx="shield">${pathTag(F(C(x, y - 40 * s, 50 * s), 'none', WHITE, 2))}</g>`;
     const fade = u.recalling ? ' opacity="0.55"' : '';
 
+    const attacking = typeof u.atk === 'number' && !u.frozen;
+    const sec = time / 1000;
     let body;
+    if (sprite.walk === 'fly') {
+      // 🐝 Essaim : vole au-dessus de son ombre, ailes qui battent, pique en attaquant
+      const hover = -10 + Math.sin(sec * 2 * Math.PI * 1.6 + u.id) * 2.5;
+      const flap = (0.25 + 0.75 * Math.abs(Math.sin(sec * 2 * Math.PI * 7 + u.id))).toFixed(2);
+      const dive = attacking ? Math.max(0, Math.sin(sec * 2 * Math.PI * 2 + u.id)) * 5 : 0;
+      return `<g${fade} transform="translate(${x} ${y}) scale(${s})" style="color:${color}">`
+        + `<path d="${E(0, 2, 11 + hover * 0.25, 3.8)}" fill="${color}" opacity="0.55"/>`
+        + `<g transform="translate(${dive.toFixed(1)} ${(hover + dive).toFixed(1)})"><g transform="translate(0 -31) scale(1 ${flap}) translate(0 31)">${use(`${sprite.id}-w`)}</g>${use(`${sprite.id}-f`)}</g></g>${marks}${hpBar}`;
+    }
+    if (sprite.walk === 'roll') {
+      // 🛡 Tank : chenilles qui défilent, roues qui tournent, recul du canon au tir
+      const rolling = walking;
+      const turn = rolling ? (sec * 400) % 360 : 0;
+      const dash = rolling ? -((sec * 40) % 8) : 0;
+      const wheels = [-22, -7.5, 7.5, 22].map((wx) => `<g transform="translate(${wx} -7.5) rotate(${turn.toFixed(1)})">${pathTag(F(C(0, 0, 4.5), '#6B716E', INK, 1.4))}${pathTag(F('M-4 0H4M0 -4V4', 'none', INK, 1.2))}</g>`).join('');
+      const treads = pathTag(F(R(-32, -15, 64, 15, 7.5), INK, INK, 1.8)) + wheels
+        + `<path d="M-26 -15H26M-26 0H26" fill="none" stroke="#6B716E" stroke-width="1.6" stroke-dasharray="3 5" stroke-dashoffset="${dash.toFixed(1)}"/>`;
+      const recoil = attacking ? -Math.max(0, Math.sin(sec * 2 * Math.PI * 0.9 + u.id)) * 2.5 : 0;
+      const shake = rolling ? Math.sin(sec * 60) * 0.5 : 0;
+      return `<g${fade} transform="translate(${x} ${y}) scale(${s})" style="color:${color}">`
+        + `<path d="${E(0, 2, 32, 11)}" fill="${color}"/>${treads}`
+        + `<g transform="translate(${recoil.toFixed(1)} ${shake.toFixed(2)})">${use(`${sprite.id}-f`)}</g></g>${marks}${hpBar}`;
+    }
     if (sprite.walk === 'step') {
       const lift = (v) => (walking ? Math.max(0, v) * 4 : 0);
       const leg = (lx, up, shift) => pathTag(F(R(lx + shift, -15 - up, 7, 15, 3), INK, INK, 1.8));
+      // ⚔️ Guerrier : l'arme s'abat au contact · 🏹 Tireur : l'arc se tend puis tire
+      let weapon = '';
+      if (attacking && u.archetype === 'guerrier') weapon = `rotate(${(-40 + 80 * Math.max(0, Math.sin(sec * 2 * Math.PI * 2.2 + u.id))).toFixed(1)} 16 -22)`;
+      if (attacking && u.archetype === 'tireur') weapon = `translate(${(-2.5 * Math.max(0, Math.sin(sec * 2 * Math.PI * 1.3 + u.id))).toFixed(1)} 0)`;
       body = use(`${sprite.id}-b`)
         + leg(-9, lift(sin), walking ? sin * 1.2 : 0)
         + leg(2, lift(-sin), walking ? -sin * 1.2 : 0)
-        + use(`${sprite.id}-f`);
+        + use(`${sprite.id}-f`)
+        + `<g transform="${weapon}">${use(`${sprite.id}-w`)}</g>`;
     } else if (sprite.walk === 'sway') {
       body = use(`${sprite.id}-f`);
     } else {
@@ -255,6 +287,7 @@
     const dark = arenaOf(arena).dark;
     const out = [];
     const under = [];
+    const over = [];
 
     // ⏳ Poses en train d'apparaître : cercle pointillé au point d'apparition
     for (const p of view.pending || []) {
@@ -273,6 +306,24 @@
       if (f.type === 'ring') {
         const k = Math.min(1, f.age / 800);
         under.push(`<g opacity="${(1 - k).toFixed(2)}">${pathTag(F(C(f.x, f.y, 10 + k * 18), 'none', f.color || BLUE, 2))}</g>`);
+        continue;
+      }
+      if (f.type === 'arrow' || f.type === 'shell') {
+        const k = Math.min(1, f.age / f.dur);
+        const arc = Math.sin(k * Math.PI) * (f.type === 'arrow' ? 9 : 5);
+        const px = f.x0 + (f.x1 - f.x0) * k;
+        const py = f.y0 + (f.y1 - f.y0) * k - arc;
+        if (f.type === 'shell') { over.push(pathTag(F(C(px, py, 2.6), INK, INK, 1))); continue; }
+        const dy = (f.y1 - f.y0) - Math.cos(k * Math.PI) * Math.PI * 9;
+        const deg = (Math.atan2(dy, f.x1 - f.x0) * 180) / Math.PI;
+        over.push(`<g data-fx="arrow" transform="translate(${px.toFixed(1)} ${py.toFixed(1)}) rotate(${deg.toFixed(1)})">`
+          + `${pathTag(F('M-8 0H5', 'none', INK, 1.6))}${pathTag(F('M5 -2.6L9.5 0L5 2.6Z', WHITE, INK, 1))}${pathTag(F('M-8 0L-11 -2.8M-8 0L-11 2.8', 'none', f.color, 1.5))}</g>`);
+        continue;
+      }
+      if (f.type === 'hit') {
+        const o = Math.max(0, 1 - f.age / 260).toFixed(2);
+        const r = 3 + f.age / 40;
+        over.push(`<g data-fx="hit" opacity="${o}">${pathTag(F(`M${f.x - r} ${f.y}H${f.x + r}M${f.x} ${f.y - r}V${f.y + r}M${f.x - r * 0.7} ${f.y - r * 0.7}L${f.x + r * 0.7} ${f.y + r * 0.7}M${f.x + r * 0.7} ${f.y - r * 0.7}L${f.x - r * 0.7} ${f.y + r * 0.7}`, 'none', f.color || WHITE, 2))}</g>`);
         continue;
       }
       if (f.type !== 'spell') continue;
@@ -317,7 +368,7 @@
       items.push({ y: at.y, svg });
     }
     items.sort((a, b) => a.y - b.y);
-    out.push(...under, ...items.map((i) => i.svg));
+    out.push(...under, ...items.map((i) => i.svg), ...over);
 
     // 🏷️ Chips de dégâts (−210, ×1,5) comme dans la DA
     for (const c of chips) {
@@ -444,6 +495,8 @@
     let showZones = false;
     let ghost = null;
     const lastHp = new Map();
+    const lastShot = new Map();   // unité → dernier tir montré
+    const SHOT_EVERY = { tireur: 750, tank: 1100, guerrier: 650, essaim: 520 };
     const STEP = 100;
 
     svgEl.setAttribute('viewBox', `0 0 ${W} ${H}`);
@@ -483,6 +536,27 @@
           fx.push({ type: 'spell', x: at.x, y: at.y - 10, born: now, color: e.side === view.you ? BLUE : ORANGE });
         }
       }
+      // ⚔️ Attaques en cours (u.atk = y de la cible) → flèches, obus, impacts
+      for (const u of view.units || []) {
+        const every = SHOT_EVERY[u.archetype];
+        if (typeof u.atk !== 'number' || !every || u.frozen) continue;
+        if (lastShot.has(u.id) && now - lastShot.get(u.id) < every) continue;
+        lastShot.set(u.id, now);
+        const s = UNIT_SCALE[u.archetype] || 0.42;
+        const [dx, dy] = formationOffset(u);
+        const at = toBoard(u.lane, u.y, view.you);
+        const tg = toBoard(u.lane, u.atk, view.you);
+        const x0 = at.x + dx;
+        const y0 = at.y + dy;
+        const mine = u.side === view.you;
+        if (u.archetype === 'tireur') fx.push({ type: 'arrow', x0: x0 + 22 * s, y0: y0 - 33 * s, x1: tg.x + dx * 0.5, y1: tg.y - 12, born: now, dur: 260, color: mine ? BLUE : ORANGE });
+        else if (u.archetype === 'tank') {
+          fx.push({ type: 'shell', x0: x0 + 40 * s, y0: y0 - 39 * s, x1: tg.x, y1: tg.y - 14, born: now, dur: 200 });
+          fx.push({ type: 'ring', x: x0 + 40 * s, y: y0 - 39 * s, born: now, color: ORANGE });
+        } else fx.push({ type: 'hit', x: (x0 + tg.x + dx) / 2, y: tg.y - 10, born: now, color: WHITE });
+      }
+      if (lastShot.size > 400) for (const id of [...lastShot.keys()].slice(0, 200)) lastShot.delete(id);
+
       // Chips de dégâts sur les tours (cumul par tour, une chip par 700 ms)
       for (const b of view.buildings || []) {
         if (b.kind === 'pompe') continue;
@@ -515,7 +589,7 @@
           return p ? { ...u, y: p.y + (u.y - p.y) * t, moving: Math.abs(u.y - p.y) > 0.001 } : u;
         }) };
       }
-      fx = fx.filter((f) => now - f.born < (f.type === 'ring' ? 800 : f.type === 'lane' ? 900 : 700));
+      fx = fx.filter((f) => now - f.born < (f.dur || (f.type === 'ring' ? 800 : f.type === 'lane' ? 900 : f.type === 'hit' ? 260 : 700)));
       chips = chips.filter((c) => now - c.born < (c.life || 900));
       live.innerHTML = (showZones ? renderZones(view) : '') + renderGhost(ghost) + renderDynamic(view, {
         arena,
