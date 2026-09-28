@@ -289,6 +289,30 @@ const qg = (state, side) => state.buildings.find((b) => b.side === side && b.kin
   const n = newMatch();
   run(n, 120000);
   check('égalité parfaite → nul', n.result.winner === null && n.result.reason === 'draw');
+  check('fin du temps : pas marqué « toutes les cartes jouées »', n.result.outOfCards === false);
+
+  // 🃏 Toutes les cartes jouées des deux côtés + terrain vide → fin avant 2:00
+  const o = newMatch();
+  let spent = 0;
+  for (let i = 0; i < 16; i += 1) {
+    for (const side of ['A', 'B']) {
+      const p = o.players[side];
+      p.elixir = 10;
+      const u = p.hand[0];
+      if (u && engine.applyAction(o, side, { type: 'deploy', url: u, x: 10 + (i * 23) % 80, depth: 20 }).ok) spent += 1;
+    }
+    run(o, 100);
+  }
+  run(o, 1000);
+  check('toutes les cartes jouées des deux côtés', spent === 16 && o.players.A.hand.length === 0 && o.players.B.hand.length === 0);
+  check('troupes encore sur le terrain → le combat continue', o.status === 'running' && o.units.length > 0);
+  o.units = [];   // les derniers affrontements sont finis
+  run(o, 100);
+  check('terrain vide → combat terminé avant 2:00', o.status === 'ended' && o.timeMs < 120000 && o.result.outOfCards === true);
+  const keep = newMatch();
+  keep.players.A.hand = [];
+  run(keep, 5000);
+  check('il reste des cartes à un camp → le combat continue', keep.status === 'running');
 
   const f = newMatch();
   engine.applyAction(f, 'A', { type: 'forfeit' });

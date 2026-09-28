@@ -520,7 +520,8 @@ ${DeckEditor.roleText(e.archetype)}`;
     const r = v.result || {};
     const won = r.winner === v.you;
     $('result-title').textContent = r.winner === null ? 'Match nul' : won ? 'Victoire !' : 'Défaite';
-    $('result-sub').textContent = ({ qg: 'Tour principale détruite.', towers: 'Plus de tours détruites.', qg_hp: 'Tour principale plus solide.', forfeit: 'Abandon.', disconnect: 'Déconnexion.', draw: 'Égalité parfaite.' })[r.reason] || '';
+    $('result-sub').textContent = (r.outOfCards ? 'Toutes les cartes ont été jouées. ' : '')
+      + (({ qg: 'Tour principale détruite.', towers: 'Plus de tours détruites.', qg_hp: 'Tour principale plus solide.', forfeit: 'Abandon.', disconnect: 'Déconnexion.', draw: 'Égalité parfaite.' })[r.reason] || '');
     const s = v.summary && v.summary.you;
     if (!s) return;
     if (s.lost.length) line('Cartes perdues', s.lost.map((c) => c.title).join(', '));
