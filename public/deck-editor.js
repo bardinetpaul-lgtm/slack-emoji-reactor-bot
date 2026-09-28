@@ -26,6 +26,58 @@
 
   const ARCH_LABELS = { tank: 'Tank', guerrier: 'Guerrier', tireur: 'Tireur', essaim: 'Essaim', sort: 'Sort', pompe: 'Pompe' };
   const RARITY_LABELS = { epic: 'Épique', legendary: 'Légendaire' };
+  const RARITIES = { common: 'Commune', rare: 'Rare', epic: 'Épique', legendary: 'Légendaire' };
+  const RARITY_ORDER = { legendary: 0, epic: 1, rare: 2, common: 3 };
+
+  // Rôle de chaque archétype (miroir de src/game/cards.js : ARCHETYPES + COUNTERS)
+  const ROLES = {
+    tank:     { emoji: '🛡', label: 'Tank',     role: '2 colosses (700 PV). Ignorent les unités et foncent sur les tours.', strong: 'guerrier', weak: 'essaim' },
+    guerrier: { emoji: '⚔️', label: 'Guerrier', role: '3 combattants au corps à corps, polyvalents.', strong: 'tireur', weak: 'tank' },
+    tireur:   { emoji: '🏹', label: 'Tireur',   role: '3 tireurs à distance, fragiles : à protéger derrière un Tank ou des Guerriers.', strong: 'essaim', weak: 'guerrier' },
+    essaim:   { emoji: '🐝', label: 'Essaim',   role: '6 petits très rapides, qui submergent les grosses cibles.', strong: 'tank', weak: 'tireur' },
+    sort:     { emoji: '💥', label: 'Sort',     role: 'Explose au point visé (zone). Seulement 40 % des dégâts sur les bâtiments.', strong: 'essaim', weak: null },
+    pompe:    { emoji: '⚗️', label: 'Pompe',    role: 'Bâtiment : +1 élixir toutes les 7 s pendant 45 s. Une seule à la fois.', strong: null, weak: null },
+  };
+  const roleText = (k) => {
+    const r = ROLES[k];
+    if (!r) return '';
+    const bits = [r.role];
+    if (r.strong) bits.push(`Fort contre ${ROLES[r.strong].emoji} ${ROLES[r.strong].label}.`);
+    if (r.weak) bits.push(`Faible contre ${ROLES[r.weak].emoji} ${ROLES[r.weak].label}.`);
+    return bits.join(' ');
+  };
+
+  /** Cadre de rareté + étiquettes rareté / rôle sur une carte (bouton). */
+  function decorate(b, card, { compact = false } = {}) {
+    const rarity = RARITIES[card.rarity] ? card.rarity : 'common';
+    const r = ROLES[card.archetype];
+    b.classList.add(`r-${rarity}`);
+    if (rarity !== 'common') b.append(el('span', 'de-rarity', compact ? RARITIES[rarity].slice(0, 3) + '.' : RARITIES[rarity]));
+    if (r) b.append(el('span', 'de-role', compact ? r.emoji : `${r.emoji} ${r.label}`));
+    b.title = `${card.title || 'Carte'} · ${RARITIES[rarity]} · ${r ? r.label : ''}\n${roleText(card.archetype)}`;
+  }
+
+  /** Encart « Comment les cartes s'affrontent ». */
+  function guide() {
+    const box = el('details', 'de-guide');
+    box.append(el('summary', null, '❓ Comment les cartes s’affrontent'));
+    const list = el('div', 'de-guide-list');
+    for (const k of Object.keys(ROLES)) {
+      const row = el('div', 'de-guide-row');
+      row.append(el('span', 'de-guide-name', `${ROLES[k].emoji} ${ROLES[k].label}`), el('span', null, roleText(k)));
+      list.append(row);
+    }
+    const rules = el('ul', 'de-guide-rules');
+    [
+      'Le cycle des contres : 🛡 Tank → ⚔️ Guerrier → 🏹 Tireur → 🐝 Essaim → 🛡 Tank. On fait ×1,5 de dégâts à ce qu’on contre, ×0,67 à ce qui nous contre. 💥 Sort écrase 🐝 Essaim.',
+      'Chaque groupe avance dans son couloir et attaque l’ennemi LE PLUS PROCHE, même celui qu’il vient de croiser. Exception : le 🛡 Tank ne frappe que les bâtiments.',
+      'Une tour ne tire que dans son couloir. Tant qu’elle tient, tu ne peux poser que dans ta moitié.',
+      'La rareté (cadre coloré) renforce les PV : Rare +4 %, Épique +7 %, Légendaire +10 %. Les Épiques et Légendaires ont en plus une spécialité ✨.',
+      'Une pose apparaît 0,5 s après avoir été jouée.',
+    ].forEach((t) => rules.append(el('li', null, t)));
+    box.append(list, rules);
+    return box;
+  }
   const DECK_SIZE = 8;
   const isToken = (u) => typeof u === 'string' && u.startsWith('shop:');
   const tokenRarity = (u) => u.slice(5);
@@ -110,6 +162,7 @@
     // ── Panneau deck ──
     const deckPanel = el('section', 'de-panel de-deck');
     const collPanel = el('section', 'de-panel de-collection');
+    const guideBox = guide();   // créé une fois : reste ouvert/fermé entre deux rendus
     rootEl.replaceChildren(deckPanel, collPanel);
 
     function renderDeck() {
@@ -160,6 +213,7 @@
           if (isCap) captainMarked = true;
           if (isCap) b.classList.add('captain');
           b.append(cardArt(c), el('span', 'de-cost', String(c.cost)));
+          decorate(b, c, { compact: true });
           const sb = specBadge(c);
           if (sb) b.append(sb);
           b.setAttribute('aria-label', `Retirer ${c.title}`);
@@ -188,7 +242,7 @@
       avgBox.append(el('span', 'de-stat-label', 'Coût moyen'), el('span', 'de-stat-value', avgCost(cards)));
       const mixBox = el('div', 'de-stat');
       const mix = el('div', 'de-mix');
-      Object.entries(counts).forEach(([k, v]) => mix.append(el('span', null, `${ARCH_LABELS[k]} ×${v}`)));
+      Object.entries(counts).forEach(([k, v]) => mix.append(el('span', null, `${ROLES[k].emoji} ${ARCH_LABELS[k]} ×${v}`)));
       mixBox.append(el('span', 'de-stat-label', 'Archétypes'), mix);
       stats.append(avgBox, mixBox);
 
@@ -272,21 +326,29 @@
       head.append(el('h2', null, 'Votre collection'), el('span', 'de-muted', `${owned} cartes possédées sur ${opts.catalogue.length}`));
 
       const bar = el('div', 'de-filters');
-      [['all', 'Toutes'], ...Object.entries(ARCH_LABELS)].forEach(([k, l]) => {
+      [['all', 'Toutes'], ...Object.entries(ARCH_LABELS).map(([k, l]) => [k, `${ROLES[k].emoji} ${l}`])].forEach(([k, l]) => {
         const b = el('button', `de-filter${state.filter === k ? ' on' : ''}`, l);
         b.type = 'button';
+        if (ROLES[k]) b.title = roleText(k);
         b.addEventListener('click', () => { state.filter = k; render(); });
         bar.append(b);
       });
       bar.append(el('span', 'de-spacer'));
-      const sort = el('button', 'de-filter', `Tri : ${state.sort === 'cost' ? 'coût' : 'nom'}`);
+      const SORTS = { cost: 'coût', rarity: 'rareté', name: 'nom' };
+      const sort = el('button', 'de-filter', `Tri : ${SORTS[state.sort]}`);
       sort.type = 'button';
-      sort.addEventListener('click', () => { state.sort = state.sort === 'cost' ? 'name' : 'cost'; render(); });
+      sort.addEventListener('click', () => {
+        const keys = Object.keys(SORTS);
+        state.sort = keys[(keys.indexOf(state.sort) + 1) % keys.length];
+        render();
+      });
       bar.append(sort);
 
       let list = opts.catalogue.filter((c) => state.filter === 'all' || c.archetype === state.filter);
+      const rank = (c) => (RARITY_ORDER[c.rarity] === undefined ? 3 : RARITY_ORDER[c.rarity]);
       list = [...list].sort((a, b) => (b.copies > 0) - (a.copies > 0)
         || (state.sort === 'cost' ? a.cost - b.cost : 0)
+        || (state.sort === 'rarity' ? rank(a) - rank(b) : 0)
         || String(a.title).localeCompare(String(b.title), 'fr', { numeric: true }));
 
       const grid = el('div', 'de-grid');
@@ -298,9 +360,11 @@
         b.type = 'button';
         b.disabled = !(can || on);
         b.setAttribute('aria-pressed', String(on));
-        b.setAttribute('aria-label', `${c.title}, ${ARCH_LABELS[c.archetype]}, coût ${c.cost}, ${c.copies} exemplaire(s), ${n} dans le deck`);
-        b.title = can ? 'Ajouter un emplacement' : on ? 'Retirer un emplacement' : '';
+        b.setAttribute('aria-label', `${c.title}, ${RARITIES[c.rarity] || RARITIES.common}, ${ARCH_LABELS[c.archetype]}, coût ${c.cost}, ${c.copies} exemplaire(s), ${n} dans le deck`);
         b.append(cardArt(c), el('span', 'de-cost', String(c.cost)), el('span', 'de-copies', c.copies > 0 ? `×${c.copies}` : '0'));
+        decorate(b, c);
+        if (can) b.title += '\n→ Ajouter un emplacement';
+        else if (on) b.title += '\n→ Retirer un emplacement';
         const sb = specBadge(c);
         if (sb) b.append(sb);
         if (on) b.append(el('span', 'de-badge', n > 1 ? `Deck ×${n}` : 'Deck'));
@@ -315,7 +379,7 @@
         });
         grid.append(b);
       });
-      collPanel.replaceChildren(head, bar, grid);
+      collPanel.replaceChildren(head, guideBox, bar, grid);
     }
 
     function render() {
@@ -335,5 +399,5 @@
     };
   }
 
-  root.DeckEditor = { mount, warningFor };
+  root.DeckEditor = { mount, warningFor, ROLES, RARITIES, roleText, guide };
 }(typeof self !== 'undefined' ? self : this));

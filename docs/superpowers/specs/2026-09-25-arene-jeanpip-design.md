@@ -105,7 +105,10 @@ hors de [35 %, 65 %].
   proche du point, la profondeur est celle du point : dans sa moitié, du pied de sa tour jusqu'au pont
   (rivière interdite) ; chez l'adversaire seulement si la tour de ce couloir est tombée. Un **Sort se vise
   n'importe où**. Un fantôme montre où le groupe apparaîtra (rouge si interdit). L'unité apparaît
-  **1 s après** (visible par l'adversaire pendant cette seconde).
+  **0,5 s après** (visible par l'adversaire pendant ce délai ; 1 s jugé trop lent au test, 2026-09-28).
+- **Ciblage :** chaque groupe attaque l'ennemi **le plus proche** de son couloir. Devant lui à toute
+  distance, et **derrière lui jusqu'à 10 cases** : il se retourne pour combattre un groupe qu'il vient de
+  croiser (sinon deux groupes posés l'un devant l'autre s'ignoraient). Le Tank ne vise que les bâtiments.
 
 ### Deck, main, élixir
 
@@ -126,7 +129,7 @@ hors de [35 %, 65 %].
 3. **Abandon** ou **déconnexion > 20 s** → défaite. Les deux déconnectés → combat annulé.
 
 Une **Pompe arrivée au bout de sa durée de vie** n'est pas détruite : elle compte comme survivante.
-Une pose encore en train d'apparaître (délai de 1 s) à la fin compte aussi comme survivante.
+Une pose encore en train d'apparaître (délai de 0,5 s) à la fin compte aussi comme survivante.
 
 ## 🎨 Rendu (DA Claude Design)
 

@@ -43,13 +43,13 @@ const tower = (s, side, lane) => s.buildings.find((b) => b.side === side && b.ki
   const s = match();
   give(s, 'A', ['guerrier1']);
   check('A : pose à la profondeur 42 acceptée', engine.applyAction(s, 'A', { type: 'deploy', url: 'guerrier1', lane: 1, depth: 42 }).ok);
-  engine.tick(s, 1000);
+  engine.tick(s, 500);
   check('A : le groupe apparaît au point choisi (y ≈ 42)', s.units.length === 3 && Math.abs(s.units[0].y - 42) < 1.5);
 
   const b = match();
   give(b, 'B', ['guerrier3']);
   engine.applyAction(b, 'B', { type: 'deploy', url: 'guerrier3', lane: 0, depth: 30 });
-  engine.tick(b, 1000);
+  engine.tick(b, 500);
   check('B : profondeur vue de son camp (y ≈ 70)', Math.abs(b.units[0].y - 70) < 1.5);
 
   const z = match();
@@ -59,13 +59,13 @@ const tower = (s, side, lane) => s.buildings.find((b) => b.side === side && b.ki
   check('refus : derrière ma base', engine.applyAction(z, 'A', { type: 'deploy', url: 'guerrier1', lane: 0, depth: 2 }).reason === 'zone');
   tower(z, 'B', 0).alive = false;
   check('brèche : pose chez l\'adversaire acceptée', engine.applyAction(z, 'A', { type: 'deploy', url: 'guerrier2', lane: 0, depth: 65 }).ok);
-  engine.tick(z, 1000);
+  engine.tick(z, 500);
   check('brèche : groupe au point choisi (y ≈ 65)', Math.abs(z.units[0].y - 65) < 1.5);
 
   const d = match();
   give(d, 'A', ['guerrier1']);
   engine.applyAction(d, 'A', { type: 'deploy', url: 'guerrier1', lane: 2 });
-  engine.tick(d, 1000);
+  engine.tick(d, 500);
   check('sans profondeur : comme avant (devant ma tour, y ≈ 20)', Math.abs(d.units[0].y - 20) < 1.5);
 }
 
@@ -75,7 +75,7 @@ const tower = (s, side, lane) => s.buildings.find((b) => b.side === side && b.ki
   give(s, 'B', ['guerrier3', 'tireur3']);
   engine.applyAction(s, 'B', { type: 'deploy', url: 'guerrier3', lane: 1, depth: 45 });   // y ≈ 55
   engine.applyAction(s, 'B', { type: 'deploy', url: 'tireur3', lane: 1, depth: 15 });     // y ≈ 85 (derrière)
-  engine.tick(s, 1000);
+  engine.tick(s, 500);
   s.units.forEach((u) => { u.speed = 0; });
   const front = () => s.units.filter((u) => u.archetype === 'guerrier').reduce((a, u) => a + u.hp, 0);
   const back = () => s.units.filter((u) => u.archetype === 'tireur').reduce((a, u) => a + u.hp, 0);
@@ -83,7 +83,7 @@ const tower = (s, side, lane) => s.buildings.find((b) => b.side === side && b.ki
   const b0 = back();
   give(s, 'A', ['sort1']);
   check('Sort visé chez l\'adversaire : accepté', engine.applyAction(s, 'A', { type: 'deploy', url: 'sort1', lane: 1, depth: 86 }).ok);
-  engine.tick(s, 1000);
+  engine.tick(s, 500);
   check('Sort visé : touche le groupe visé (derrière)', back() < b0);
   check('Sort visé : épargne le groupe hors zone (devant)', Math.abs(front() - f0) < 1 || front() >= f0 - 5);
 }

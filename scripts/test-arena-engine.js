@@ -152,10 +152,10 @@ const qg = (state, side) => state.buildings.find((b) => b.side === side && b.kin
   forceHand(s, 'A', ['guerrier1', 'guerrier2', 'tireur1', 'tireur2']);
   const r = engine.applyAction(s, 'A', { type: 'deploy', url: 'guerrier1', lane: 1 });
   check('la pose est annoncée tout de suite (événement deploy)', r.events.some((e) => e.type === 'deploy' && e.url === 'guerrier1'));
-  run(s, 900);
-  check('pas encore apparue à 0,9 s', s.units.length === 0);
+  run(s, 400);
+  check('pas encore apparue à 0,4 s', s.units.length === 0);
   run(s, 100);
-  check('apparue à 1 s : un groupe de 3 Guerriers', s.units.length === 3 && s.units.every((u) => u.lane === 1));
+  check('apparue à 0,5 s : un groupe de 3 Guerriers', s.units.length === 3 && s.units.every((u) => u.lane === 1));
   check('groupe : chaque personnage connaît sa place dans le groupe', JSON.stringify(s.units.map((u) => u.slot)) === '[0,1,2]' && s.units.every((u) => u.packSize === 3));
 }
 

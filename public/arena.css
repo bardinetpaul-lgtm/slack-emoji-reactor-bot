@@ -239,3 +239,39 @@ body.wide .top { display: none; }
 /* ✋ Glisser une carte sur le terrain */
 #hand .card { touch-action: none; }
 #board { touch-action: none; }
+
+/* 💎 Rareté (cadre coloré) · 🎭 Rôle (Tank, Tireur…) — sur toutes les cartes */
+.de-card.r-rare, .card.r-rare { --rarity: #3d8bff; }
+.de-card.r-epic, .card.r-epic { --rarity: #b35cff; }
+.de-card.r-legendary, .card.r-legendary { --rarity: #FFC83D; }
+.de-card.r-rare::after, .de-card.r-epic::after, .de-card.r-legendary::after,
+.card.r-rare::after, .card.r-epic::after, .card.r-legendary::after {
+  content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+  box-shadow: inset 0 0 0 3px var(--rarity);
+}
+.de-card.r-legendary::after, .card.r-legendary::after { box-shadow: inset 0 0 0 3px var(--rarity), inset 0 0 14px rgba(255, 200, 61, .55); }
+.de-rarity, .card .rarity {
+  position: absolute; left: 50%; top: -7px; transform: translateX(-50%); z-index: 1;
+  background: var(--rarity); color: var(--ink); border-radius: 999px; padding: 1px 7px;
+  font-size: 10px; font-weight: 600; letter-spacing: .02em; text-transform: uppercase; white-space: nowrap;
+}
+.de-role, .card .role {
+  position: absolute; left: 6px; bottom: 6px; z-index: 1;
+  background: rgba(26, 32, 29, .88); color: var(--cream); border-radius: 6px; padding: 2px 6px;
+  font-size: 11px; font-weight: 600; white-space: nowrap;
+}
+.card .role { left: 4px; bottom: 4px; padding: 1px 5px; font-size: 10px; }
+.card .tag { bottom: 24px; }
+.de-grid .de-badge { bottom: 30px; }
+
+/* ❓ Guide des affrontements */
+.de-guide { background: var(--c3); color: var(--ink); border-radius: 14px; padding: 10px 14px; font-size: 13px; line-height: 1.45; }
+.de-guide summary { cursor: pointer; font-weight: 600; }
+.de-guide-list { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.de-guide-row { display: grid; grid-template-columns: 96px 1fr; gap: 8px; }
+.de-guide-name { font-weight: 600; }
+.de-guide-rules { margin: 10px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; }
+@media (max-width: 480px) { .de-guide-row { grid-template-columns: 1fr; gap: 0; } }
+/* « Dans le deck » : anneau sombre (le bleu est réservé à la rareté Rare) */
+.de-card.in-deck { box-shadow: 0 0 0 3px var(--cream), 0 0 0 6px var(--ink); }
+.de-grid .de-badge { background: var(--ink); color: var(--cream); }

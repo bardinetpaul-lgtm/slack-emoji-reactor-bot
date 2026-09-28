@@ -238,6 +238,7 @@ const give = (s, side, urls) => { s.players[side].hand = urls.slice(); s.players
   const v = duel('vampire');
   run(v, 1000);
   v.units.filter((u) => u.side === 'A').forEach((u) => { u.hp = u.maxHp / 2; });
+  v.units.filter((u) => u.side === 'B').forEach((u) => { u.dps = 0; });   // on ne mesure que le soin
   const hpBefore = v.units.filter((u) => u.side === 'A').reduce((a, u) => a + u.hp, 0);
   run(v, 6000);
   check('Vampire : se soigne en frappant', v.units.filter((u) => u.side === 'A').some((u) => u.hp > u.maxHp / 2) || hpBefore === 0);

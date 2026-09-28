@@ -38,7 +38,8 @@ const DOUBLE_ELIXIR_MS = 60000;   // double élixir quand il reste ≤ 60 s
 const ELIXIR_START = 5;
 const ELIXIR_MAX = 10;
 const ELIXIR_REGEN_MS = 2800;
-const DEPLOY_DELAY_MS = 1000;
+const DEPLOY_DELAY_MS = 500;
+const SIGHT = 10;   // une unité repère un ennemi jusqu'à 10 cases DERRIÈRE elle
 const HAND_SIZE = 4;
 const LANES = 3;
 
@@ -350,7 +351,7 @@ function recall(state, side, { poseId }, events) {
 }
 
 // ─────────────────────────────────────────────
-// ✨ Apparition d'une pose (1 s après)
+// ✨ Apparition d'une pose (0,5 s après)
 // ─────────────────────────────────────────────
 
 function spawn(state, pending, events) {
@@ -432,9 +433,12 @@ function castSpell(state, side, lane, stats, events, aimY = null) {
 }
 
 // ─────────────────────────────────────────────
-// 🎯 Cible d'une unité : la plus proche devant elle (ou à portée)
-//    parmi unités ennemies du couloir (sauf Tank), Pompe du couloir,
-//    tour du couloir, et QG seulement si la tour est tombée.
+// 🎯 Cible d'une unité : la plus proche parmi unités ennemies du
+//    couloir (sauf pour le Tank), Pompe du couloir, tour du couloir,
+//    et QG seulement si la tour est tombée.
+//    Devant elle : à toute distance. Derrière elle : un ennemi repéré
+//    (≤ SIGHT) → elle se retourne pour le combattre (sinon deux groupes
+//    qui se croisent s'ignoreraient).
 // ─────────────────────────────────────────────
 
 function findTarget(state, unit) {
@@ -456,7 +460,8 @@ function findTarget(state, unit) {
   let bestDist = Infinity;
   for (const c of candidates) {
     const ahead = d * (c.y - unit.y);
-    if (ahead < -unit.range) continue;   // derrière elle, hors de portée
+    const sight = c.kind ? unit.range : Math.max(unit.range, SIGHT);   // un bâtiment dépassé est oublié
+    if (ahead < -sight) continue;   // trop loin derrière elle
     const dist = Math.abs(c.y - unit.y);
     if (dist < bestDist) { best = c; bestDist = dist; }
   }
@@ -626,7 +631,7 @@ function step(state, events) {
       if (typeof modified === 'number') dmg = modified;
       hit(target, dmg);
     } else {
-      u.y += dir(u.side) * Math.min(speed * dt, dist - u.range);
+      u.y += Math.sign(target.y - u.y) * Math.min(speed * dt, dist - u.range);   // vers sa cible, même derrière
     }
   }
   for (const b of state.buildings) {

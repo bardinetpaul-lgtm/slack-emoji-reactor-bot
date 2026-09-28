@@ -50,6 +50,7 @@
   let pillTimer = null;
   let editor = null;
   const decoder = ArenaWire.createDecoder();   // états différentiels (public/arena-wire.js)
+  $('phase-running').append(DeckEditor.guide());   // ❓ rappel des règles pendant le combat
   let shownPhase = null;
   const ARENA_NAMES = { jardin: 'Arène 01 · Le jardin', port: 'Arène 02 · Le port', serveurs: 'Arène 03 · La salle serveur' };
 
@@ -149,8 +150,15 @@
       if (c.cost > me.elixir) b.classList.add('poor');
       if (on) b.classList.add('selected');
       b.setAttribute('aria-pressed', String(on));
-      b.setAttribute('aria-label', `${c.title || 'Carte'}, coût ${c.cost}, ${c.copies} pose(s) restante(s)`);
       b.append(cardFace(c), costBadge(c.cost));
+      // 💎 rareté (cadre + étiquette) · 🎭 rôle
+      const rarity = DeckEditor.RARITIES[c.rarity] ? c.rarity : 'common';
+      const role = DeckEditor.ROLES[c.archetype];
+      b.classList.add(`r-${rarity}`);
+      if (rarity !== 'common') b.append(el('span', 'rarity', DeckEditor.RARITIES[rarity]));
+      if (role) b.append(el('span', 'role', `${role.emoji} ${role.label}`));
+      b.title = `${c.title || 'Carte'} · ${DeckEditor.RARITIES[rarity]}\n${DeckEditor.roleText(c.archetype)}`;
+      b.setAttribute('aria-label', `${c.title || 'Carte'}, ${DeckEditor.RARITIES[rarity]}, ${role ? role.label : ''}, coût ${c.cost}, ${c.copies} pose(s) restante(s)`);
       if (c.copies > 1) b.append(el('span', 'copies', `×${c.copies}`));
       const spec = c.specialty && setup && setup.specialties && setup.specialties[c.specialty];
       if (spec) { const sp = el('span', 'spec', spec.emoji); sp.title = `${spec.label} : ${spec.desc}`; b.append(sp); }
