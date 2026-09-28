@@ -62,6 +62,7 @@ function attackMode(userId, isAdmin) {
  * @param {Array<{id, fixed}>} [ctx.autoTargets] - cibles auto-react (admins)
  * @param {string|null} [ctx.collectionUrl] - lien du classeur web (null si page web désactivée)
  * @param {string|null} [ctx.deckUrl] - lien « Mon deck » de l'Arène (null si page web désactivée)
+ * @param {object} [ctx.arena] - état Arène du joueur (src/arenaSlack.js homeState) : bloc « ⚔️ Arène »
  */
 function buildHomeView(userId, ctx) {
   const balance = credits.getBalance(userId);
@@ -143,8 +144,11 @@ function buildHomeView(userId, ctx) {
     blocks.push({ type: 'divider' });
   }
 
-  // ⚔️ Arène : éditer ses decks sans lancer de combat (page web)
-  if (ctx.deckUrl) {
+  // ⚔️ Arène : combattre (défi, combat rapide), son combat en cours, ses decks
+  if (ctx.arena) {
+    blocks.push(...require('./arenaSlack').buildHomeBlocks(ctx.arena));
+    blocks.push({ type: 'divider' });
+  } else if (ctx.deckUrl) {
     blocks.push(section(
       `⚔️ *Arène — Mon deck* — prépare tes 3 decks de combat et ton Capitaine, quand tu veux. Le deck actif est celui que tu emmènes au combat.`,
       { ...button('🃏 Modifier mon deck', 'open_deck_web'), url: ctx.deckUrl },

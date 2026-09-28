@@ -45,6 +45,19 @@ function isWaiting(userId) {
   return inQueue(userId) || Boolean(outgoing(userId));
 }
 
+/** Où en est un joueur : { inQueue, outgoing: défi envoyé | null, incoming: [défis reçus] } (Accueil). */
+function statusOf(userId, now = Date.now()) {
+  const alive = (c) => now < c.expiresAt;
+  return {
+    inQueue: inQueue(userId),
+    outgoing: [...challenges.values()].find((c) => c.from === userId && alive(c)) || null,
+    incoming: [...challenges.values()].filter((c) => c.to === userId && alive(c)),
+  };
+}
+
+/** Un défi par son identifiant (ou null). */
+const getChallenge = (id) => challenges.get(id) || null;
+
 // ─────────────────────────────────────────────
 // 🎯 Défis
 // ─────────────────────────────────────────────
@@ -137,6 +150,8 @@ module.exports = {
   configure,
   reset,
   isWaiting,
+  statusOf,
+  getChallenge,
   createChallenge,
   acceptChallenge,
   refuseChallenge,

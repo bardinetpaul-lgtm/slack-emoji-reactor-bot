@@ -25,6 +25,13 @@ const weeklyGift = require('./weeklyGift');
 const { SPAM_CARDS } = require('./spamCards');
 const looks = require('./game/looks');
 const cards = require('./game/cards');
+const arenaSlack = require('./arenaSlack');
+// ⚔️ Liens de l'Arène (null si la page web est désactivée)
+const ARENA_LINKS = {
+  arena: (matchId, userId) => web.buildArenaUrl(matchId, userId),
+  deck: (userId) => web.buildDeckUrl(userId),
+  openBooster: (boosterId, userId) => web.buildOpenUrl(boosterId, userId),
+};
 const { describeText: describeCharacter } = require('./game/characters');
 
 // ─────────────────────────────────────────────
@@ -299,6 +306,7 @@ function buildHomeFor(userId) {
     autoTargets: isAdmin ? adminActions.listAutoTargets() : undefined,
     collectionUrl: web.buildCollectionUrl(userId),
     deckUrl: web.buildDeckUrl(userId),
+    arena: arenaSlack.homeState(userId, ARENA_LINKS),
   });
 }
 
@@ -1483,6 +1491,15 @@ async function runWeeklyGift(client, logger) {
   for (const userId of homeViewers) await refreshHome(client, userId, logger);
 }
 
+// ⚔️ Arène depuis Slack : défis, combat rapide, liens de combat, récaps de fin
+const arenaHooks = arenaSlack.register(app, {
+  sendDM,
+  isBot,
+  openModal,
+  refreshHome: refreshHomeIfSeen,
+  links: ARENA_LINKS,
+});
+
 // 👑 Boutons du panneau admin → ouverture des modales
 const ADMIN_MODALS = {
   admin_give_attack_open: home.buildGiveAttackModal,
@@ -1844,6 +1861,7 @@ function createCardLook(client, media, logger) {
 (async () => {
   await app.start();
 
+  arenaHooks.setClient(app.client);   // ⚔️ récaps de fin et expirations, même sans clic préalable
   const authResult = await app.client.auth.test();
   botUserId = authResult.user_id;
   botName = authResult.user || 'Jeanpip Bot';
