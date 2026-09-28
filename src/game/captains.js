@@ -41,14 +41,14 @@ const CAPTAINS = {
 
 // Valeurs utilisées par le moteur (réglables, validées par la simulation)
 const TUNING = {
-  tankHp: 1.15,
+  tankHp: 1.7,
   rushSpeed: 1.25,
-  rushDps: 1.15,
-  towerRange: 1.2,
+  rushDps: 1.45,
+  towerRange: 1.05,
   extraSwarm: 2,
-  startElixir: 2,
+  startElixir: 4,
   elixirMax: 12,
-  ecoRegen: 1.1,
+  ecoRegen: 1.25,
   spellDiscount: 1,
   spellDamage: 1,
   rempartMs: 4000,

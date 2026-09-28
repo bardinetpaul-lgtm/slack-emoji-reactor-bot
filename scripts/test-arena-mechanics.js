@@ -28,6 +28,7 @@ for (const spec of ['charge', 'bouclier', 'vampire', 'explosion', 'invocation', 
 overrides['auto-epic'] = { archetype: 'guerrier' };   // spécialité tirée automatiquement
 fs.writeFileSync(path.join(TMP, 'data', 'card-overrides.json'), JSON.stringify(overrides));
 
+const { TUNING } = require(path.join(TMP, 'src', 'game', 'captains.js'));
 const engine = require(path.join(TMP, 'src', 'game', 'engine.js'));
 const cards = require(path.join(TMP, 'src', 'game', 'cards.js'));
 const captains = require(path.join(TMP, 'src', 'game', 'captains.js'));
@@ -65,7 +66,7 @@ const give = (s, side, urls) => { s.players[side].hand = urls.slice(); s.players
 
   // Passifs
   const pompe = match(player('UA', DECK_A, { captain: 'pompe1' }));
-  check('Économie (Pompe) : +2 élixir au départ', pompe.players.A.elixir === 7);
+  check(`Économie (Pompe) : +${TUNING.startElixir} élixir au départ`, pompe.players.A.elixir === 5 + TUNING.startElixir);
   run(pompe, 20000);
   check('Économie (Pompe) : élixir jusqu’à 12', pompe.players.A.elixir === 12 && engine.publicState(pompe, 'A').players.A.elixirMax === 12);
   const sortC = match(player('UA', DECK_A, { captain: 'sort1' }));
@@ -83,7 +84,7 @@ const give = (s, side, urls) => { s.players[side].hand = urls.slice(); s.players
   engine.applyAction(echo, 'A', { type: 'forfeit' });
   check('Écho (Magie) : la relance n\'engage aucune carte (une seule pose au bilan)', echo.result.poses.filter((p) => p.url === 'sort2').length === 1);
   const tir = match(player('UA', DECK_A, { captain: 'tireur1' }));
-  check('Contrôle (Tireur) : portée des tours +20 %', Math.abs(tower(tir, 'A', 0).range - tower(match(), 'A', 0).range * 1.2) < 1e-9);
+  check('Contrôle (Tireur) : portée des tours augmentée', Math.abs(tower(tir, 'A', 0).range - tower(match(), 'A', 0).range * TUNING.towerRange) < 1e-9 && TUNING.towerRange > 1);
   const ess = match(player('UA', ['essaim1', 'essaim2', 'guerrier2', 'tireur1', 'tireur2', 'tank1', 'sort1', 'pompe1'], { captain: 'essaim1' }));
   give(ess, 'A', ['essaim2', 'guerrier2']);
   engine.applyAction(ess, 'A', { type: 'deploy', url: 'essaim2', lane: 1 });
@@ -95,7 +96,7 @@ const give = (s, side, urls) => { s.players[side].hand = urls.slice(); s.players
   give(rush, 'A', ['guerrier2']);
   engine.applyAction(rush, 'A', { type: 'deploy', url: 'guerrier2', lane: 1 });
   run(rush, 1000);
-  check('Rush (Guerrier) : unités +25 % vitesse, +15 % dégâts', Math.abs(rush.units[0].speed - cards.getCardStats(card('guerrier2')).speed * 1.25) < 1e-9 && Math.abs(rush.units[0].dps - cards.getCardStats(card('guerrier2')).dps * 1.15) < 1e-9);
+  check('Rush (Guerrier) : unités plus rapides et plus fortes', Math.abs(rush.units[0].speed - cards.getCardStats(card('guerrier2')).speed * TUNING.rushSpeed) < 1e-9 && Math.abs(rush.units[0].dps - cards.getCardStats(card('guerrier2')).dps * TUNING.rushDps) < 1e-9);
   const siege = match(player('UA', DECK_A, { captain: 'guerrier1' }), player('UB', DECK_B, { captain: 'tank2' }));
   give(siege, 'B', ['tank2', 'tank2']);
   siege.players.B.cards.tank2 = siege.players.B.cards.tank2;
@@ -104,7 +105,7 @@ const give = (s, side, urls) => { s.players[side].hand = urls.slice(); s.players
   t.players.A.hand = ['tank1'];
   engine.applyAction(t, 'A', { type: 'deploy', url: 'tank1', lane: 0 });
   run(t, 1000);
-  check('Siège (Tank) : Tanks +15 % PV', t.units.length === 0 || Math.abs(t.units[0].maxHp - cards.getCardStats(card('tank1')).hp * 1.15) < 1e-6);
+  check('Siège (Tank) : Tanks plus résistants', t.units.length === 0 || Math.abs(t.units[0].maxHp - cards.getCardStats(card('tank1')).hp * TUNING.tankHp) < 1e-6);
 
   // Pouvoirs (1 fois par combat)
   const salve = match(player('UA', DECK_A, { captain: 'tireur1' }));
@@ -112,8 +113,9 @@ const give = (s, side, urls) => { s.players[side].hand = urls.slice(); s.players
   engine.applyAction(salve, 'B', { type: 'deploy', url: 'guerrier3', lane: 2 });
   run(salve, 1000);
   const before = salve.units.reduce((a, u) => a + u.hp, 0);
-  check('Salve : acceptée', engine.applyAction(salve, 'A', { type: 'power', lane: 2 }).ok);
-  check('Salve : dégâts sur tout le couloir', salve.units.reduce((a, u) => a + u.hp, 0) < before);
+  const g0 = salve.units[0];
+  check('Salve : acceptée (au point du groupe)', engine.applyAction(salve, 'A', { type: 'power', x: g0.x, depth: g0.y }).ok);
+  check('Salve : dégâts aux ennemis de la zone', salve.units.reduce((a, u) => a + u.hp, 0) < before);
   check('pouvoir : une seule fois par combat', engine.applyAction(salve, 'A', { type: 'power', lane: 2 }).reason === 'power_used');
   check('pouvoir : refus sans Capitaine', engine.applyAction(match(), 'A', { type: 'power', lane: 0 }).reason === 'no_captain');
 
@@ -121,10 +123,10 @@ const give = (s, side, urls) => { s.players[side].hand = urls.slice(); s.players
   give(gel, 'B', ['guerrier3']);
   engine.applyAction(gel, 'B', { type: 'deploy', url: 'guerrier3', lane: 0 });
   run(gel, 1000);
-  engine.applyAction(gel, 'A', { type: 'power', lane: 0 });
+  engine.applyAction(gel, 'A', { type: 'power', x: gel.units[0].x, depth: gel.units[0].y });
   const y0 = gel.units[0].y;
   run(gel, 1500);
-  check('Gel : les unités du couloir sont figées', gel.units[0].y === y0);
+  check('Gel : les unités de la zone sont figées', gel.units[0].y === y0);
   run(gel, 2000);
   check('Gel : 3 s puis ça repart', gel.units[0].y !== y0);
 
@@ -141,7 +143,7 @@ const give = (s, side, urls) => { s.players[side].hand = urls.slice(); s.players
   surch.players.B.elixir = 0;
   engine.applyAction(surch, 'A', { type: 'power' });
   run(surch, 2800);
-  check('Surchauffe : élixir ×2 (×2,2 avec la recharge Économie)', Math.abs(surch.players.A.elixir - 2.2 * surch.players.B.elixir) < 0.02);
+  check('Surchauffe : élixir ×2 (× la recharge Économie en plus)', Math.abs(surch.players.A.elixir - 2 * TUNING.ecoRegen * surch.players.B.elixir) < 0.02);
 
   const renf = match(player('UA', DECK_A, { captain: 'essaim1' }));
   engine.applyAction(renf, 'A', { type: 'power', lane: 1 });

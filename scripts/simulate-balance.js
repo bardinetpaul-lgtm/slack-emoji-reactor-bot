@@ -259,7 +259,10 @@ function goodAct(s, side, rand) {
     const inLane = threats.filter((u) => u.lane === lane);
     const main = inLane[0].archetype;
     if (p.captain && !p.captain.used && ['salve', 'gel', 'rempart'].includes(p.captain.power) && inLane.length >= 2) {
-      engine.applyAction(s, side, { type: 'power', lane });
+      // pouvoir au point du groupe menaçant (terrain ouvert : une zone, plus une colonne)
+      const cx = inLane.reduce((a, u) => a + u.x, 0) / inLane.length;
+      const cy = inLane.reduce((a, u) => a + mineY(u.y), 0) / inLane.length;
+      engine.applyAction(s, side, { type: 'power', x: cx, depth: cy });
       return;
     }
     const pick = (inLane.length >= 3 && hand.find((u) => arch(u) === 'sort' && can(u)))

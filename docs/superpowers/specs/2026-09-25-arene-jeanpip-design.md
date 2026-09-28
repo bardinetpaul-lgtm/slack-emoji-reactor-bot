@@ -37,7 +37,7 @@ donnés par personnage.
 | ⚔️ Guerrier | 27 % | 3 | ×3 | 170 | 24 | mêlée | moyenne | tout |
 | 🏹 Tireur | 23 % | 3 | ×3 | 115 | 29 | distance | moyenne | tout |
 | 🐝 Essaim | 15 % | 3 | ×6 | 105 | 20 | mêlée | rapide | tout |
-| 💥 Sort | 10 % | 4 | – | – | 350 en zone | – | instantané | 1re unité ennemie du couloir (sinon Pompe, tour, QG), dégâts en zone autour, **40 % sur les bâtiments** |
+| 💥 Sort | 10 % | 4 | – | – | 350 en zone | – | instantané | le point visé (ou le groupe ennemi visé), dégâts en zone autour, **40 % sur les bâtiments** |
 | ⚗️ Pompe | 5 % | 4 | bâtiment | 500 | – | – | immobile | +1 élixir / 7 s pendant 45 s |
 
 ### Rareté
@@ -84,31 +84,34 @@ hors de [35 %, 65 %].
 
 ## ⚔️ Règles du combat
 
-### Terrain
+### Terrain (terrain ouvert depuis le 2026-09-28 : plus de couloirs)
 
 ```
       [T1]   [T2]   [T3]     ← tours de l'adversaire (600 PV, 80 DPS)
              [ QG 2000 ]
-  ────────── rivière ──────────
+  ─────[pont]──────────[pont]───── rivière
              [ QG 2000 ]
       [T1]   [T2]   [T3]     ← mes tours
 ```
 
-- **3 couloirs.** Une unité avance dans son couloir, sans jamais en changer, et attaque ce qu'elle
-  croise (sauf le Tank, qui ne vise que les bâtiments).
-- **Tours de couloir : 600 PV, 80 DPS** sur la zone du couloir proche d'elles. Tant qu'une tour
-  tient, son couloir est fermé : on ne peut pas atteindre le QG par là.
-- **Brèche :** une tour détruite ouvre le couloir jusqu'au QG. Le vainqueur de la tour peut
-  alors poser ses cartes **plus loin dans ce couloir** (jusqu'à la rivière adverse).
-- **QG : 2000 PV, 100 DPS**, ne tire que sur les unités entrées par une brèche.
-- **Pose au point exact :** on touche (ou on glisse la carte sur) le point voulu. Le couloir est le plus
-  proche du point, la profondeur est celle du point : dans sa moitié, du pied de sa tour jusqu'au pont
-  (rivière interdite) ; chez l'adversaire seulement si la tour de ce couloir est tombée. Un **Sort se vise
-  n'importe où**. Un fantôme montre où le groupe apparaîtra (rouge si interdit). L'unité apparaît
-  **0,5 s après** (visible par l'adversaire pendant ce délai ; 1 s jugé trop lent au test, 2026-09-28).
-- **Ciblage :** chaque groupe attaque l'ennemi **le plus proche** de son couloir. Devant lui à toute
-  distance, et **derrière lui jusqu'à 10 cases** : il se retourne pour combattre un groupe qu'il vient de
-  croiser (sinon deux groupes posés l'un devant l'autre s'ignoraient). Le Tank ne vise que les bâtiments.
+- **Repère du moteur** : x de 0 à 100 (absolu, le même pour les deux joueurs ; la page retourne la vue
+  du camp B), y de 0 (camp A) à 100 (camp B). Tours en x = 17 / 50 / 83 (y = 15 ou 85), QG en x = 50.
+  Distances : D = hypot((Δx) × 0,6, Δy) (le terrain est plus haut que large).
+- **Rivière** (y 45 → 55) franchie par **2 ponts** (x = 28 et 72) : à pied, une unité passe par le
+  pont le plus court. **L'Essaim vole** et passe partout.
+- **Ciblage** : chaque unité va vers la **cible la plus proche** : un ennemi repéré (≤ 12), sinon le
+  **bâtiment ennemi le plus proche** (tour, Pompe ou QG). Le Tank ne vise que les bâtiments.
+  (Conséquence : après le pont de gauche, c'est la tour de gauche qui est visée, pas celle du centre.)
+- **Tours : 600 PV, 80 DPS**, portée 12 ; **QG : 2000 PV, 100 DPS**, portée 10 : chacun tire sur
+  l'unité ennemie la plus proche à portée.
+- **Pose libre** : on touche (ou on glisse la carte sur) le point voulu, **n'importe où dans sa
+  moitié** (rivière interdite). **Chez l'adversaire : seulement autour d'une de ses tours détruites**
+  (rayon 20). Un fantôme montre où le groupe apparaîtra (rouge si interdit). Une troupe apparaît
+  **0,5 s après** (visible par l'adversaire pendant ce délai).
+- **Sort** : se vise n'importe où et **frappe tout de suite** ; visé sur le corps d'un ennemi, il se
+  centre sur son groupe (avant : on visait le sol pendant que la cible avançait, et on la ratait).
+- **Pouvoirs du Capitaine** au point touché (rayon 16) ; la Charge concerne les unités présentes
+  dans la zone au moment du pouvoir.
 
 ### Deck, main, élixir
 
@@ -116,7 +119,8 @@ hors de [35 %, 65 %].
   d'exemplaires (×3 possédée → jusqu'à 3). Il faut **au moins 8 exemplaires** en collection pour combattre.
 - **Chaque emplacement se joue UNE seule fois par combat** : une carte mise ×1 dans le deck, une fois
   dépensée, n'est plus disponible ; ×3 dans le deck = 3 poses. **Au maximum 8 poses par combat.**
-- **Main de 4** + la carte suivante visible : la carte posée quitte le jeu, la suivante prend sa place.
+- **Les 8 cartes du deck sont en main dès le début** (2026-09-28) : on pose celle qu'on veut, quand on a
+  l'élixir ; une carte posée quitte la main.
 - **Élixir :** départ 5, max 10, +1 toutes les 2,8 s ; **double élixir la dernière minute**.
 - L'élixir des deux joueurs est visible.
 - **Une seule Pompe active** à la fois par joueur.
@@ -158,7 +162,7 @@ Une pose encore en train d'apparaître (délai de 0,5 s) à la fin compte aussi 
 - **Terrain** : `public/arena-board.js`, DA « Arènes » (Le jardin, Le port, La salle serveur), plan 360×640,
   chaque joueur voit son camp en bas (bleu), l'adversaire en haut (orange).
 - **Écran de combat** : `public/arena.html/.css/.js`, DA « Combat - Menu de pose » : toucher une carte,
-  puis un point de sa moitié (couloir le plus proche ; chez l'adversaire = pose avancée si brèche).
+  puis un point de sa moitié (ou autour d'une tour adverse détruite).
 - **Animations** : groupes en formation, marche (jambes qui alternent), vol de l'Essaim, chenilles du Tank,
   frappes, flèches, obus et impacts (le serveur envoie `atk` = y de la cible frappée), anneau de pose, Sorts,
   chips de dégâts.
@@ -184,12 +188,12 @@ emplacement (7 poses au lieu de 8) et donne un passif + un **pouvoir utilisable 
 
 | Capitaine | Style | Passif | Pouvoir |
 |---|---|---|---|
-| Tank | Siège | Tanks +15 % PV | Rempart : tour du couloir invulnérable 4 s |
-| Guerrier | Rush | unités +25 % vitesse, +15 % dégâts | Charge : couloir vitesse ×2, dégâts +20 % pendant 3 s |
-| Tireur | Contrôle | tours +20 % portée | Salve : 200 dégâts à tout le couloir adverse |
+| Tank | Siège | Tanks +15 % PV | Rempart : ma tour la plus proche du point touché invulnérable 4 s |
+| Guerrier | Rush | unités +25 % vitesse, +15 % dégâts | Charge : mes unités de la zone, vitesse ×2 et dégâts +20 % pendant 3 s |
+| Tireur | Contrôle | tours +8 % portée | Salve : 200 dégâts aux ennemis de la zone |
 | Essaim | Nuée | Essaims +2 abeilles | Renforts : 4 abeilles gratuites |
 | Pompe | Économie | +2 élixir au départ, recharge +10 %, élixir jusqu'à 12 | Surchauffe : élixir ×2 pendant 12 s |
-| Sort | Magie | Écho : chaque Sort se relance une fois gratuitement (sans carte en jeu), −1 élixir | Gel : couloir adverse figé 3 s |
+| Sort | Magie | Écho : chaque Sort se relance une fois gratuitement (sans carte en jeu), −1 élixir | Gel : ennemis de la zone figés 3 s |
 
 Chaque Capitaine gagne entre 41 % et 60 % contre un deck sans Capitaine (bons joueurs des deux côtés).
 

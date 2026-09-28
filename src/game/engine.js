@@ -58,6 +58,7 @@ const BRIDGES = [28, 72];         // x des 2 ponts
 const BRIDGE_HALF = 5;            // demi-largeur d'un pont
 const RIVER = { low: 45, high: 55 };
 const XK = 0.6;
+const REACH_EPS = 0.05;           // tolérance de portée (arrondis des déplacements en 2D)
 const POWER_RADIUS = 16;          // zone d'un pouvoir de Capitaine
 const BREACH_RADIUS = 20;         // pose autour d'une tour adverse détruite
 
@@ -324,7 +325,8 @@ function applyAction(state, side, action) {
   const lane = columnOf(pt.x);
   state.pending.push({
     poseId: pose.id, side, url, lane, forward, x: pt.x, y: pt.y, auto: Boolean(pt.auto),
-    readyAt: state.timeMs + (spell ? 0 : DEPLOY_DELAY_MS),   // 💥 un Sort frappe au pas suivant
+    // 💥 un Sort visé frappe au pas suivant ; sans point visé, il attend que les poses adverses apparaissent
+    readyAt: state.timeMs + (spell ? (pt.auto ? DEPLOY_DELAY_MS + STEP_MS : 0) : DEPLOY_DELAY_MS),
   });
 
   // 👁 l'adversaire voit ce qui est posé (carte, rareté, rôle) et où
@@ -349,8 +351,8 @@ function usePower(state, side, action, events) {
   if (def.lane && !pt) return { ok: false, reason: 'lane', events };
   const now = state.timeMs;
   const foe = other(side);
-  // zone : autour du point, ou toute la colonne si seul un « lane » est donné
-  const inZone = (u) => (isNum(action.x) || isNum(action.depth) ? D(u, pt) <= POWER_RADIUS : Math.abs(u.x - pt.x) <= POWER_RADIUS);
+  // zone : autour du point touché (un simple « lane » vise sa colonne, à mi-chemin de ma tour)
+  const inZone = (u) => D(u, pt) <= POWER_RADIUS;
 
   switch (def.key) {
     case 'rempart': {
@@ -685,29 +687,39 @@ function step(state, events) {
   const hit = (target, dmg) => hits.set(target, (hits.get(target) || 0) + dmg);
   const home = [];
 
+  // Deux temps, pour qu'aucun camp ne soit avantagé par l'ordre de traitement :
+  //   1. chaque unité choisit sa cible et son action sur les positions du DÉBUT du pas ;
+  //   2. puis toutes agissent (déplacements, coups).
+  const plans = [];
   for (const u of state.units) {
     u.attackY = null;   // ⚔️ cible frappée ce pas-ci (flèches, coups à l'écran)
     u.attackX = null;
     if (u.frozenUntil > now) continue;   // 🎖 Gel
-    const fx = state.players[u.side].effects;
     const charging = u.chargeUntil > now;   // 🎖 Charge
     let speed = u.speed * (u.slowUntil > now ? SLOW : 1) * (charging ? TUNING.chargeSpeed : 1);
-
-    // 🏳 Rappel : rentre à sa tour la plus proche sans combattre
     if (u.recalling) {
       speed *= RECALL_SPEED;
       const mine = state.buildings.filter((b) => b.side === u.side && (b.kind === 'tower' || b.kind === 'qg'));
-      const tower = mine.sort((a, b) => D(a, u) - D(b, u))[0];
-      moveToward(u, waypoint(u, tower), speed * dt);
-      if (D(u, tower) <= 2) home.push(u);
+      plans.push({ u, speed, recallTo: mine.sort((a, b) => D(a, u) - D(b, u))[0] });
       continue;
     }
-
     callHook(state, u, 'onTick', {}, events);
     const target = findTarget(state, u);
     if (!target) continue;
     const dist = D(target, u);
-    if (dist <= u.range) {
+    const goal = dist <= u.range + REACH_EPS ? null : waypoint(u, target);
+    plans.push({ u, speed, charging, target, dist, goal });
+  }
+
+  for (const { u, speed, charging, target, dist, goal, recallTo } of plans) {
+    const fx = state.players[u.side].effects;
+    // 🏳 Rappel : rentre à sa tour la plus proche sans combattre
+    if (recallTo) {
+      moveToward(u, waypoint(u, recallTo), speed * dt);
+      if (D(u, recallTo) <= 2) home.push(u);
+      continue;
+    }
+    if (!goal) {   // à portée (tolérance : arrivée pile à portée malgré les arrondis)
       const targetArch = target.archetype || target.kind;
       let dmg = u.dps * dt * damageMultiplier(u.archetype, targetArch);
       if (charging) dmg *= TUNING.chargeDps;
@@ -718,9 +730,7 @@ function step(state, events) {
       u.attackY = target.y;
       u.attackX = target.x;
     } else {
-      const goal = waypoint(u, target);
-      const toGoal = D(goal, u);
-      moveToward(u, goal, Math.min(speed * dt, goal === target ? dist - u.range : toGoal));
+      moveToward(u, goal, Math.min(speed * dt, goal === target ? dist - u.range : D(goal, u)));
     }
   }
   for (const b of state.buildings) {
