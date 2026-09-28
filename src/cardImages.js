@@ -12,14 +12,15 @@
 //    3. repli : page publique slack-files.com → URL pub_secret
 //
 //  Liste blanche : seuls les FILEID présents dans la banque de
-//  médias (ou parmi les photos anti-spam) sont servis (le proxy ne
-//  peut pas lire d'autres fichiers).
+//  médias (médias retirés compris : des joueurs les possèdent encore)
+//  ou parmi les photos anti-spam sont servis (le proxy ne peut pas
+//  lire d'autres fichiers).
 // ═══════════════════════════════════════════════════════════
 
 const fs = require('fs');
 const path = require('path');
 
-const { getAllMedia } = require('./media');
+const { getAllMedia, getRemovedMedia } = require('./media');
 const { SPAM_CARDS } = require('./spamCards');
 
 const CACHE_DIR = path.join(__dirname, '..', 'data', 'card-cache');
@@ -43,7 +44,7 @@ function slackFileId(url) {
 }
 
 function findMediaByFileId(fileId) {
-  return [...getAllMedia(), ...SPAM_CARDS].find((m) => slackFileId(m.url) === fileId) || null;
+  return [...getAllMedia(), ...getRemovedMedia(), ...SPAM_CARDS].find((m) => slackFileId(m.url) === fileId) || null;
 }
 
 // ─────────────────────────────────────────────
