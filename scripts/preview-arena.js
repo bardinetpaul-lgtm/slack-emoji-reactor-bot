@@ -14,6 +14,7 @@
 //  Usage : node scripts/preview-arena.js [port]   (3200 par défaut)
 //          puis http://127.0.0.1:3200/arena/preview?t=jardin
 //          (t = arène : jardin | port | serveurs)
+//          et http://127.0.0.1:3200/deck (« Mon deck », bouton de l'Accueil Slack)
 // ═══════════════════════════════════════════════════════════
 const fs = require('fs');
 const http = require('http');
@@ -220,6 +221,13 @@ function readBody(req) {
   });
 }
 
+// 🃏 Decks de la page « Mon deck » (mémoire du serveur d'aperçu)
+const deckPage = (() => {
+  const collection = demoCollection();
+  const auto = deckRules.buildAutoDeck(collection) || [];
+  return { collection, decks: { active: 0, decks: [{ name: 'Deck 1', cards: auto, captain: null }, { name: 'Deck 2', cards: [] }, { name: 'Deck 3', cards: [] }] } };
+})();
+
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://127.0.0.1:${PORT}`);
 
@@ -229,6 +237,28 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(302, { Location: `/arena/${id}${url.search}` });
     return res.end();
   }
+  // 🃏 « Mon deck » (bouton de l'Accueil Slack) : même page que la prod, collection de démo
+  if (url.pathname === '/deck') {
+    const html = fs.readFileSync(path.join(PUBLIC, 'deck.html'), 'utf-8').replace(/__ASSET_VERSION__/g, String(Date.now()));
+    res.writeHead(200, { 'Content-Type': TYPES['.html'] });
+    return res.end(html);
+  }
+  if (url.pathname === '/api/deck') {
+    if (req.method === 'POST') {
+      const body = await readBody(req);
+      if (body.tutorial === true) tutorialSeen = true;
+      else deckPage.decks = { active: Number(body.active) || 0, decks: body.decks };
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      return res.end('{"ok":true}');
+    }
+    // images relatives à la racine (et non à …/arena/<id>)
+    const catalogue = catalogueOf(deckPage.collection).map((c) => ({ ...c, image: c.image && c.image.replace(/^\.\.\//, '') }));
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    return res.end(JSON.stringify({
+      status: 'ok', name: 'Toi', catalogue, ...deckPage.decks, captains: CAPTAINS, specialties: specialties.INFO, tutorialSeen,
+    }));
+  }
+
   if (/^\/arena\/p[a-z0-9]+$/.test(url.pathname)) {
     const html = fs.readFileSync(path.join(PUBLIC, 'arena.html'), 'utf-8').replace(/__ASSET_VERSION__/g, String(Date.now()));
     res.writeHead(200, { 'Content-Type': TYPES['.html'] });

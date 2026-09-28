@@ -60,6 +60,7 @@ function attackMode(userId, isAdmin) {
  * @param {Function} ctx.formatRemaining  - ms → « 42 min »
  * @param {Array<{id, fixed}>} [ctx.autoTargets] - cibles auto-react (admins)
  * @param {string|null} [ctx.collectionUrl] - lien du classeur web (null si page web désactivée)
+ * @param {string|null} [ctx.deckUrl] - lien « Mon deck » de l'Arène (null si page web désactivée)
  */
 function buildHomeView(userId, ctx) {
   const balance = credits.getBalance(userId);
@@ -137,6 +138,15 @@ function buildHomeView(userId, ctx) {
     blocks.push(section(
       `📒 *Mon classeur* — toutes tes cartes rangées comme un album Panini, mis à jour en direct.`,
       { ...button('📒 Ouvrir mon classeur', 'open_collection_web'), url: ctx.collectionUrl },
+    ));
+    blocks.push({ type: 'divider' });
+  }
+
+  // ⚔️ Arène : éditer ses decks sans lancer de combat (page web)
+  if (ctx.deckUrl) {
+    blocks.push(section(
+      `⚔️ *Arène — Mon deck* — prépare tes 3 decks de combat et ton Capitaine, quand tu veux. Le deck actif est celui que tu emmènes au combat.`,
+      { ...button('🃏 Modifier mon deck', 'open_deck_web'), url: ctx.deckUrl },
     ));
     blocks.push({ type: 'divider' });
   }

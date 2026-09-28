@@ -201,6 +201,26 @@ async function test(name, fn) {
     assert.ok(!find(home.buildHomeView('U_A', { ...ctx, collectionUrl: null })), 'absent sans page web');
   });
 
+  await test('Accueil : bouton-lien « Mon deck » (Arène) vers la page deck signée', async () => {
+    const ctx = {
+      isAdmin: false, attackPrice: 30, creditsPerJeanpipLabel: '1', targetEmoji: 'x',
+      farmRemainingMs: 0, farmQuota: { used: 0, max: 10, nextFreeMs: 0 }, formatRemaining: () => '',
+    };
+    const find = (view) => view.blocks.find((b) => b.accessory && b.accessory.action_id === 'open_deck_web');
+    const url = web.buildDeckUrl('U_A');
+    assert.ok(url && url.includes('/deck?t='), 'lien deck construit');
+    const btn = find(home.buildHomeView('U_A', { ...ctx, deckUrl: url }));
+    assert.ok(btn, 'bouton présent');
+    assert.strictEqual(btn.accessory.url, url);
+    assert.ok(!find(home.buildHomeView('U_A', { ...ctx, deckUrl: null })), 'absent sans page web');
+    // le lien ouvre bien les decks du joueur (jeton accepté par l'API)
+    const t = new URL(url).searchParams.get('t');
+    const res = await fetch(`${base}/api/deck?t=${encodeURIComponent(t)}`);
+    assert.strictEqual(res.status, 200, 'API deck accessible avec le jeton du lien');
+    const data = await res.json();
+    assert.ok(Array.isArray(data.decks) && data.decks.length === 3, '3 decks renvoyés');
+  });
+
   server.close();
   fs.rmSync(TMP, { recursive: true, force: true });
   console.log(`\n${passed} test(s) OK${process.exitCode ? ' — ❌ ÉCHECS ci-dessus' : ' 🎉'}\n`);
