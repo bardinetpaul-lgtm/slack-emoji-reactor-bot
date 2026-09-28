@@ -164,7 +164,6 @@ body.wide .top { display: none; }
 .de-card { position: relative; border: none; padding: 0; cursor: pointer; aspect-ratio: 3 / 4; border-radius: 14px; background: var(--c3); font-family: 'Inter Tight', sans-serif; color: var(--ink); }
 .de-card:disabled { cursor: default; }
 .de-card.empty { background: var(--ink); }
-.de-card.unowned { opacity: .4; }
 .de-card.in-deck { box-shadow: 0 0 0 3px var(--blue); }
 .de-card:focus-visible { outline: 3px solid var(--blue); outline-offset: 2px; }
 .de-art { position: absolute; inset: 0; border-radius: 14px; background-size: cover; background-position: center; }
@@ -276,7 +275,6 @@ body.wide .top { display: none; }
   color: #fff; font-size: 12px; text-shadow: 0 1px 2px rgba(0, 0, 0, .6);
 }
 .card .copies { right: 6px; bottom: 6px; font-size: 11px; }
-.de-card.unowned .de-copies { color: var(--ink); text-shadow: none; }
 .de-cost, .card .cost, .de-spec, .card .spec, .de-badge, .card .tag { z-index: 4; }
 .card .tag { bottom: 22px; }
 .de-grid .de-badge { bottom: 26px; }

@@ -141,8 +141,8 @@ const pathOf = (url) => url.replace('http://jeanpip.test/', '');
     && /no-transform/.test(resA.headers['cache-control']) && resA.headers['x-accel-buffering'] === 'no');
   await until(() => lastState(sA));
   const setupPrep = sA.events.find((e) => e.event === 'setup');
-  check('préparation : setup avec noms Slack + catalogue complet', setupPrep && setupPrep.data.names.you === 'Paul' && setupPrep.data.names.opponent === 'Julie'
-    && setupPrep.data.catalogue.length === bank.length);
+  check('préparation : setup avec noms Slack + catalogue = mes cartes seulement', setupPrep && setupPrep.data.names.you === 'Paul' && setupPrep.data.names.opponent === 'Julie'
+    && setupPrep.data.catalogue.length === 10 && setupPrep.data.catalogue.every((c) => c.copies > 0));
   const own = setupPrep.data.catalogue.filter((c) => c.copies > 0);
   check('catalogue : mes exemplaires + vraies images', own.length === 10 && own.every((c) => c.image === null || typeof c.image === 'string'));
   check('préparation : arène, decks et statut', lastState(sA).data.phase === 'preparing' && lastState(sA).data.arena === 'port' && lastState(sA).data.decks.length === 3);
@@ -206,7 +206,8 @@ const pathOf = (url) => url.replace('http://jeanpip.test/', '');
   const deckPage = await request('GET', pathOf(deckUrl));
   check('page « Mon deck » servie', deckPage.status === 200 && deckPage.body.includes('deck-editor.js?v='));
   const dget = await request('GET', `api/deck?t=${encodeURIComponent(dt)}`);
-  check('API deck : catalogue + mes decks', dget.json && dget.json.catalogue.length === bank.length && dget.json.decks.length === 3 && dget.json.active === 1);
+  const ownedA = collections.getCollection('UA').filter((c) => c.count > 0).length;
+  check('API deck : mes cartes seulement (aucune non possédée) + mes decks', dget.json && dget.json.catalogue.length === ownedA && dget.json.catalogue.every((c) => c.copies > 0) && dget.json.decks.length === 3 && dget.json.active === 1);
   const dpost = await request('POST', `api/deck?t=${encodeURIComponent(dt)}`, { active: 0, decks: [{ name: 'Nouveau', cards: deckA }, {}, {}] });
   check('API deck : enregistrement', dpost.json && dpost.json.ok);
   check('API deck : jeton refusé', (await request('GET', 'api/deck?t=UA.00')).status === 403);

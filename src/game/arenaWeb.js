@@ -94,9 +94,10 @@ function imageFor(card, prefix) {
   return /^https?:/.test(img) ? img : `${prefix}${img}`;
 }
 
+// Seulement les cartes POSSÉDÉES : une carte qu'on n'a pas n'apparaît nulle part (ni envoyée)
 function catalogueFor(userId, prefix) {
   const owned = Object.fromEntries(collections.getCollection(userId).map((c) => [c.url, c.count]));
-  return getAllMedia().map((m) => {
+  return getAllMedia().filter((m) => owned[m.url] > 0).map((m) => {
     const s = getCardStats(m);
     return {
       url: m.url, title: m.title, rarity: s.rarity, archetype: s.archetype, cost: s.cost, specialty: s.specialty,

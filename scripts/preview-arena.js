@@ -65,7 +65,7 @@ function demoCollection() {
 }
 
 function catalogueOf(collection) {
-  return collection.map((m) => {
+  return collection.filter((m) => m.count > 0).map((m) => {   // cartes possédées seulement
     const s = getCardStats(m);
     return { url: m.url, title: m.title, rarity: s.rarity, archetype: s.archetype, cost: s.cost, specialty: s.specialty, copies: m.count, image: imageOf(m) };
   });

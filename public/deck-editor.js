@@ -114,6 +114,8 @@
   }
 
   function mount(rootEl, opts) {
+    // une carte non possédée n'apparaît nulle part (le serveur ne les envoie déjà plus)
+    opts = { ...opts, catalogue: (opts.catalogue || []).filter((c) => c.copies > 0) };
     const byUrl = Object.fromEntries(opts.catalogue.map((c) => [c.url, c]));
     const captains = opts.captains || {};
     const specs = opts.specialties || {};
@@ -318,10 +320,10 @@
       const inDeckCount = {};
       d.cards.forEach((u) => { inDeckCount[u] = (inDeckCount[u] || 0) + 1; });
       const deckFull = d.cards.length >= DECK_SIZE;
-      const owned = opts.catalogue.filter((c) => c.copies > 0).length;
+      const owned = opts.catalogue.length;
 
       const head = el('div', 'de-coll-head');
-      head.append(el('h2', null, 'Votre collection'), el('span', 'de-muted', `${owned} cartes possédées sur ${opts.catalogue.length}`));
+      head.append(el('h2', null, 'Votre collection'), el('span', 'de-muted', `${owned} carte${owned > 1 ? 's' : ''} dans ta collection`));
 
       const bar = el('div', 'de-filters');
       [['all', 'Toutes'], ...Object.entries(ARCH_LABELS).map(([k, l]) => [k, `${ROLES[k].emoji} ${l}`])].forEach(([k, l]) => {
@@ -344,8 +346,7 @@
 
       let list = opts.catalogue.filter((c) => state.filter === 'all' || c.archetype === state.filter);
       const rank = (c) => (RARITY_ORDER[c.rarity] === undefined ? 3 : RARITY_ORDER[c.rarity]);
-      list = [...list].sort((a, b) => (b.copies > 0) - (a.copies > 0)
-        || (state.sort === 'cost' ? a.cost - b.cost : 0)
+      list = [...list].sort((a, b) => (state.sort === 'cost' ? a.cost - b.cost : 0)
         || (state.sort === 'rarity' ? rank(a) - rank(b) : 0)
         || String(a.title).localeCompare(String(b.title), 'fr', { numeric: true }));
 
@@ -354,12 +355,12 @@
         const n = inDeckCount[c.url] || 0;
         const on = n > 0;
         const can = n < c.copies && !deckFull;
-        const b = el('button', `de-card${on ? ' in-deck' : ''}${c.copies > 0 ? '' : ' unowned'}`);
+        const b = el('button', `de-card${on ? ' in-deck' : ''}`);
         b.type = 'button';
         b.disabled = !(can || on);
         b.setAttribute('aria-pressed', String(on));
         b.setAttribute('aria-label', `${c.title}, ${RARITIES[c.rarity] || RARITIES.common}, ${ARCH_LABELS[c.archetype]}, coût ${c.cost}, ${c.copies} exemplaire(s), ${n} dans le deck`);
-        b.append(cardArt(c), el('span', 'de-cost', String(c.cost)), el('span', 'de-copies', c.copies > 0 ? `×${c.copies}` : '0'));
+        b.append(cardArt(c), el('span', 'de-cost', String(c.cost)), el('span', 'de-copies', `×${c.copies}`));
         decorate(b, c);
         if (can) b.title += '\n→ Ajouter un emplacement';
         else if (on) b.title += '\n→ Retirer un emplacement';
