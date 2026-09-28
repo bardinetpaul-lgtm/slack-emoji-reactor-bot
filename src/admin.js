@@ -13,7 +13,7 @@
 const scores = require('./scores');
 const credits = require('./credits');
 const targets = require('./targets');
-const { addMedia, getRarityInfo } = require('./media');
+const { addMedia, removeMedia, getRarityInfo } = require('./media');
 const { buildMediaBlocks } = require('./blocks');
 const { describeText: describeCharacter } = require('./game/characters');
 
@@ -160,6 +160,42 @@ function createAdminActions({ safeSendDM, isBot, targetEmoji }) {
   }
 
   // ─────────────────────────────────────────────
+  // 🗑️ Retirer un média ajouté en live (« Surprise #number »)
+  //    Il ne sort plus au tirage. Ceux qui l'ont déjà le gardent
+  //    (classeur : « Hors série ») et son numéro n'est jamais réattribué.
+  //    Les crédits déjà versés à l'auteur ne sont PAS repris.
+  // ─────────────────────────────────────────────
+  function removeMediaFromBank(adminId, number, logger) {
+    const result = removeMedia(number);
+    if (!result.ok) {
+      const reason = {
+        introuvable: `Le média Surprise #${number} n'est pas (ou plus) dans la banque.`,
+        ecriture: `Erreur d'écriture du fichier${result.detail ? ` : ${result.detail}` : ''}.`,
+      }[result.error] || 'Erreur inconnue.';
+      return { ok: false, error: result.error, text: `❌ *Impossible de retirer le média.*\n${reason}` };
+    }
+
+    const { media } = result;
+    const info = getRarityInfo(media.rarity);
+    logger.info(`🗑️ <@${adminId}> a retiré le média #${number} (${media.rarity}) : ${media.url}`);
+
+    const authorLine = media.author
+      ? `\n🎨 Les *${formatCredits(AUTHOR_REWARDS[media.rarity] || 0)} crédit(s)* versés à <@${media.author}> ne sont pas repris (utilise *💳 Crédits ±* si besoin).`
+      : '';
+    const text = `🗑️ *Média retiré de la banque : ${media.title}*\n\n${info.emoji} Il ne sortira plus au tirage — il reste *${result.count}* média(s) en ${info.label}.\n📒 Ceux qui l'ont déjà le gardent (rangé en « Hors série » du classeur). Son numéro ne sera pas réattribué.${authorLine}`;
+
+    return {
+      ok: true,
+      text,
+      blocks: [
+        section(text),
+        ...buildMediaBlocks({ headerText: `🗑️ *Média retiré*`, media }),
+      ],
+      media,
+    };
+  }
+
+  // ─────────────────────────────────────────────
   // 🎪 Cibles auto-react
   // ─────────────────────────────────────────────
   function addAutoTarget(adminId, targetId, logger) {
@@ -201,6 +237,7 @@ function createAdminActions({ safeSendDM, isBot, targetEmoji }) {
     adjustCredits,
     addMediaToBank,
     notifyMediaAuthor,
+    removeMediaFromBank,
     addAutoTarget,
     removeAutoTarget,
     listAutoTargets,

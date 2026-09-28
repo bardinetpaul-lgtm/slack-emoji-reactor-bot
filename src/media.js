@@ -54,6 +54,9 @@ try {
 // ➕ Banque CUSTOM (médias ajoutés en live via /jeanpip-addmedia)
 //    Fichier runtime séparé (gitignored) pour ne pas toucher
 //    media-bank.json versionné.
+//    Un média retiré par un admin y reste avec `removedAt` : il ne sort
+//    plus au tirage, mais son numéro reste pris et les joueurs qui le
+//    possèdent voient toujours son image dans le classeur.
 // ─────────────────────────────────────────────
 const CUSTOM_BANK_PATH = path.join(__dirname, '..', 'data', 'media-bank-custom.json');
 let customMedia = [];
@@ -63,8 +66,9 @@ try {
     const parsed = JSON.parse(fs.readFileSync(CUSTOM_BANK_PATH, 'utf-8'));
     if (Array.isArray(parsed)) {
       customMedia = parsed;
-      localMediaBank = localMediaBank.concat(customMedia);
-      console.log(`➕ Banque custom chargée : ${customMedia.length} média(s) ajouté(s)`);
+      const active = customMedia.filter((m) => !m.removedAt);
+      localMediaBank = localMediaBank.concat(active);
+      console.log(`➕ Banque custom chargée : ${active.length} média(s) ajouté(s)${active.length < customMedia.length ? `, ${customMedia.length - active.length} retiré(s)` : ''}`);
     }
   }
 } catch (err) {
@@ -268,11 +272,12 @@ const RESERVED_NUMBER_MAX = 71;
 
 /**
  * Retourne le prochain numéro « Surprise #N » libre.
- * = max(plus grand numéro de la banque, plage réservée anti-spam) + 1
+ * = max(plus grand numéro de la banque, médias retirés compris,
+ *       plage réservée anti-spam) + 1
  */
 function getNextMediaNumber() {
   let max = RESERVED_NUMBER_MAX;
-  for (const media of localMediaBank) {
+  for (const media of [...localMediaBank, ...customMedia]) {
     const match = (media.title || '').match(/Surprise #(\d+)/);
     if (match) {
       const n = parseInt(match[1], 10);
@@ -337,7 +342,7 @@ function addMedia({ url, rarity, title, author }) {
 //    Les objets étant partagés avec mediaByRarity, la correction se propage.
 // ─────────────────────────────────────────────
 function migrateCustomNumbers() {
-  const sansNumero = customMedia.filter((m) => !/Surprise #\d+/.test(m.title || ''));
+  const sansNumero = customMedia.filter((m) => !m.removedAt && !/Surprise #\d+/.test(m.title || ''));
   if (sansNumero.length === 0) return;
 
   let next = getNextMediaNumber();
@@ -361,6 +366,54 @@ function migrateCustomNumbers() {
 
 migrateCustomNumbers();
 
+// ─────────────────────────────────────────────
+// 🗑️ Retrait d'un média ajouté en live (banque custom uniquement :
+//    media-bank.json versionné n'est jamais modifié par le bot)
+// ─────────────────────────────────────────────
+
+/** « ⚪ Surprise #12 — Titre » → 12 (null si pas de numéro). */
+function mediaNumber(media) {
+  const match = /Surprise #(\d+)/.exec((media && media.title) || '');
+  return match ? parseInt(match[1], 10) : null;
+}
+
+/** Médias ajoutés en live encore en jeu, du plus récent au plus ancien. */
+function listCustomMedia() {
+  return customMedia.filter((m) => !m.removedAt).reverse();
+}
+
+/**
+ * Retire de la banque le média custom « Surprise #number ».
+ * Il ne sort plus au tirage ; son numéro n'est jamais réattribué.
+ * @returns {{ ok, media?, count?, error? }}
+ */
+function removeMedia(number) {
+  const media = customMedia.find((m) => !m.removedAt && mediaNumber(m) === number);
+  if (!media) return { ok: false, error: 'introuvable' };
+
+  media.removedAt = new Date().toISOString();
+  try {
+    fs.writeFileSync(CUSTOM_BANK_PATH, JSON.stringify(customMedia, null, 2), 'utf-8');
+  } catch (e) {
+    delete media.removedAt;
+    return { ok: false, error: 'ecriture', detail: e.message };
+  }
+
+  // En mémoire : hors banque + hors regroupement, et deck de la rareté reshufflé
+  localMediaBank = localMediaBank.filter((m) => m !== media);
+  for (const [rarity, list] of Object.entries(mediaByRarity)) {
+    const i = list.indexOf(media);
+    if (i !== -1) {
+      list.splice(i, 1);
+      delete decks[rarity];
+      delete deckIndexes[rarity];
+    }
+  }
+
+  const rarity = RARITIES[media.rarity] ? media.rarity : DEFAULT_RARITY;
+  return { ok: true, media, count: mediaByRarity[rarity].length };
+}
+
 /**
  * Toute la banque (versionnée + custom), telle qu'en mémoire.
  * Utilisé par le proxy d'images comme liste blanche.
@@ -369,12 +422,21 @@ function getAllMedia() {
   return localMediaBank;
 }
 
+/** Médias retirés de la banque (toujours possédés par des joueurs). */
+function getRemovedMedia() {
+  return customMedia.filter((m) => m.removedAt);
+}
+
 module.exports = {
   getRandomMedia,
   getAllMedia,
+  getRemovedMedia,
   drawCardOfRarity,
   getRarityInfo,
   normalizeRarity,
   addMedia,
+  removeMedia,
+  listCustomMedia,
+  mediaNumber,
   RARITIES,
 };

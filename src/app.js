@@ -1489,6 +1489,7 @@ const ADMIN_MODALS = {
   admin_credits_open: home.buildCreditsModal,
   admin_addmedia_open: home.buildAddMediaModal,
   admin_card_type_open: home.buildCardTypeModal,
+  admin_removemedia_open: home.buildRemoveMediaModal,
   admin_target_add_open: home.buildAddTargetModal,
   admin_credit_value_open: home.buildCreditValueModal,
   admin_farm_limit_open: home.buildFarmLimitModal,
@@ -1601,6 +1602,25 @@ app.view('admin_card_type_submit', async ({ ack, body, view, client, logger }) =
   logger.info(`⚔️ <@${adminId}> : type de « ${card.title} » ${before} → ${result.archetype}${result.auto ? ' (automatique)' : ''}`);
   const text = `⚔️ *Type de carte mis à jour*\n*${card.title}* : ${label(before)} → *${label(result.archetype)}*${result.auto ? ' _(automatique)_' : ''}\n🎭 Son personnage : ${describeCharacter(card)}\n_Les combats en cours ne changent pas._`;
   await sendAdminResult(client, adminId, { text }, logger);
+});
+
+// 🗑️ Modale « Retirer un média »
+app.view('admin_removemedia_submit', async ({ ack, body, view, client, logger }) => {
+  const adminId = body.user.id;
+  if (!isAdminUser(adminId, logger, 'admin_removemedia_submit')) return ack(fieldError('media', 'Réservé aux admins.'));
+
+  const selected = view.state.values.media.value.selected_option;
+  if (!selected) return ack(fieldError('media', 'Choisis un média.'));
+
+  const result = adminActions.removeMediaFromBank(adminId, parseInt(selected.value, 10), logger);
+  if (!result.ok) return ack(fieldError('media', plain(result.text.split('\n')[1] || result.text)));
+
+  await ack();
+  try {
+    await sendAdminResult(client, adminId, result, logger);
+  } catch (error) {
+    logger.error('❌ Erreur dans admin_removemedia_submit:', error);
+  }
 });
 
 // ⚙️ Modale « Crédits par Jeanpip » (valeur d'un Jeanpip envoyé, sans rétroactivité)
