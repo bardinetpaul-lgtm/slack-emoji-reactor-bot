@@ -27,7 +27,9 @@
 //  Rétro-compatibilité : { lane } (0, 1, 2) = la colonne d'une tour.
 //
 //  Deck : les 8 cartes sont jouables à tout moment (élixir permettant) ;
-//  chaque emplacement se joue UNE fois par combat.
+//  chaque emplacement se joue UNE fois par combat. Quand les deux joueurs
+//  ont tout posé et que le terrain est vide, le combat s'arrête (décompte
+//  comme à la fin du temps : tours détruites, puis PV du QG).
 //
 //  Mécaniques de style de jeu :
 //    🎖 Capitaine  : une 9e carte HORS du deck, jamais posée → passif + pouvoir 1×
@@ -758,11 +760,20 @@ function step(state, events) {
   }
   applyDamage(state, hits, events);
 
-  // 🏁 Fin : QG détruit, sinon fin du temps
+  // 🏁 Fin : QG détruit, sinon fin du temps, ou plus rien à jouer
   for (const side of SIDES) {
     if (!qgOf(state, side).alive) return endMatch(state, other(side), 'qg', events);
   }
-  if (now >= state.durationMs) endByTime(state, events);
+  if (now >= state.durationMs) return endByTime(state, events);
+  if (outOfCards(state)) {
+    state.outOfCards = true;   // 🃏 toutes les cartes jouées des deux côtés, terrain vide
+    endByTime(state, events);
+  }
+}
+
+/** Plus aucune carte en main des deux côtés, rien en train d'apparaître, plus aucune troupe. */
+function outOfCards(state) {
+  return SIDES.every((side) => state.players[side].hand.length === 0) && !state.pending.length && !state.units.length;
 }
 
 function endByTime(state, events) {
@@ -791,6 +802,7 @@ function endMatch(state, winner, reason, events = []) {
   state.result = {
     winner,
     reason,
+    outOfCards: Boolean(state.outOfCards),   // fini avant 2:00 : toutes les cartes jouées
     // les poses « free » (Écho) n'engagent aucune carte : exclues du bilan
     poses: state.poses.filter((p) => !p.free).map(({ side, url, title, rarity, archetype, status }) => ({ side, url, title, rarity, archetype, status })),
   };
