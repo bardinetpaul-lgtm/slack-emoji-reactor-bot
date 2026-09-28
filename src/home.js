@@ -13,7 +13,7 @@ const scores = require('./scores');
 const credits = require('./credits');
 const boosters = require('./boosters');
 const broadcast = require('./broadcast');
-const { RARITIES } = require('./media');
+const { RARITIES, listCustomMedia, mediaNumber } = require('./media');
 const settings = require('./settings');
 const weeklyGift = require('./weeklyGift');
 const { formatCredits, AUTHOR_REWARDS } = require('./admin');
@@ -197,6 +197,7 @@ function buildAdminBlocks(autoTargets) {
         button('🎁 Offrir une attaque', 'admin_give_attack_open'),
         button('💳 Crédits ±', 'admin_credits_open'),
         button('🖼️ Ajouter un média', 'admin_addmedia_open'),
+        button('🗑️ Retirer un média', 'admin_removemedia_open'),
         button('🎪 Ajouter une cible', 'admin_target_add_open'),
         button('⚙️ Crédits par Jeanpip', 'admin_credit_value_open'),
         button('🚜 Limite anti-farm', 'admin_farm_limit_open'),
@@ -350,6 +351,46 @@ function buildAddMediaModal() {
   ]);
 }
 
+// Limites Slack : 100 options par menu, 75 caractères par option
+const MAX_REMOVABLE_SHOWN = 100;
+
+function truncate(text, max) {
+  return text.length > max ? `${text.slice(0, max - 1)}…` : text;
+}
+
+/** 🗑️ Modale « Retirer un média » : choix parmi les médias ajoutés en live. */
+function buildRemoveMediaModal() {
+  const removable = listCustomMedia().filter((m) => mediaNumber(m) !== null);
+
+  if (removable.length === 0) {
+    return {
+      type: 'modal',
+      title: { type: 'plain_text', text: 'Retirer un média' },
+      close: { type: 'plain_text', text: 'Fermer' },
+      blocks: [section(`ℹ️ *Aucun média ajouté depuis l'admin.*\n_Seuls les médias ajoutés en live (🖼️ Ajouter un média ou \`/jeanpip-addmedia\`) peuvent être retirés ici._`)],
+    };
+  }
+
+  return modal('admin_removemedia_submit', 'Retirer un média', '🗑️ Retirer', [
+    {
+      type: 'input',
+      block_id: 'media',
+      label: { type: 'plain_text', text: 'Quel média retirer ?' },
+      element: {
+        type: 'static_select',
+        action_id: 'value',
+        placeholder: { type: 'plain_text', text: 'Choisis un média' },
+        options: removable.slice(0, MAX_REMOVABLE_SHOWN).map((m) => ({
+          text: { type: 'plain_text', text: truncate(m.title, 75), emoji: true },
+          value: String(mediaNumber(m)),
+        })),
+      },
+      hint: { type: 'plain_text', text: `Du plus récent au plus ancien${removable.length > MAX_REMOVABLE_SHOWN ? ` (les ${MAX_REMOVABLE_SHOWN} derniers)` : ''}. Seuls les médias ajoutés en live sont listés.` },
+    },
+    { type: 'context', elements: [{ type: 'mrkdwn', text: `_Le média ne sortira plus au tirage. Ceux qui l'ont déjà le gardent (« Hors série » du classeur), son numéro n'est pas réattribué et les crédits de l'auteur ne sont pas repris. Tu recevras un aperçu en DM._` }] },
+  ]);
+}
+
 function buildAddTargetModal() {
   return modal('admin_target_add_submit', 'Ajouter une cible', 'Ajouter', [
     userInput('Qui doit recevoir un Jeanpip auto à chaque message ?'),
@@ -403,6 +444,7 @@ module.exports = {
   buildGiveAttackModal,
   buildCreditsModal,
   buildAddMediaModal,
+  buildRemoveMediaModal,
   buildAddTargetModal,
   attackMode,
 };

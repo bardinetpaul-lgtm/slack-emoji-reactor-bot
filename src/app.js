@@ -1478,6 +1478,7 @@ const ADMIN_MODALS = {
   admin_give_attack_open: home.buildGiveAttackModal,
   admin_credits_open: home.buildCreditsModal,
   admin_addmedia_open: home.buildAddMediaModal,
+  admin_removemedia_open: home.buildRemoveMediaModal,
   admin_target_add_open: home.buildAddTargetModal,
   admin_credit_value_open: home.buildCreditValueModal,
   admin_farm_limit_open: home.buildFarmLimitModal,
@@ -1563,6 +1564,25 @@ app.view('admin_addmedia_submit', async ({ ack, body, view, client, logger }) =>
     }
   } catch (error) {
     logger.error('❌ Erreur dans admin_addmedia_submit:', error);
+  }
+});
+
+// 🗑️ Modale « Retirer un média »
+app.view('admin_removemedia_submit', async ({ ack, body, view, client, logger }) => {
+  const adminId = body.user.id;
+  if (!isAdminUser(adminId, logger, 'admin_removemedia_submit')) return ack(fieldError('media', 'Réservé aux admins.'));
+
+  const selected = view.state.values.media.value.selected_option;
+  if (!selected) return ack(fieldError('media', 'Choisis un média.'));
+
+  const result = adminActions.removeMediaFromBank(adminId, parseInt(selected.value, 10), logger);
+  if (!result.ok) return ack(fieldError('media', plain(result.text.split('\n')[1] || result.text)));
+
+  await ack();
+  try {
+    await sendAdminResult(client, adminId, result, logger);
+  } catch (error) {
+    logger.error('❌ Erreur dans admin_removemedia_submit:', error);
   }
 });
 
