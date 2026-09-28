@@ -28,5 +28,8 @@ data/collections.json
 data/settings.json
 data/weekly-gift.json
 data/farm.json
+data/arena.json
 data/web-secret
 data/card-cache/
+data/card-looks.json
+data/card-overrides.json

@@ -11,7 +11,11 @@
   "author": "PaulBRD",
   "license": "MIT",
   "dependencies": {
+    "@anthropic-ai/foundry-sdk": "^0.4.9",
+    "@anthropic-ai/sdk": "^0.128.0",
     "@slack/bolt": "^4.1.0",
-    "dotenv": "^16.4.7"
+    "dotenv": "^16.4.7",
+    "jpeg-js": "^0.4.4",
+    "pngjs": "^7.0.0"
   }
 }

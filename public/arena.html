@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="theme-color" content="#1A201D">
+  <title>Arène · Jeanpip</title>
+  <!-- Chemins relatifs : la page est servie sur …/arena/<id> (derrière un préfixe de proxy) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;600&family=Space+Grotesk:wght@400&display=swap">
+  <link rel="stylesheet" href="../arena.css?v=__ASSET_VERSION__">
+</head>
+<body>
+  <main class="frame" id="frame">
+    <header class="top">
+      <div class="opponent"><span class="dot" aria-hidden="true"></span><span id="opponent">Adversaire</span><span class="opp-cap" id="opp-cap"></span><span class="opp-rage" id="opp-rage" hidden>🔥</span></div>
+      <span class="clock" id="clock" aria-live="off">2:00</span>
+    </header>
+
+    <!-- ⏳ Préparation = éditeur de deck (DA « Editeur de deck ») -->
+    <section class="phase" id="phase-preparing" hidden>
+      <header class="prep-head">
+        <div class="prep-title">
+          <span class="vs"><span id="prep-me">Vous</span> <span class="sep">vs</span> <span id="prep-opp">Adversaire</span></span>
+          <small>Préparation du combat. Le deck adverse reste caché. <span class="prep-arena" id="prep-arena"></span></small>
+        </div>
+        <div class="prep-status">
+          <span class="prep-chip" id="chip-me"><i></i><span>Vous · en préparation</span></span>
+          <span class="prep-chip" id="chip-opp"><i></i><span>Adversaire · en préparation</span></span>
+          <button type="button" class="tuto-btn" id="tuto-btn">❓ Tuto</button>
+        </div>
+        <div class="prep-clock"><b id="prep-clock">1:00</b><span>avant le lancement</span></div>
+      </header>
+      <div class="editor" id="editor"></div>
+      <p class="muted small">Les cartes que tu poses sont en jeu : détruites, elles sont perdues. Si tu perds le combat, toutes tes cartes posées sont perdues.</p>
+    </section>
+
+    <!-- ⚔️ Combat -->
+    <section class="phase" id="phase-running" hidden>
+      <div class="board-wrap" id="board-wrap">
+        <svg id="board" role="img" aria-label="Arène"></svg>
+        <span class="pill" id="pill" role="status" hidden></span>
+        <span class="x2" id="x2" hidden>×2 élixir</span>
+        <span class="rage" id="rage" hidden>🔥 Rage !</span>
+        <div class="opp-feed" id="opp-feed" aria-label="Dernières cartes posées par l'adversaire" hidden></div>
+      </div>
+      <div class="hand-row">
+        <div class="hand" id="hand" role="group" aria-label="Mon deck : les cartes jouables"></div>
+      </div>
+      <div class="elixir" aria-label="Élixir">
+        <span class="badge" id="elixir-count">5</span>
+        <div class="segs" id="elixir-segs"></div>
+      </div>
+      <div class="power-row">
+        <button type="button" class="power" id="power" hidden></button>
+        <span class="hint" id="hint">Touche un de tes groupes pour le rappeler 🏳 : sorti du terrain, sa carte est sauvée.</span>
+      </div>
+    </section>
+
+    <!-- 🏁 Fin -->
+    <section class="phase" id="phase-ended" hidden>
+      <h1 id="result-title">Combat terminé</h1>
+      <p class="muted" id="result-sub"></p>
+      <div class="result" id="result"></div>
+      <p class="muted small">Le récapitulatif t'attend aussi en DM dans Slack.</p>
+    </section>
+
+    <p class="muted center" id="status">Connexion à l'arène…</p>
+  </main>
+
+  <script src="../arena-wire.js?v=__ASSET_VERSION__"></script>
+  <script src="../arena-board.js?v=__ASSET_VERSION__"></script>
+  <script src="../deck-editor.js?v=__ASSET_VERSION__"></script>
+  <script src="../arena-tutorial.js?v=__ASSET_VERSION__"></script>
+  <script src="../arena.js?v=__ASSET_VERSION__"></script>
+</body>
+</html>
