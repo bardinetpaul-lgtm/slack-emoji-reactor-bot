@@ -317,6 +317,7 @@ function buildHomeFor(userId) {
     formatRemaining,
     autoTargets: isAdmin ? adminActions.listAutoTargets() : undefined,
     collectionUrl: web.buildCollectionUrl(userId),
+    statsUrl: isAdmin ? web.buildStatsUrl(userId) : null,
     deckUrl: web.buildDeckUrl(userId),
     arena: arenaSlack.homeState(userId, ARENA_LINKS),
   });
@@ -1250,6 +1251,11 @@ app.action('open_booster_web', async ({ ack }) => {
 
 // 📒 Bouton-lien « Mon classeur » de l'Accueil : même principe, rien à faire
 app.action('open_collection_web', async ({ ack }) => {
+  await ack();
+});
+
+// 📊 Bouton-lien « Stats du jeu » (admins) : la page s'ouvre dans le navigateur
+app.action('open_stats_web', async ({ ack }) => {
   await ack();
 });
 
