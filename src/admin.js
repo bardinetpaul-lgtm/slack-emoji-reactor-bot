@@ -75,7 +75,7 @@ function createAdminActions({ safeSendDM, isBot, targetEmoji }) {
 
     if (amount > 0) {
       // ➕ Cadeau : on ajoute et on notifie la personne
-      const newBalance = credits.addCredit(targetId, amount);
+      const newBalance = credits.addCredit(targetId, amount, { source: 'admin_gift', ref: adminId });
 
       await safeSendDM(client, targetId, {
         text: `🎁 Un admin t'a offert ${formatCredits(amount)} crédits JeanPip !`,
@@ -88,7 +88,7 @@ function createAdminActions({ safeSendDM, isBot, targetEmoji }) {
 
     // ➖ Correction : on retire (solde jamais négatif), sans notifier la personne
     const before = credits.getBalance(targetId);
-    const newBalance = credits.setBalance(targetId, before + amount); // amount négatif
+    const newBalance = credits.setBalance(targetId, before + amount, { source: 'admin_adjust', ref: adminId }); // amount négatif
     const removed = before - newBalance;
 
     logger.info(`💳 <@${adminId}> a corrigé <@${targetId}> : ${before} → ${newBalance}`);
@@ -123,7 +123,7 @@ function createAdminActions({ safeSendDM, isBot, targetEmoji }) {
     let authorLine = '';
     if (authorId) {
       const reward = AUTHOR_REWARDS[rarity];
-      const newBalance = credits.addCredit(authorId, reward);
+      const newBalance = credits.addCredit(authorId, reward, { source: 'media_author', item: rarity, ref: url });
       author = { id: authorId, reward, newBalance };
       logger.info(`🎨 <@${authorId}> a reçu +${reward} pour son média ${rarity} (solde ${newBalance})`);
       authorLine = `\n🎨 Attribué à <@${authorId}> : *+${formatCredits(reward)} crédit(s)* (nouveau solde : *${formatCredits(newBalance)}*). La personne a été notifiée.`;

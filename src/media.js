@@ -14,6 +14,7 @@
 
 const path = require('path');
 const fs = require('fs');
+const events = require('./events');
 
 // ─────────────────────────────────────────────
 // 🎨 Définition des raretés
@@ -330,6 +331,9 @@ function addMedia({ url, rarity, title, author }) {
   } catch (e) {
     return { ok: false, error: 'ecriture', detail: e.message };
   }
+
+  // 📒 Stats : nouvelle carte au catalogue
+  events.record('card_added', author || null, { url: media.url, title: media.title, rarity }, { dedup: `added:${media.url}` });
 
   return { ok: true, media, number, count: mediaByRarity[rarity].length };
 }

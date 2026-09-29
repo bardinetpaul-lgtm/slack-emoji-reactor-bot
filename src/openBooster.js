@@ -13,6 +13,7 @@
 
 const boosters = require('./boosters');
 const collections = require('./collections');
+const events = require('./events');
 
 /**
  * Ouvre un booster une seule fois.
@@ -45,6 +46,13 @@ function openOnce(id, userId, via) {
   const cards = boosters.openBooster(pending.type);
   const counts = collections.addCards(pending.owner, cards);
   boosters.saveOpening(id, { via, cards, counts });
+  events.record('booster_opened', pending.owner, {
+    boosterId: id,
+    boosterType: pending.type,
+    via,
+    cards: cards.map((c) => ({ url: c.url, title: c.title, rarity: c.rarity })),
+    score: events.boosterScore(cards),
+  }, { dedup: `booster_opened:${id}` });
 
   return { status: 'opened', pending, via, cards, counts };
 }

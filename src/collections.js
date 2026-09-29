@@ -15,6 +15,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const events = require('./events');
 
 const COLLECTIONS_PATH = path.join(__dirname, '..', 'data', 'collections.json');
 
@@ -54,6 +55,7 @@ function addCards(userId, cards, at = new Date().toISOString()) {
   if (!data.users[userId]) data.users[userId] = { cards: {} };
   const owned = data.users[userId].cards;
   const now = at;
+  const discovered = [];
 
   const counts = cards.map((card) => {
     if (!card || !card.url) return 0;
@@ -74,10 +76,16 @@ function addCards(userId, cards, at = new Date().toISOString()) {
       firstAt: now,
       lastAt: now,
     };
+    discovered.push(card);
     return 1;
   });
 
   save(data);
+  // 📒 Stats : 1re obtention d'une carte (jamais re-comptée : clé dedup)
+  for (const card of discovered) {
+    events.record('card_discovered', userId, { url: card.url, title: card.title, rarity: card.rarity },
+      { at: now, dedup: `disc:${userId}:${card.url}` });
+  }
   return counts;
 }
 
@@ -151,8 +159,19 @@ function removeCards(userId, urls) {
   return counts;
 }
 
+// ─────────────────────────────────────────────
+// 🔢 Exemplaires possédés (un joueur, ou tous) — dashboard /stats
+// ─────────────────────────────────────────────
+
+function countCopies(userId = null) {
+  const data = load();
+  const users = userId ? [data.users[userId]].filter(Boolean) : Object.values(data.users);
+  return users.reduce((sum, u) => sum + Object.values(u.cards).reduce((s, c) => s + (c.count || 0), 0), 0);
+}
+
 module.exports = {
   addCards,
+  countCopies,
   removeCards,
   copyPhrase,
   getCount,
