@@ -158,6 +158,33 @@ slack-emoji-reactor-bot/
     └── media.js          # Gestion des médias (local + Giphy)
 ```
 
+## 📊 Dashboard /stats et base SQLite
+
+Les crédits (soldes + grand livre de chaque mouvement) et le journal des stats vivent dans `data/jeanpip.db` (SQLite, non versionné). Les autres données restent dans les fichiers JSON de `data/`.
+
+**Premier déploiement** (VM `BS-LORIENT-DASHBOARD`) :
+
+```bash
+node --version                     # ≥ 18
+cd /root/slack-emoji-reactor-bot
+cp -r data data.bak-$(date +%F)    # sauvegarde
+git pull
+npm install                        # installe better-sqlite3
+node scripts/backfill-events.js    # rattrapage de l'historique (relançable sans doublon)
+systemctl restart slack-reactor
+journalctl -u slack-reactor -n 50  # « Bot lancé », aucune erreur SQLite
+```
+
+Au premier démarrage, `data/credits.json` est importé puis n'est plus écrit (il reste en place). Si la base est inutilisable, le bot refuse de démarrer (message dans les logs).
+
+**Accès** : onglet Accueil du bot → 👑 Admin → 📊 Stats du jeu (admins `JEANPIP_ADMINS` seulement, lien valable 24 h).
+
+**Retour arrière** : `node scripts/export-credits-json.js` (réécrit `credits.json` avec les soldes actuels, l'ancien est sauvegardé) **puis** redéployer le commit précédent et `systemctl restart slack-reactor`.
+
+**Sauvegarde** : copier `data/jeanpip.db` (et `jeanpip.db-wal` s'il existe) avec les autres fichiers de `data/`.
+
+**Aperçu local** : `node scripts/preview-stats.js` (données simulées).
+
 ## 🐛 Dépannage
 
 | Problème | Solution |

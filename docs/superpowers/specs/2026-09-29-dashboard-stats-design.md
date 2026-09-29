@@ -124,7 +124,7 @@ les tests et affiché sur le dashboard (« écart ledger » doit valoir 0).
 | `booster_bought` | acheteur | `{ boosterId, boosterType, price }` | achat |
 | `booster_granted` | gagnant | `{ boosterId, boosterType, reason:'arena' }` | `settle.js` |
 | `booster_opened` | owner | `{ boosterId, boosterType, via, cards:[{url,title,rarity}], score }` | `openOnce` |
-| `card_discovered` | joueur | `{ url, title, rarity, via }` | `collections.addCards` quand count passe à 1 |
+| `card_discovered` | joueur | `{ url, title, rarity }` | `collections.addCards` quand count passe à 1 |
 | `card_added` | admin/auteur | `{ url, title, rarity }` | `media.addMedia` |
 | `match_finished` | — | `{ matchId, players:[{userId, deck:[{url,rarity,rented}] , outcome}], result:'win'|'draw'|'cancelled', loot }` | `settle.js` (+ annulations dans `matches.js`) |
 
@@ -150,6 +150,8 @@ une fois au déploiement, relançable sans doublon) :
 | `collections.json` | `card_added` = plus ancien firstAt de chaque carte | approximative (date de 1re apparition) |
 | `arena.json` history | `match_finished` sans decks | 1000 derniers combats, sans cartes jouées |
 | réactions, crédits | — | non récupérable : suivi démarre au déploiement |
+
+Booster gagné en arène dans le passé : détecté si un booster commun a été créé ≤ 5 s après une victoire du même joueur dans l'historique de l'arène.
 
 La page affiche « suivi depuis le JJ/MM » sur les courbes concernées (date du
 mouvement `opening`, du premier `reaction`, du premier `match_finished` avec decks).
