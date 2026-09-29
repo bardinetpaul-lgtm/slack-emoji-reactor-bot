@@ -33,3 +33,7 @@ data/web-secret
 data/card-cache/
 data/card-looks.json
 data/card-overrides.json
+data/jeanpip.db
+data/jeanpip.db-wal
+data/jeanpip.db-shm
+data/credits.json.bak-*

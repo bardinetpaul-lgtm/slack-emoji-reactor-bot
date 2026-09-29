@@ -18,6 +18,7 @@ const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'jeanpip-album-'));
 const PORT = parseInt(process.argv[2], 10) || 3100;
 
 fs.cpSync(path.join(ROOT, 'src'), path.join(TMP, 'src'), { recursive: true });
+fs.symlinkSync(path.join(ROOT, 'node_modules'), path.join(TMP, 'node_modules'), 'junction');
 fs.symlinkSync(path.join(ROOT, 'public'), path.join(TMP, 'public'), 'junction'); // éditions CSS/JS visibles en live
 fs.mkdirSync(path.join(TMP, 'data'));
 fs.copyFileSync(path.join(ROOT, 'data', 'media-bank.json'), path.join(TMP, 'data', 'media-bank.json'));

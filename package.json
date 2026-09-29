@@ -7,13 +7,19 @@
     "start": "node src/app.js",
     "dev": "node --watch src/app.js"
   },
-  "keywords": ["slack", "bot", "emoji", "reaction"],
+  "keywords": [
+    "slack",
+    "bot",
+    "emoji",
+    "reaction"
+  ],
   "author": "PaulBRD",
   "license": "MIT",
   "dependencies": {
     "@anthropic-ai/foundry-sdk": "^0.4.9",
     "@anthropic-ai/sdk": "^0.128.0",
     "@slack/bolt": "^4.1.0",
+    "better-sqlite3": "^11.10.0",
     "dotenv": "^16.4.7",
     "jpeg-js": "^0.4.4",
     "pngjs": "^7.0.0"
