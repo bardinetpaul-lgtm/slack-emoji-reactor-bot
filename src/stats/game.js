@@ -2,7 +2,7 @@
 //  🎮 STATS — Boosters, Cartes, Arène, Activité (journal `events`)
 // ═══════════════════════════════════════════════════════════
 
-const { bucketsBetween, sum, round, median, indexer } = require('./time');
+const { bucketsBetween, bucketBounds, sum, round, median, indexer } = require('./time');
 
 function loadEvents(db, types, { from = null, to, user = null }) {
   const where = [`type IN (${types.map(() => '?').join(',')})`, 'at <= ?'];
@@ -159,24 +159,38 @@ function arena(f, { db }) {
 }
 
 // 😀 Activité
+// ⚡ Réactions / achats / ouvertures comptés par SQLite (GROUP BY par bucket,
+//    index events(type, at)) : seuls les totaux par joueur remontent en JS.
 function activity(f, { db }) {
-  const keys = bucketsBetween(f.from, f.to, f.grain);
+  const bounds = bucketBounds(f.from, f.to, f.grain);
+  const keys = bounds.map((b) => b.key);
   const at = indexer(keys, f.grain);
-  const ev = loadEvents(db, ['reaction', 'booster_bought', 'booster_opened', 'match_finished'], { ...f, user: null });
   const reactions = keys.map(() => 0);
   const active = keys.map(() => new Set());
   const all = new Set();
   const reactors = {};
-  for (const e of ev) {
-    const users = e.type === 'match_finished' ? (e.data.players || []).map((p) => p.userId) : [e.userId];
-    const kept = users.filter((u) => u && (!f.user || u === f.user));
-    if (!kept.length) continue;
+  const userClause = f.user ? ' AND user_id = ?' : '';
+  const userArgs = f.user ? [f.user] : [];
+  const bucketSql = (op) => db.prepare(`SELECT user_id AS userId, type, COUNT(*) AS n FROM events
+    WHERE type IN ('reaction', 'booster_bought', 'booster_opened') AND at >= ? AND at ${op} ? AND user_id IS NOT NULL${userClause}
+    GROUP BY user_id, type`);
+  const inBucket = bucketSql('<');
+  const inLastBucket = bucketSql('<=');
+  bounds.forEach((b, i) => {
+    for (const r of (b.last ? inLastBucket : inBucket).all(b.start, b.end, ...userArgs)) {
+      active[i].add(r.userId);
+      all.add(r.userId);
+      if (r.type === 'reaction') {
+        reactions[i] += r.n;
+        reactors[r.userId] = (reactors[r.userId] || 0) + r.n;
+      }
+    }
+  });
+  // Combats : peu nombreux, joueurs dans le JSON de l'événement
+  for (const e of loadEvents(db, ['match_finished'], { ...f, user: null })) {
+    const kept = (e.data.players || []).map((p) => p.userId).filter((u) => u && (!f.user || u === f.user));
     const b = at(e.at);
     for (const u of kept) { active[b].add(u); all.add(u); }
-    if (e.type === 'reaction') {
-      reactions[b] += 1;
-      reactors[e.userId] = (reactors[e.userId] || 0) + 1;
-    }
   }
   const total = sum(reactions);
   return {

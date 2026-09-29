@@ -5,7 +5,7 @@
 //  porte les soldes d'avant le suivi).
 // ═══════════════════════════════════════════════════════════
 
-const { bucketsBetween, sum, round, median, indexer } = require('./time');
+const { bucketsBetween, bucketBounds, sum, round, median, indexer } = require('./time');
 
 const itemKey = (m) => (m.item ? `${m.source}/${m.item}` : m.source);
 const sorted = (obj) => Object.entries(obj).map(([key, credits]) => ({ key, credits: round(credits) })).sort((a, b) => b.credits - a.credits);
@@ -20,32 +20,37 @@ function ledgerGap(db) {
   return round(r.gap);
 }
 
+// ⚡ Agrégation faite par SQLite : une requête GROUP BY par bucket, sur l'index
+//    credit_moves(at). Seuls quelques totaux par joueur remontent en JS, même
+//    avec des centaines de milliers de mouvements (le bot partage ce thread
+//    avec les acks Slack et la boucle de l'Arène).
 function economy(f, { db, boosterPrice = 20 }) {
-  const keys = bucketsBetween(f.from, f.to, f.grain);
-  const at = indexer(keys, f.grain);
+  const bounds = bucketBounds(f.from, f.to, f.grain);
+  const keys = bounds.map((b) => b.key);
   const zero = () => keys.map(() => 0);
   const created = zero(); const consumed = zero(); const mass = zero(); const mean = zero(); const med = zero();
   const bySource = {}; const byUse = {};
   let adjust = 0; let unknown = 0;
 
-  const moves = db.prepare(`SELECT at, user_id AS userId, amount, kind, source, item FROM credit_moves
-    WHERE at <= ?${f.user ? ' AND user_id = ?' : ''} ORDER BY at, id`).all(...(f.user ? [f.to, f.user] : [f.to]));
-
+  const userClause = f.user ? ' AND user_id = ?' : '';
+  const userArgs = f.user ? [f.user] : [];
   const balances = new Map();
   const apply = (m) => balances.set(m.userId, (balances.get(m.userId) || 0) + m.amount);
-  const groups = keys.map(() => []);
-  for (const m of moves) {
-    if (m.at < f.from) apply(m);
-    else groups[at(m.at)].push(m);
-  }
+  db.prepare(`SELECT user_id AS userId, SUM(amount) AS amount FROM credit_moves INDEXED BY credit_moves_stats WHERE at < ?${userClause} GROUP BY user_id`)
+    .all(f.from, ...userArgs).forEach(apply);
+  const bucketSql = (op) => db.prepare(`SELECT user_id AS userId, kind, source, item, SUM(amount) AS amount, COUNT(*) AS n
+    FROM credit_moves WHERE at >= ? AND at ${op} ?${userClause} GROUP BY user_id, kind, source, item`);
+  const inBucket = bucketSql('<');
+  const inLastBucket = bucketSql('<=');
+
   const massStart = sum([...balances.values()]);
   const pass = (m) => !f.source || m.source === f.source;
 
   let positives = [];
-  keys.forEach((_, i) => {
-    for (const m of groups[i]) {
+  bounds.forEach((b, i) => {
+    for (const m of (b.last ? inLastBucket : inBucket).all(b.start, b.end, ...userArgs)) {
       apply(m);
-      if (m.source === 'unknown') unknown += 1;
+      if (m.source === 'unknown') unknown += m.n;
       if (m.kind === 'earn' && pass(m)) {
         created[i] += m.amount;
         bySource[m.source] = (bySource[m.source] || 0) + m.amount;

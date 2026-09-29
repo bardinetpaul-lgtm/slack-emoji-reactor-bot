@@ -104,5 +104,42 @@ const invariant = (conn) => conn.prepare(`
   fs.rmSync(tmp, { recursive: true, force: true });
 }
 
+// 7️⃣ Base perdue après l'import : on NE réimporte PAS en silence un credits.json périmé
+{
+  const { tmp, credits, db } = freshProject(JSON.stringify({ users: { UA: 10 } }));
+  credits.getBalance('UA');
+  const marker = path.join(tmp, 'data', 'credits.json.imported');
+  check('import : marqueur écrit', fs.existsSync(marker) && JSON.parse(fs.readFileSync(marker, 'utf-8')).total === 10);
+  db.close();
+  for (const f of ['jeanpip.db', 'jeanpip.db-wal', 'jeanpip.db-shm']) fs.rmSync(path.join(tmp, 'data', f), { force: true });
+  delete require.cache[require.resolve(path.join(tmp, 'src', 'credits.js'))];
+  delete require.cache[require.resolve(path.join(tmp, 'src', 'db.js'))];
+  const credits2 = require(path.join(tmp, 'src', 'credits.js'));
+  let msg = '';
+  try { credits2.ensureImported(); } catch (e) { msg = e.message; }
+  check(`base vide + marqueur → refus de démarrer (${msg || 'aucune erreur'})`, /déjà été importé/.test(msg));
+  require(path.join(tmp, 'src', 'db.js')).close();
+  fs.rmSync(tmp, { recursive: true, force: true });
+}
+
+// 8️⃣ credits.json réécrit après l'import (retour arrière puis redéploiement) → refus
+{
+  const { tmp, credits, db } = freshProject(JSON.stringify({ users: { UA: 10 } }));
+  credits.getBalance('UA');
+  db.close();
+  const json = path.join(tmp, 'data', 'credits.json');
+  fs.writeFileSync(json, JSON.stringify({ users: { UA: 99 } }));
+  const future = new Date(Date.now() + 60000);
+  fs.utimesSync(json, future, future);
+  delete require.cache[require.resolve(path.join(tmp, 'src', 'credits.js'))];
+  delete require.cache[require.resolve(path.join(tmp, 'src', 'db.js'))];
+  const credits2 = require(path.join(tmp, 'src', 'credits.js'));
+  let msg = '';
+  try { credits2.ensureImported(); } catch (e) { msg = e.message; }
+  check('credits.json modifié après import → refus de démarrer', /modifié après/.test(msg));
+  require(path.join(tmp, 'src', 'db.js')).close();
+  fs.rmSync(tmp, { recursive: true, force: true });
+}
+
 console.log(failures ? `\n❌ ${failures} échec(s)` : '\n🎉 Crédits SQLite OK');
 process.exit(failures ? 1 : 0);

@@ -20,6 +20,7 @@ const path = require('path');
 const { getDb } = require('./db');
 
 const CREDITS_PATH = path.join(__dirname, '..', 'data', 'credits.json');
+const MARKER_PATH = path.join(__dirname, '..', 'data', 'credits.json.imported');
 
 let imported = false;
 
@@ -37,20 +38,51 @@ function readLegacyUsers() {
   }
 }
 
+// 🛡️ Marqueur d'import : après la migration, credits.json est figé. Si la base
+//    disparaît (restauration incomplète, nouvelle VM…) ou si credits.json est
+//    réécrit ensuite (retour arrière puis redéploiement), réimporter en silence
+//    ferait perdre des crédits : on refuse de démarrer, avec la marche à suivre.
+function readMarker() {
+  try {
+    return JSON.parse(fs.readFileSync(MARKER_PATH, 'utf-8'));
+  } catch {
+    return null;
+  }
+}
+
+function checkNoStaleImport(db, marker) {
+  const hasMoves = Boolean(db.prepare('SELECT 1 FROM credit_moves LIMIT 1').get());
+  if (!hasMoves && marker) {
+    throw new Error(`credits.json a déjà été importé le ${marker.at} mais la base est vide : `
+      + 'restaurer data/jeanpip.db, ou supprimer data/credits.json.imported pour réimporter volontairement credits.json');
+  }
+  if (hasMoves && marker && fs.existsSync(CREDITS_PATH) && fs.statSync(CREDITS_PATH).mtimeMs > Date.parse(marker.at) + 1000) {
+    throw new Error(`credits.json modifié après son import du ${marker.at} (retour arrière ?) : `
+      + 'archiver data/jeanpip.db et supprimer data/credits.json.imported pour repartir de credits.json, ou restaurer credits.json');
+  }
+  return hasMoves;
+}
+
 function ensureImported() {
   if (imported) return;
   const db = getDb();
-  if (!db.prepare('SELECT 1 FROM credit_moves LIMIT 1').get()) {
+  if (!checkNoStaleImport(db, readMarker()) && fs.existsSync(CREDITS_PATH)) {
     const users = readLegacyUsers();
     const at = new Date().toISOString();
+    let total = 0;
+    let count = 0;
     db.transaction(() => {
       for (const [userId, value] of Object.entries(users)) {
         const balance = Math.max(0, Number(value) || 0);
         if (!balance) continue;
         db.prepare('INSERT INTO balances (user_id, balance) VALUES (?, ?)').run(userId, balance);
         db.prepare("INSERT INTO credit_moves (at, user_id, amount, kind, source) VALUES (?, ?, ?, 'opening', 'migration')").run(at, userId, balance);
+        total += balance;
+        count += 1;
       }
     })();
+    fs.writeFileSync(MARKER_PATH, JSON.stringify({ at, users: count, total }, null, 2), 'utf-8');
+    console.log(`💰 credits.json importé dans SQLite : ${count} solde(s), total ${total} crédit(s)`);
   }
   imported = true;
 }

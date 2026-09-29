@@ -43,6 +43,12 @@ const MIGRATIONS = [
     CREATE INDEX events_type_at ON events(type, at);
     CREATE INDEX events_user ON events(user_id, at);
   `),
+  // v2 — index couvrants des stats : les agrégations (soldes de départ,
+  //      totaux par bucket) se lisent dans l'index, sans aller chercher les lignes
+  (db) => db.exec(`
+    CREATE INDEX credit_moves_stats ON credit_moves(at, user_id, kind, source, item, amount);
+    CREATE INDEX events_stats ON events(type, at, user_id);
+  `),
 ];
 
 let db = null;

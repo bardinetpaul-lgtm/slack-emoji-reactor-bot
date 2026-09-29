@@ -75,4 +75,26 @@ function indexer(keys, grain) {
   return (iso) => idx.get(bucketKey(iso, grain)) ?? keys.length - 1;
 }
 
-module.exports = { TZ, DAY_MS, parisDay, bucketKey, bucketsBetween, normalizeFilters, sum, round, median, indexer };
+/** Minuit à Paris du jour 'YYYY-MM-DD', en ISO UTC (22 h ou 23 h UTC la veille). */
+function parisMidnightIso(day) {
+  const base = Date.parse(`${day}T00:00:00Z`);
+  for (const h of [2, 1]) {
+    const t = base - h * 3600 * 1000;
+    if (parisDay(new Date(t).toISOString()) === day && parisDay(new Date(t - 1).toISOString()) !== day) return new Date(t).toISOString();
+  }
+  return new Date(base).toISOString();
+}
+
+/**
+ * Buckets avec leurs bornes UTC : [{ key, start, end, last }].
+ * Un mouvement appartient au bucket si start <= at < end (at <= end pour le dernier).
+ * Sert aux agrégations SQL (GROUP BY par bucket, via l'index sur `at`).
+ */
+function bucketBounds(from, to, grain) {
+  const keys = bucketsBetween(from, to, grain);
+  const firstDay = (k) => (grain === 'month' ? `${k}-01` : k);
+  const starts = keys.map((k, i) => (i === 0 ? from : parisMidnightIso(firstDay(k))));
+  return keys.map((key, i) => ({ key, start: starts[i], end: i < keys.length - 1 ? starts[i + 1] : to, last: i === keys.length - 1 }));
+}
+
+module.exports = { TZ, DAY_MS, parisDay, bucketKey, bucketsBetween, bucketBounds, parisMidnightIso, normalizeFilters, sum, round, median, indexer };
