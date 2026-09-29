@@ -114,6 +114,7 @@ console.log = origLog;
 const fresh = characters.renderSvg(added.media);
 check('un Jeanpip tout juste ajouté a son personnage (avant même son analyse)', added.ok && fresh.includes('<path') && !/NaN|undefined/.test(fresh));
 
+try { require(path.join(TMP, 'src', 'db.js')).close(); } catch { /* base jamais ouverte */ }   // Windows : fichier ouvert = non supprimable
 fs.rmSync(TMP, { recursive: true, force: true });
 console.log(failures ? `\n❌ ${failures} échec(s)` : '\n✅ Tout est bon');
 process.exit(failures ? 1 : 0);

@@ -89,6 +89,7 @@ check('deck auto : d’abord des cartes différentes', new Set(autoDupes.slice(0
 const kept = deck.resolveDeck(['tank1', 'tank1', 'tank1', 'sort1'], dupes);
 check('deck sauvegardé : le 3e tank1 (non possédé) est remplacé', kept.urls.filter((u) => u === 'tank1').length === 2 && kept.replaced.join() === 'tank1' && deck.validateDeck(dupes, kept.urls).ok);
 
+try { require(path.join(TMP, 'src', 'db.js')).close(); } catch { /* base jamais ouverte */ }   // Windows : fichier ouvert = non supprimable
 fs.rmSync(TMP, { recursive: true, force: true });
 console.log(failures ? `\n❌ ${failures} échec(s)` : '\n✅ Tout est bon');
 process.exit(failures ? 1 : 0);

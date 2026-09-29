@@ -155,6 +155,7 @@ const lastTo = (u) => [...sent].reverse().find((m) => m.userId === u);
   check('récap perdant : défaite, carte volée', lose.text.includes('Défaite') && flat(lose.blocks).includes('part chez'));
 
   matches.stop();
+  try { require(path.join(TMP, 'src', 'db.js')).close(); } catch { /* base jamais ouverte */ }   // Windows : fichier ouvert = non supprimable
   fs.rmSync(TMP, { recursive: true, force: true });
   console.log(failures ? `\n❌ ${failures} échec(s)` : '\n✅ Tout est bon');
   process.exit(failures ? 1 : 0);

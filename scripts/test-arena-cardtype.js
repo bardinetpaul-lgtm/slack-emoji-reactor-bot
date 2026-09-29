@@ -68,6 +68,7 @@ const add = home.buildAddMediaModal();
 const arch = add.blocks.find((b) => b.block_id === 'arch');
 check('« Ajouter un média » : type en Arène optionnel (6 types)', arch && arch.optional && arch.element.options.length === 6);
 
+try { require(path.join(TMP, 'src', 'db.js')).close(); } catch { /* base jamais ouverte */ }   // Windows : fichier ouvert = non supprimable
 fs.rmSync(TMP, { recursive: true, force: true });
 console.log(failures ? `\n❌ ${failures} échec(s)` : '\n✅ Tout est bon');
 process.exit(failures ? 1 : 0);

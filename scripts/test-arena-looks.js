@@ -115,6 +115,7 @@ check('sans clé : analyse désactivée', !analyzer.enabled());
   check('backfill : déjà à jour → rien à refaire', again.skipped === 2 && again.done === 0);
   check('backfill : looks enregistrés dans data/card-looks.json', Object.keys(JSON.parse(fs.readFileSync(LOOKS, 'utf-8'))).length === 2);
 
+  try { require(path.join(TMP, 'src', 'db.js')).close(); } catch { /* base jamais ouverte */ }   // Windows : fichier ouvert = non supprimable
   fs.rmSync(TMP, { recursive: true, force: true });
   console.log(failures ? `\n❌ ${failures} échec(s)` : '\n✅ Tout est bon');
   process.exit(failures ? 1 : 0);

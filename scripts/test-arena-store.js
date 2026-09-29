@@ -92,6 +92,7 @@ store.markSettled('mX');
 ({ store, collections } = restart());
 check('match réglé, même après redémarrage', store.isSettled('mX') === true);
 
+try { require(path.join(TMP, 'src', 'db.js')).close(); } catch { /* base jamais ouverte */ }   // Windows : fichier ouvert = non supprimable
 fs.rmSync(TMP, { recursive: true, force: true });
 console.log(failures ? `\n❌ ${failures} échec(s)` : '\n✅ Tout est bon');
 process.exit(failures ? 1 : 0);

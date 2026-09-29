@@ -145,6 +145,7 @@ process.on('unhandledRejection', (e) => { origLog('❌ unhandledRejection', e); 
   const errs = logs.filter((l) => l.startsWith('ERR'));
   check(errs.length === 0, `aucune erreur loguée${errs.length ? ' : ' + errs.join(' | ') : ''}`);
 
+  try { require(path.join(TMP, 'src', 'db.js')).close(); } catch { /* base jamais ouverte */ }   // Windows : fichier ouvert = non supprimable
   fs.rmSync(TMP, { recursive: true, force: true });
   process.exit(process.exitCode || 0);
 })();

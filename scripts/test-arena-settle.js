@@ -128,6 +128,7 @@ check('rappel : jamais prise en butin', rc.B.loot && rc.B.loot.url === 'k2');
 const empty = settleMatch({ matchId: 'm4', players: { A: 'UI', B: 'UJ' }, result: { winner: 'B', reason: 'forfeit', poses: [] } }, { now: T0 });
 check('perdant sans pose : pas de butin, récompense quand même', !empty.B.loot && empty.B.boosterId);
 
+try { require(path.join(TMP, 'src', 'db.js')).close(); } catch { /* base jamais ouverte */ }   // Windows : fichier ouvert = non supprimable
 fs.rmSync(TMP, { recursive: true, force: true });
 console.log(failures ? `\n❌ ${failures} échec(s)` : '\n✅ Tout est bon');
 process.exit(failures ? 1 : 0);

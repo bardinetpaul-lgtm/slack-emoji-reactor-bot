@@ -109,6 +109,7 @@ const tower = (s, side, lane) => s.buildings.find((b) => b.side === side && b.ki
   check('fantôme : zone d\'impact pour un Sort', board.renderGhost({ x: 180, y: 150, ok: true, archetype: 'sort' }).includes('data-fx="ghost-spell"'));
 }
 
+try { require(path.join(TMP, 'src', 'db.js')).close(); } catch { /* base jamais ouverte */ }   // Windows : fichier ouvert = non supprimable
 fs.rmSync(TMP, { recursive: true, force: true });
 console.log(failures ? `\n❌ ${failures} échec(s)` : '\n✅ Tout est bon');
 process.exit(failures ? 1 : 0);

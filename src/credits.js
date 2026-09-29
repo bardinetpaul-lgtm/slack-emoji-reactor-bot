@@ -4,47 +4,93 @@
 //  On gagne N crédit(s) à chaque réaction :jeanpip: posée (spam exclu),
 //  N réglable par un admin (src/settings.js, défaut 0,5).
 //  Les soldes peuvent donc être des demi-crédits (ex. 12.5).
-//  DB = fichier JSON local (data/credits.json)
-//    { users: { U123: 42 } }
+//
+//  DB = SQLite (src/db.js) : table `balances` + grand livre `credit_moves`.
+//  Chaque variation de solde écrit son mouvement DANS LA MÊME transaction :
+//  pour tout joueur, balance = SUM(credit_moves.amount), toujours.
+//  `meta` = { source, item?, ref? } dit d'où vient / où part l'argent
+//  (source absente → 'unknown', visible sur le dashboard /stats).
+//
+//  Migration : au 1er accès, data/credits.json (ancien stockage) est
+//  importé (mouvements 'opening'), puis laissé intact et plus jamais écrit.
 // ═══════════════════════════════════════════════════════════
 
 const fs = require('fs');
 const path = require('path');
+const { getDb } = require('./db');
 
 const CREDITS_PATH = path.join(__dirname, '..', 'data', 'credits.json');
 
+let imported = false;
+
 // ─────────────────────────────────────────────
-// 📦 Chargement / Sauvegarde
+// 📥 Import unique de l'ancien credits.json
 // ─────────────────────────────────────────────
 
-function load() {
+function readLegacyUsers() {
+  if (!fs.existsSync(CREDITS_PATH)) return {};
   try {
-    if (!fs.existsSync(CREDITS_PATH)) return { users: {} };
     const data = JSON.parse(fs.readFileSync(CREDITS_PATH, 'utf-8'));
-    return data && typeof data.users === 'object' ? data : { users: {} };
-  } catch {
-    return { users: {} };
+    return data && typeof data.users === 'object' ? data.users : {};
+  } catch (e) {
+    throw new Error(`credits.json illisible, import annulé : ${e.message}`);
   }
 }
 
-function save(data) {
-  try {
-    fs.writeFileSync(CREDITS_PATH, JSON.stringify(data, null, 2), 'utf-8');
-  } catch (e) {
-    console.error('[credits] écriture:', e.message);
+function ensureImported() {
+  if (imported) return;
+  const db = getDb();
+  if (!db.prepare('SELECT 1 FROM credit_moves LIMIT 1').get()) {
+    const users = readLegacyUsers();
+    const at = new Date().toISOString();
+    db.transaction(() => {
+      for (const [userId, value] of Object.entries(users)) {
+        const balance = Math.max(0, Number(value) || 0);
+        if (!balance) continue;
+        db.prepare('INSERT INTO balances (user_id, balance) VALUES (?, ?)').run(userId, balance);
+        db.prepare("INSERT INTO credit_moves (at, user_id, amount, kind, source) VALUES (?, ?, ?, 'opening', 'migration')").run(at, userId, balance);
+      }
+    })();
   }
+  imported = true;
+}
+
+// ─────────────────────────────────────────────
+// ✍️ Écriture d'un mouvement (dans une transaction ouverte)
+// ─────────────────────────────────────────────
+
+function readBalance(db, userId) {
+  const row = db.prepare('SELECT balance FROM balances WHERE user_id = ?').get(userId);
+  return row ? row.balance : 0;
+}
+
+function writeMove(db, userId, newBalance, amount, kind, meta = {}) {
+  db.prepare('INSERT INTO balances (user_id, balance) VALUES (?, ?) ON CONFLICT(user_id) DO UPDATE SET balance = excluded.balance')
+    .run(userId, newBalance);
+  db.prepare('INSERT INTO credit_moves (at, user_id, amount, kind, source, item, ref) VALUES (?, ?, ?, ?, ?, ?, ?)')
+    .run(new Date().toISOString(), userId, amount, kind, meta.source || 'unknown', meta.item ?? null, meta.ref ?? null);
 }
 
 // ─────────────────────────────────────────────
 // ➕ Créditer 1 (ou N) crédit(s) — jamais de reset
-//    Retourne le nouveau solde.
+//    Retourne le nouveau solde (inchangé si l'écriture échoue).
 // ─────────────────────────────────────────────
 
-function addCredit(userId, amount = 1) {
-  const data = load();
-  data.users[userId] = (data.users[userId] || 0) + amount;
-  save(data);
-  return data.users[userId];
+function addCredit(userId, amount = 1, meta = {}) {
+  ensureImported();
+  const db = getDb();
+  try {
+    return db.transaction(() => {
+      const balance = readBalance(db, userId);
+      if (!amount) return balance;
+      const next = balance + amount;
+      writeMove(db, userId, next, amount, 'earn', meta);
+      return next;
+    })();
+  } catch (e) {
+    console.error('[credits] écriture:', e.message);
+    return getBalance(userId);
+  }
 }
 
 // ─────────────────────────────────────────────
@@ -52,35 +98,50 @@ function addCredit(userId, amount = 1) {
 // ─────────────────────────────────────────────
 
 function getBalance(userId) {
-  const data = load();
-  return data.users[userId] || 0;
+  ensureImported();
+  return readBalance(getDb(), userId);
 }
 
 // ─────────────────────────────────────────────
 // 🔧 Fixer le solde exact d'un user (jamais négatif).
-//    Arrondi au demi-crédit. Utilisé pour les corrections admin. Retourne le nouveau solde.
+//    Arrondi au demi-crédit. Corrections admin. Mouvement 'adjust' = écart.
 // ─────────────────────────────────────────────
 
-function setBalance(userId, value) {
-  const data = load();
-  data.users[userId] = Math.max(0, Math.floor(value * 2) / 2);
-  save(data);
-  return data.users[userId];
+function setBalance(userId, value, meta = {}) {
+  ensureImported();
+  const db = getDb();
+  const next = Math.max(0, Math.floor(value * 2) / 2);
+  try {
+    return db.transaction(() => {
+      const balance = readBalance(db, userId);
+      if (next !== balance) writeMove(db, userId, next, next - balance, 'adjust', meta);
+      return next;
+    })();
+  } catch (e) {
+    console.error('[credits] écriture:', e.message);
+    return getBalance(userId);
+  }
 }
 
 // ─────────────────────────────────────────────
 // 💸 Dépenser `amount` crédits.
-//    Retourne true si le solde suffisait (débit effectué),
-//    false sinon (rien débité).
+//    true si le solde suffisait (débit + mouvement écrits), false sinon.
 // ─────────────────────────────────────────────
 
-function spend(userId, amount) {
-  const data = load();
-  const balance = data.users[userId] || 0;
-  if (balance < amount) return false;
-  data.users[userId] = balance - amount;
-  save(data);
-  return true;
+function spend(userId, amount, meta = {}) {
+  ensureImported();
+  const db = getDb();
+  try {
+    return db.transaction(() => {
+      const balance = readBalance(db, userId);
+      if (balance < amount) return false;
+      if (amount) writeMove(db, userId, balance - amount, -amount, 'spend', meta);
+      return true;
+    })();
+  } catch (e) {
+    console.error('[credits] écriture:', e.message);
+    return false;
+  }
 }
 
 module.exports = {
@@ -88,4 +149,5 @@ module.exports = {
   getBalance,
   setBalance,
   spend,
+  ensureImported,
 };

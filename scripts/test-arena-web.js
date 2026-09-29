@@ -216,6 +216,7 @@ const pathOf = (url) => url.replace('http://jeanpip.test/', '');
   sA.close(); sB.close(); sA2.close();
   matches.stop();
   server.close();
+  try { require(path.join(TMP, 'src', 'db.js')).close(); } catch { /* base jamais ouverte */ }   // Windows : fichier ouvert = non supprimable
   fs.rmSync(TMP, { recursive: true, force: true });
   console.log(failures ? `\n❌ ${failures} échec(s)` : '\n✅ Tout est bon');
   process.exit(failures ? 1 : 0);

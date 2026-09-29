@@ -59,6 +59,7 @@ console.log('   Ctrl+C pour arrêter\n');
 
 process.on('SIGINT', () => {
   fs.unlinkSync(path.join(TMP, 'public')); // retirer le lien AVANT de supprimer (ne jamais toucher au vrai public/)
+  try { require(path.join(TMP, 'src', 'db.js')).close(); } catch { /* base jamais ouverte */ }   // Windows : fichier ouvert = non supprimable
   fs.rmSync(TMP, { recursive: true, force: true });
   process.exit(0);
 });

@@ -125,6 +125,7 @@ process.on('unhandledRejection', (e) => { origLog('❌ unhandledRejection', e); 
   check(!JSON.stringify(homeAfter).includes('weekly_gift_open'), 'plus rien à offrir : section masquée');
   check(!logs.some((l) => l.startsWith('ERR')), 'aucune erreur loguée');
 
+  try { require(path.join(TMP, 'src', 'db.js')).close(); } catch { /* base jamais ouverte */ }   // Windows : fichier ouvert = non supprimable
   fs.rmSync(TMP, { recursive: true, force: true });
   origLog(process.exitCode ? '\n❌ ÉCHECS ci-dessus\n' : '\n🎉 Crédits du vendredi côté Slack OK\n');
   process.exit(process.exitCode || 0);

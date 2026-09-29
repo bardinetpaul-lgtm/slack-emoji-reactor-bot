@@ -122,6 +122,7 @@ check('solde 30 : l\'épique (25) passe, la légendaire (40) saute', pr.length =
 check('solde insuffisant : deck quand même complet', pg.engine.players[ps].hand.length === 8);
 
 matches.stop();
+try { require(path.join(TMP, 'src', 'db.js')).close(); } catch { /* base jamais ouverte */ }   // Windows : fichier ouvert = non supprimable
 fs.rmSync(TMP, { recursive: true, force: true });
 console.log(failures ? `\n❌ ${failures} échec(s)` : '\n✅ Tout est bon');
 process.exit(failures ? 1 : 0);

@@ -171,6 +171,7 @@ const wait = (ms) => new Promise((r) => realSetTimeout(r, ms));
     assert.deepStrictEqual(tried, [fileId]);
   });
 
+  try { require(path.join(TMP, 'src', 'db.js')).close(); } catch { /* base jamais ouverte */ }   // Windows : fichier ouvert = non supprimable
   fs.rmSync(TMP, { recursive: true, force: true });
   origLog(`\n${passed} test(s) OK${process.exitCode ? ' — ❌ ÉCHECS ci-dessus' : ' 🎉'}\n`);
   process.exit(process.exitCode || 0);

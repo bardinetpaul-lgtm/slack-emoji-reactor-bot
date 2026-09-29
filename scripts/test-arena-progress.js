@@ -104,6 +104,7 @@ check('Capitaine déjà dans le deck sans exemplaire en plus : refusé', matches
 const m2 = matches.createMatchFor('P1', 'P2', T0, {});
 check('sans arène précisée : le jardin', !m2.ok || matches.getMatch(m2.id).arena === 'jardin');
 
+try { require(path.join(TMP, 'src', 'db.js')).close(); } catch { /* base jamais ouverte */ }   // Windows : fichier ouvert = non supprimable
 fs.rmSync(TMP, { recursive: true, force: true });
 console.log(failures ? `\n❌ ${failures} échec(s)` : '\n✅ Tout est bon');
 process.exit(failures ? 1 : 0);

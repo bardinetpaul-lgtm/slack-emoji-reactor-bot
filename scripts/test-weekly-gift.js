@@ -86,6 +86,7 @@ check('UC désinscrit : 0', weeklyGift.getAllowance('UC', at(2026, 10, 2, 9, 1))
 check('bot éteint 2 semaines : rattrapage', weeklyGift.distributeIfDue(broadcast.getSubscribers(), at(2026, 10, 20, 8)).length === 2);
 check('… puis plus rien', weeklyGift.distributeIfDue(broadcast.getSubscribers(), at(2026, 10, 20, 9)).length === 0);
 
+try { require(path.join(TMP, 'src', 'db.js')).close(); } catch { /* base jamais ouverte */ }   // Windows : fichier ouvert = non supprimable
 fs.rmSync(TMP, { recursive: true, force: true });
 console.log(failures ? `\n❌ ${failures} échec(s)\n` : '\n🎉 Crédits du vendredi OK\n');
 process.exit(failures ? 1 : 0);
