@@ -171,6 +171,15 @@ const wait = (ms) => new Promise((r) => realSetTimeout(r, ms));
     assert.deepStrictEqual(tried, [fileId]);
   });
 
+  await test('grand livre : aucun gain sans source, une réaction journalisée par réaction créditée', async () => {
+    const conn = require(path.join(TMP, 'src', 'db.js')).getDb();
+    const unknownEarn = conn.prepare("SELECT COUNT(*) n FROM credit_moves WHERE source = 'unknown' AND kind = 'earn'").get().n;
+    const reactionEvents = conn.prepare("SELECT COUNT(*) n FROM events WHERE type = 'reaction'").get().n;
+    const reactionMoves = conn.prepare("SELECT COUNT(*) n FROM credit_moves WHERE source = 'reaction'").get().n;
+    assert.strictEqual(unknownEarn, 0);
+    assert.strictEqual(reactionEvents, reactionMoves);
+  });
+
   try { require(path.join(TMP, 'src', 'db.js')).close(); } catch { /* base jamais ouverte */ }   // Windows : fichier ouvert = non supprimable
   fs.rmSync(TMP, { recursive: true, force: true });
   origLog(`\n${passed} test(s) OK${process.exitCode ? ' — ❌ ÉCHECS ci-dessus' : ' 🎉'}\n`);

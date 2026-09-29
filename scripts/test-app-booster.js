@@ -98,6 +98,13 @@ process.on('unhandledRejection', (e) => { origLog('❌ unhandledRejection', e); 
   })();
   const btns = buyMsg.blocks.find((b) => b.type === 'actions').elements;
   check(buyMsg.text.includes('acheté'), 'achat OK');
+  {
+    const conn = require(path.join(TMP, 'src', 'db.js')).getDb();
+    const mv = conn.prepare("SELECT * FROM credit_moves WHERE kind = 'spend' ORDER BY id DESC").get();
+    check(mv && mv.source === 'booster' && mv.item && mv.amount < 0, 'grand livre : achat de booster sourcé (booster/<type>)');
+    const ev = conn.prepare("SELECT * FROM events WHERE type = 'booster_bought' ORDER BY id DESC").get();
+    check(ev && ev.user_id === 'U1' && mv && JSON.parse(ev.data).price === -mv.amount, 'événement booster_bought avec le prix');
+  }
   if (MODE === 'web') {
     check(btns.length === 2 && /\/open\/b_.+\?t=[a-f0-9]{64}$/.test(btns[0].url), 'DM : bouton ouverture animée (lien signé) + bouton Slack');
   } else {

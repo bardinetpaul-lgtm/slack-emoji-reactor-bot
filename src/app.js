@@ -26,6 +26,18 @@ const { SPAM_CARDS } = require('./spamCards');
 const looks = require('./game/looks');
 const cards = require('./game/cards');
 const arenaSlack = require('./arenaSlack');
+const events = require('./events');
+
+// 🗄️ Base SQLite (crédits + journal des stats) : sans elle, pas de démarrage
+//    (mieux vaut un bot arrêté qu'une économie non tracée ou remise à zéro).
+try {
+  require('./db').getDb();
+  credits.ensureImported();
+} catch (e) {
+  console.error(`❌ Base SQLite indisponible (data/jeanpip.db) : ${e.message}`);
+  console.error('   → vérifier `npm install` (better-sqlite3) et les droits sur data/.');
+  process.exit(1);
+}
 // ⚔️ Liens de l'Arène (null si la page web est désactivée)
 const ARENA_LINKS = {
   arena: (matchId, userId) => web.buildArenaUrl(matchId, userId),
@@ -490,7 +502,8 @@ app.event('reaction_added', async ({ event, client, logger }) => {
       // 💰 +N crédit(s) permanent(s) (porte-monnaie booster, N réglable : src/settings.js). Spam déjà exclu ci-dessus,
       //    et présence du bot dans la conversation vérifiée juste au-dessus.
       //    Seule TA réaction crédite : l'attaque et l'auto-react ne créditent pas.
-      const newBalance = credits.addCredit(reactingUserId, settings.getCreditsPerJeanpip());
+      const newBalance = credits.addCredit(reactingUserId, settings.getCreditsPerJeanpip(), { source: 'reaction', ref: channelId });
+      events.record('reaction', reactingUserId, { channel: channelId });
       logger.info(`💰 Crédits de <@${reactingUserId}> : ${newBalance}`);
       refreshHomeIfSeen(client, reactingUserId, logger);
     }
@@ -694,7 +707,7 @@ async function launchAttack(client, userId, channelId, logger, { consumeFree = f
   }
 
   if (price) {
-    if (!credits.spend(userId, price)) {
+    if (!credits.spend(userId, price, { source: 'attack', ref: channelId })) {
       const balance = credits.getBalance(userId);
       await safeSendDM(client, userId, {
         text: `❌ Solde insuffisant pour l'Attaque Jeanpip`,
@@ -1047,7 +1060,7 @@ app.action(/^buy_booster_/, async ({ ack, body, action, client, logger }) => {
     }
 
     // 💸 Débit atomique : spend() re-vérifie le solde et renvoie false si insuffisant
-    if (!credits.spend(userId, booster.price)) {
+    if (!credits.spend(userId, booster.price, { source: 'booster', item: type })) {
       const balance = credits.getBalance(userId);
       const missing = booster.price - balance;
       await sendDM(client, userId, {
@@ -1068,6 +1081,7 @@ app.action(/^buy_booster_/, async ({ ack, body, action, client, logger }) => {
 
     // ✅ Débit OK → on enregistre le booster en attente
     const id = boosters.createPending(userId, type);
+    events.record('booster_bought', userId, { boosterId: id, boosterType: type, price: booster.price }, { dedup: `booster_created:${id}` });
     const balance = credits.getBalance(userId);
 
     // 🎬 Ouverture animée (page web, bureaux uniquement) si configurée,
