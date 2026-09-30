@@ -16,6 +16,8 @@
   --epic-deep: #4d1a8c;
   --legendary: #ffc83d;
   --legendary-deep: #a8650b;
+  --rose: #ff5fa2;
+  --rose-deep: #a3134f;
 
   --glow: var(--common);
   --display: 'Bebas Neue', Impact, 'Arial Narrow', sans-serif;
@@ -401,6 +403,7 @@ body.has-beams .beams { opacity: 1; }
 .card.r-rare      { --c: var(--rare); --c-deep: var(--rare-deep); }
 .card.r-epic      { --c: var(--epic); --c-deep: var(--epic-deep); }
 .card.r-legendary { --c: var(--legendary); --c-deep: var(--legendary-deep); }
+.card.r-rose      { --c: var(--rose); --c-deep: var(--rose-deep); }
 
 .card-inner {
   position: relative;
@@ -455,7 +458,8 @@ body.has-beams .beams { opacity: 1; }
   flex-direction: column;
 }
 .card.r-legendary .card-front::after,
-.card.r-epic .card-front::after {
+.card.r-epic .card-front::after,
+.card.r-rose .card-front::after {
   content: '';
   position: absolute;
   inset: 0;
@@ -527,7 +531,7 @@ body.has-beams .beams { opacity: 1; }
   text-align: center;
   color: #0b1422;
 }
-.card.r-epic .card-info, .card.r-rare .card-info { color: #fff; }
+.card.r-epic .card-info, .card.r-rare .card-info, .card.r-rose .card-info { color: #fff; }
 .card-name {
   font-family: var(--display);
   font-size: calc(var(--w) * 0.11);

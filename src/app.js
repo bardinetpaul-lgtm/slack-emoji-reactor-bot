@@ -1017,7 +1017,7 @@ app.command('/jeanpip-booster', async ({ command, ack, client, logger }) => {
 
     const buttons = boosters.listBoosters().map((b) => ({
       type: 'button',
-      text: { type: 'plain_text', text: `${b.emoji} ${b.label} (${b.price})` },
+      text: { type: 'plain_text', text: boosters.buttonLabel(b) },
       action_id: `buy_booster_${b.type}`,
       value: b.type,
     }));
@@ -1034,7 +1034,7 @@ app.command('/jeanpip-booster', async ({ command, ack, client, logger }) => {
           },
         },
         { type: 'actions', elements: buttons },
-        { type: 'context', elements: [{ type: 'mrkdwn', text: boosters.listBoosters().map((b) => `${b.emoji} ${b.label} · ${b.price} crédits`).join('   ') }] },
+        { type: 'context', elements: [{ type: 'mrkdwn', text: boosters.listBoosters().map((b) => `${b.emoji} ${b.label} · ${b.price} crédits${b.dailyStock ? ` · ${b.dailyStock}/jour pour tout le monde${boosters.stockLeft(b) === 0 ? ` (épuisé aujourd'hui, retour demain entre 9h et 10h)` : ''}` : ''}`).join('   ') }] },
       ],
     }, logger);
     logger.info(`🎁 /jeanpip-booster : boutique envoyée à <@${userId}> (solde ${balance})`);
@@ -1057,6 +1057,28 @@ app.action(/^buy_booster_/, async ({ ack, body, action, client, logger }) => {
     const booster = boosters.getBooster(type);
     if (!booster) {
       logger.warn(`⚠️ Type de booster inconnu : ${type}`);
+      return;
+    }
+
+    // 🎀 Booster saisonnier : hors saison, stock du jour pas encore arrivé
+    //    ou épuisé → rien n'est débité.
+    //    ⚠️ Aucun await entre ce contrôle et createPending() : deux clics
+    //    simultanés ne peuvent pas dépasser le stock.
+    const blocked = boosters.purchaseBlock(booster);
+    if (blocked) {
+      const why = blocked === 'not_yet'
+        ? `⏳ *Pas encore de Booster ${booster.emoji} ${booster.label} aujourd'hui !* ${boosters.DROP_TEXT} Reviens un peu plus tard 😉`
+        : blocked === 'sold_out'
+        ? `😢 *Plus de Booster ${booster.emoji} ${booster.label} aujourd'hui !* Les ${booster.dailyStock} du jour sont partis.
+
+${boosters.RESTOCK_TEXT} Sois rapide 😉`
+        : `⏳ *Le Booster ${booster.emoji} ${booster.label} n'est plus en vente.*`;
+      sendDM(client, userId, { text: why, blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `${why}
+
+_Aucun crédit n'a été débité._` } }] })
+        .catch((e) => logger.error('❌ DM booster indisponible:', e.message));
+      logger.info(`🚫 Achat refusé (${blocked}) : <@${userId}> ${booster.type}`);
+      refreshHomeIfSeen(client, userId, logger);
       return;
     }
 

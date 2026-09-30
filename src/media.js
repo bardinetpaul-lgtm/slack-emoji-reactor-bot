@@ -226,8 +226,13 @@ function drawCardOfRarity(rarity) {
 /**
  * Retourne les infos d'affichage d'une rareté (emoji + label)
  */
+// Raretés hors série (hors banque : jamais tirées au hasard, jamais proposées aux admins)
+const EXTRA_RARITIES = {
+  rose: { emoji: '🎀', label: 'Octobre Rose' },
+};
+
 function getRarityInfo(rarity) {
-  return RARITIES[rarity] || RARITIES[DEFAULT_RARITY];
+  return RARITIES[rarity] || EXTRA_RARITIES[rarity] || RARITIES[DEFAULT_RARITY];
 }
 
 // ─────────────────────────────────────────────

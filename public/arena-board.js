@@ -277,7 +277,7 @@
   // 👁 rôles des poses adverses (même vocabulaire que l'éditeur de deck)
   const ROLE_ICONS = { tank: '🛡', guerrier: '⚔️', tireur: '🏹', essaim: '🐝', sort: '💥', pompe: '⚗️' };
   const ROLE_TAGS = { tank: '🛡 Tank', guerrier: '⚔️ Guerrier', tireur: '🏹 Tireur', essaim: '🐝 Essaim', sort: '💥 Sort', pompe: '⚗️ Pompe' };
-  const RARITY_TAGS = { rare: 'Rare', epic: 'Épique', legendary: 'Légendaire' };
+  const RARITY_TAGS = { rare: 'Rare', epic: 'Épique', legendary: 'Légendaire', rose: 'Octobre Rose' };
   const teamColor = (side, viewer) => (side === viewer ? BLUE : ORANGE);
   const bar = (x, y, w, ratio, color) => pathTag(F(R(x - w / 2, y, w, 5, 2.5), I7)) + pathTag(F(R(x - w / 2, y, Math.max(5, w * ratio), 5, 2.5), color));
 

@@ -115,14 +115,22 @@ function buildHomeView(userId, ctx) {
   blocks.push({ type: 'divider' });
 
   // 🎁 Boosters
-  blocks.push(section(`🎁 *Boosters* — 8 cartes chacun, plus il est cher, plus les cartes rares sont probables.`));
+  const seasonal = boosters.listBoosters().find((b) => b.dailyStock);
+  blocks.push(section(`🎁 *Boosters* — 8 cartes chacun, plus il est cher, plus les cartes rares sont probables.${seasonal
+    ? `
+${seasonal.emoji} *Booster ${seasonal.label}* : 1 ou 2 cartes exclusives qu'on ne trouve nulle part ailleurs, et 30 % de chances d'une légendaire. Seulement *${seasonal.dailyStock} par jour pour tout le monde* !${boosters.stockLeft(seasonal) === 0
+      ? `
+😢 *Épuisé pour aujourd'hui* : les ${seasonal.dailyStock} boosters du jour sont partis. ${boosters.RESTOCK_TEXT}`
+      : boosters.purchaseBlock(seasonal) === 'not_yet' ? `
+⏳ ${boosters.DROP_TEXT}` : ''}`
+    : ''}`));
   blocks.push({
     type: 'actions',
     block_id: 'home_boosters',
     elements: boosters.listBoosters().map((b) => button(
-      `${b.emoji} ${b.label} (${b.price})`,
+      boosters.buttonLabel(b),
       `buy_booster_${b.type}`,
-      { value: b.type, ...(balance >= b.price ? { style: 'primary' } : {}) },
+      { value: b.type, ...(balance >= b.price && !boosters.purchaseBlock(b) ? { style: 'primary' } : {}) },
     )),
   });
   blocks.push({

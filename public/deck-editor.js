@@ -27,8 +27,8 @@
 
   const ARCH_LABELS = { tank: 'Tank', guerrier: 'Guerrier', tireur: 'Tireur', essaim: 'Essaim', sort: 'Sort', pompe: 'Pompe' };
   const RARITY_LABELS = { epic: 'Épique', legendary: 'Légendaire' };
-  const RARITIES = { common: 'Commune', rare: 'Rare', epic: 'Épique', legendary: 'Légendaire' };
-  const RARITY_ORDER = { legendary: 0, epic: 1, rare: 2, common: 3 };
+  const RARITIES = { common: 'Commune', rare: 'Rare', epic: 'Épique', legendary: 'Légendaire', rose: 'Octobre Rose' };
+  const RARITY_ORDER = { legendary: 0, rose: 1, epic: 1, rare: 2, common: 3 };
 
   // Rôle de chaque archétype (miroir de src/game/cards.js : ARCHETYPES + COUNTERS).
   // `vs` décrit les dégâts RÉELS : l'attaquant fait ×1,5 à ce qu'il contre et

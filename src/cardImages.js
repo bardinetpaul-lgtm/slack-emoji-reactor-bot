@@ -22,6 +22,7 @@ const path = require('path');
 
 const { getAllMedia, getRemovedMedia } = require('./media');
 const { SPAM_CARDS } = require('./spamCards');
+const { ROSE_CARDS } = require('./octobreRose');
 const { decode, shrink } = require('./imageResize');
 
 const CACHE_DIR = path.join(__dirname, '..', 'data', 'card-cache');
@@ -45,7 +46,7 @@ function slackFileId(url) {
 }
 
 function findMediaByFileId(fileId) {
-  return [...getAllMedia(), ...getRemovedMedia(), ...SPAM_CARDS].find((m) => slackFileId(m.url) === fileId) || null;
+  return [...getAllMedia(), ...getRemovedMedia(), ...SPAM_CARDS, ...ROSE_CARDS.filter((c) => c.url)].find((m) => slackFileId(m.url) === fileId) || null;
 }
 
 // ─────────────────────────────────────────────
@@ -216,4 +217,4 @@ function cardThumbUrl(card) {
   return fileId ? `api/card-thumb/${fileId}` : cardImageUrl(card);
 }
 
-module.exports = { getCardImage, getCardThumb, cardImageUrl, cardThumbUrl, slackFileId, youtubeId };
+module.exports = { getCardImage, getCardThumb, cardImageUrl, cardThumbUrl, slackFileId, youtubeId, findMediaByFileId };

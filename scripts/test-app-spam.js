@@ -95,6 +95,9 @@ const wait = (ms) => new Promise((r) => realSetTimeout(r, ms));
   const collections = require(path.join(TMP, 'src', 'collections.js'));
   const { buildAlbum } = require(path.join(TMP, 'src', 'album.js'));
   const { SPAM_CARDS } = require(path.join(TMP, 'src', 'spamCards.js'));
+  // « Hors série » du classeur, sans les cartes 🎀 Octobre Rose (rangées en tête)
+  const ROSE = require(path.join(TMP, 'src', 'octobreRose.js')).ROSE_CARDS.filter((c) => c.url).length;
+  const spamOnly = (album) => album.sections.find((s) => s.key === 'extra').stickers.filter((st) => st.rarity !== 'rose');
 
   const react = (user, ts = '111.222') => events.reaction_added({
     event: { reaction: 'jeanpip', user, item: { channel: 'C1', ts } }, client: fakeClient, logger,
@@ -136,19 +139,19 @@ const wait = (ms) => new Promise((r) => realSetTimeout(r, ms));
 
   await test('classeur : Hors série = les 10 anti-spam, hors pourcentage', () => {
     const album = buildAlbum('U_SPAM');
-    const extra = album.sections.find((s) => s.key === 'extra');
-    assert.deepStrictEqual(extra.stickers.map((s) => s.n), SPAM_CARDS.map((c) => c.number));
-    assert.ok(extra.stickers.every((s) => s.owned && s.rarity === 'extra'));
-    assert.match(extra.stickers[0].image, /^api\/card-thumb\/F[A-Z0-9]+$/);
-    assert.deepStrictEqual(album.stats.byRarity.extra, { total: 10, owned: 10 });
+    const extra = spamOnly(album);
+    assert.deepStrictEqual(extra.map((s) => s.n), SPAM_CARDS.map((c) => c.number));
+    assert.ok(extra.every((s) => s.owned && s.rarity === 'extra'));
+    assert.match(extra[0].image, /^api\/card-thumb\/F[A-Z0-9]+$/);
+    assert.deepStrictEqual(album.stats.byRarity.extra, { total: 10 + ROSE, owned: 10 });   // + emplacements Octobre Rose vides
     assert.ok(album.stats.owned < 10, 'les cartes anti-spam ne comptent pas dans le %');
   });
 
   await test('classeur d\'un non-spammeur : 10 emplacements Hors série vides', () => {
     const album = buildAlbum('U_SAGE');
-    const extra = album.sections.find((s) => s.key === 'extra');
-    assert.strictEqual(extra.stickers.length, 10);
-    assert.ok(extra.stickers.every((s) => !s.owned && Object.keys(s).length === 3));
+    const extra = spamOnly(album);
+    assert.strictEqual(extra.length, 10);
+    assert.ok(extra.every((s) => !s.owned && Object.keys(s).length === 3));
   });
 
   await test('DM troll qui échoue → carte PAS ajoutée', async () => {
