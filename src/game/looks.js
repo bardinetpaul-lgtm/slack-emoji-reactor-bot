@@ -99,13 +99,7 @@ const isSkin = ([h, s, l]) => (h <= 45 || h >= 345) && s >= 0.18 && s <= 0.8 && 
 // ─────────────────────────────────────────────
 
 function decode(buffer, mime) {
-  try {
-    if (mime === 'image/png') return require('pngjs').PNG.sync.read(buffer);
-    if (mime === 'image/jpeg') return require('jpeg-js').decode(buffer, { useTArray: true, formatAsRGBA: true, maxMemoryUsageInMB: 512 });
-  } catch (e) {
-    return null;
-  }
-  return null;   // GIF, WebP : pas de lecture de pixels (repli sur le tirage stable)
+  return require('../imageResize').decode(buffer, mime);   // GIF, WebP : null (repli sur le tirage stable)
 }
 
 /** Grille de pixels échantillonnés (N × N) : [[rgb, fx, fy], …] (fx, fy ∈ [0, 1]). */

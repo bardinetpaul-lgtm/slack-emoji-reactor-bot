@@ -186,6 +186,31 @@ async function test(name, fn) {
 
   await test('image hors banque → 404 (liste blanche)', async () => {
     assert.strictEqual((await fetch(`${base}/api/card-image/FNOTINBANK1`)).status, 404);
+    assert.strictEqual((await fetch(`${base}/api/card-thumb/FNOTINBANK1`)).status, 404);
+  });
+
+  await test('miniature : JPEG ≤ 600 px, bien plus légère que l\'original (mise en cache)', async () => {
+    // Original « photo » 2000 × 1500 (bruit → PNG lourd, comme les vraies cartes)
+    const { PNG } = require(path.join(ROOT, 'node_modules', 'pngjs'));
+    const big = new PNG({ width: 2000, height: 1500 });
+    for (let i = 0; i < big.data.length; i += 1) big.data[i] = (i % 4 === 3) ? 255 : Math.floor(Math.random() * 256);
+    const original = PNG.sync.write(big);
+    const bank = JSON.parse(fs.readFileSync(path.join(TMP, 'data', 'media-bank.json'), 'utf-8'));
+    const fileId = bank.map((m) => (/slack-files\.com\/T[A-Z0-9]+-(F[A-Z0-9]+)/.exec(m.url) || [])[1]).find(Boolean);
+    fs.mkdirSync(path.join(TMP, 'data', 'card-cache'), { recursive: true });
+    fs.writeFileSync(path.join(TMP, 'data', 'card-cache', `${fileId}.png`), original);
+
+    const res = await fetch(`${base}/api/card-thumb/${fileId}`);
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(res.headers.get('content-type'), 'image/jpeg');
+    const thumb = Buffer.from(await res.arrayBuffer());
+    const { width, height } = require(path.join(ROOT, 'node_modules', 'jpeg-js')).decode(thumb);
+    assert.strictEqual(Math.max(width, height), 600);
+    assert.strictEqual(width, 600);
+    assert.strictEqual(height, 450);
+    assert.ok(thumb.length < original.length / 10, `${thumb.length} octets vs ${original.length}`);
+    assert.ok(fs.existsSync(path.join(TMP, 'data', 'card-cache', 'thumb', `${fileId}.jpg`)), 'miniature en cache');
+    assert.strictEqual((await fetch(`${base}/api/card-thumb/${fileId}`)).status, 200);
   });
 
   // Droits Unix : vérifiés sur la VM (Linux), sautés sous Windows

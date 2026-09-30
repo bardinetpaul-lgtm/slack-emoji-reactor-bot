@@ -122,7 +122,7 @@ async function test(name, fn) {
     const owned = data.sections.flatMap((s) => s.stickers).filter((s) => s.owned);
     const first = owned.find((s) => s.link === cards[0].url);
     assert.strictEqual(first.count, 3);
-    assert.match(first.image, /^api\/card-image\/F[A-Z0-9]+$/);
+    assert.match(first.image, /^api\/card-thumb\/F[A-Z0-9]+$/);   // miniature, pas l'original (4 à 11 Mo)
   });
 
   await test('cartes manquantes : seulement numéro + rareté (ni image, ni titre, ni lien)', async () => {

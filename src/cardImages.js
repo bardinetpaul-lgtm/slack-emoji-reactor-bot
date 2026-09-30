@@ -22,6 +22,7 @@ const path = require('path');
 
 const { getAllMedia, getRemovedMedia } = require('./media');
 const { SPAM_CARDS } = require('./spamCards');
+const { decode, shrink } = require('./imageResize');
 
 const CACHE_DIR = path.join(__dirname, '..', 'data', 'card-cache');
 const MAX_BYTES = 15 * 1024 * 1024;
@@ -166,4 +167,53 @@ async function getCardImage(client, fileId, logger = console) {
   }
 }
 
-module.exports = { getCardImage, cardImageUrl, slackFileId, youtubeId };
+// ─────────────────────────────────────────────
+// 🔍 Miniature (classeur) : JPEG ≤ THUMB_SIDE px
+//    Les originaux font 4 Mo en moyenne (jusqu'à 11 Mo) : une double
+//    page du classeur en affichait ~75 Mo, et sur une connexion lente
+//    les images ne chargeaient jamais. La miniature pèse ~50 Ko.
+//    Faite une fois (data/card-cache/thumb/<FILEID>.jpg), une à la fois
+//    (le décodage pur JS bloque ~0,2 s le process).
+// ─────────────────────────────────────────────
+
+const THUMB_DIR = path.join(CACHE_DIR, 'thumb');
+const THUMB_SIDE = 600;
+let thumbQueue = Promise.resolve();
+
+function makeThumb(fileId, image) {
+  const pixels = decode(fs.readFileSync(image.file), image.mime);
+  if (!pixels) return image; // GIF, WebP : l'original
+  const buffer = shrink(pixels, THUMB_SIDE, 80);
+  if (buffer.length >= fs.statSync(image.file).size) return image; // déjà petite
+  fs.mkdirSync(THUMB_DIR, { recursive: true });
+  const file = path.join(THUMB_DIR, `${fileId}.jpg`);
+  fs.writeFileSync(file, buffer);
+  return { file, mime: 'image/jpeg' };
+}
+
+async function getCardThumb(client, fileId, logger = console) {
+  const image = await getCardImage(client, fileId, logger);
+  if (!image) return null;
+  const file = path.join(THUMB_DIR, `${fileId}.jpg`);
+  if (fs.existsSync(file)) return { file, mime: 'image/jpeg' };
+
+  const task = thumbQueue.then(() => {
+    if (fs.existsSync(file)) return { file, mime: 'image/jpeg' };
+    try {
+      return makeThumb(fileId, image);
+    } catch (e) {
+      logger.warn(`[cardImages] miniature ${fileId} : ${e.message} → original`);
+      return image;
+    }
+  });
+  thumbQueue = task;
+  return task;
+}
+
+/** Image à afficher en vignette (classeur) : miniature pour les fichiers Slack. */
+function cardThumbUrl(card) {
+  const fileId = slackFileId(card.url);
+  return fileId ? `api/card-thumb/${fileId}` : cardImageUrl(card);
+}
+
+module.exports = { getCardImage, getCardThumb, cardImageUrl, cardThumbUrl, slackFileId, youtubeId };

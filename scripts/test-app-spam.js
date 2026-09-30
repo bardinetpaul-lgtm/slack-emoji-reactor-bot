@@ -139,7 +139,7 @@ const wait = (ms) => new Promise((r) => realSetTimeout(r, ms));
     const extra = album.sections.find((s) => s.key === 'extra');
     assert.deepStrictEqual(extra.stickers.map((s) => s.n), SPAM_CARDS.map((c) => c.number));
     assert.ok(extra.stickers.every((s) => s.owned && s.rarity === 'extra'));
-    assert.match(extra.stickers[0].image, /^api\/card-image\/F[A-Z0-9]+$/);
+    assert.match(extra.stickers[0].image, /^api\/card-thumb\/F[A-Z0-9]+$/);
     assert.deepStrictEqual(album.stats.byRarity.extra, { total: 10, owned: 10 });
     assert.ok(album.stats.owned < 10, 'les cartes anti-spam ne comptent pas dans le %');
   });

@@ -19,7 +19,7 @@ const crypto = require('crypto');
 
 const collections = require('./collections');
 const { getAllMedia, RARITIES } = require('./media');
-const { cardImageUrl } = require('./cardImages');
+const { cardThumbUrl } = require('./cardImages');
 const { SPAM_CARDS } = require('./spamCards');
 
 const SECTION_ORDER = ['common', 'rare', 'epic', 'legendary'];
@@ -64,7 +64,7 @@ function ownedSticker(n, rarity, card, mediaCard) {
     owned: true,
     count: card.count,
     title: card.title || (mediaCard && mediaCard.title) || `#${n}`,
-    image: cardImageUrl({ url: card.url, type: card.type || (mediaCard && mediaCard.type) }),
+    image: cardThumbUrl({ url: card.url, type: card.type || (mediaCard && mediaCard.type) }),
     link: card.url,
     firstAt: card.firstAt || null,
     lastAt: card.lastAt || null,
