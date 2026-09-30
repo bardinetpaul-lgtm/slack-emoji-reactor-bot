@@ -22,11 +22,11 @@ const SEASON = { from: '2026-10-01', to: '2026-10-31' };
 //    Ne jamais modifier une URL une fois distribuée : c'est l'identifiant
 //    de la carte dans les collections.
 const ROSE_CARD_DEFS = [
-  { url: '', name: '' },
-  { url: '', name: '' },
-  { url: '', name: '' },
-  { url: '', name: '' },
-  { url: '', name: '' },
+  { url: 'https://slack-files.com/T6EFSEHCN-F0C5MUHEGNS-b11ba716cf', name: '' },
+  { url: 'https://slack-files.com/T6EFSEHCN-F0C58G1PBSB-716345987f', name: '' },
+  { url: 'https://slack-files.com/T6EFSEHCN-F0C58G350TH-96dcd80914', name: '' },
+  { url: 'https://slack-files.com/T6EFSEHCN-F0C58G3MMQF-c2e9b44439', name: '' },
+  { url: 'https://slack-files.com/T6EFSEHCN-F0C58G4T7AT-ae35265d42', name: '' },
   { url: '', name: '' },
   { url: '', name: '' },
   { url: '', name: '' },
