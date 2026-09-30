@@ -136,7 +136,7 @@ function listBoosters(now = Date.now()) {
   return BOOSTER_ORDER.map((type) => BOOSTERS[type]).filter((b) => b && isOnSale(b, now));
 }
 
-/** En vente : toujours, sauf le saisonnier (période + 8 cartes renseignées). */
+/** En vente : toujours, sauf le saisonnier (période + cartes Octobre Rose renseignées). */
 function isOnSale(booster, now = Date.now()) {
   if (!booster.seasonal) return true;
   return octobreRose.inSeason(now) && octobreRose.isReady();

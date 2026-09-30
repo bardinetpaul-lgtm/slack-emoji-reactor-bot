@@ -9,7 +9,7 @@
 //  numéro et sa rareté — jamais son image, son titre ni son lien.
 //
 //  Intercalaire « Hors série » (hors pourcentage de complétion) :
-//    • les 8 cartes 🎀 Octobre Rose (emplacements OR1 → OR8, rareté 'rose')
+//    • les 6 cartes 🎀 Octobre Rose (emplacements OR1 → OR6, rareté 'rose')
 //    • les 10 photos anti-spam #62 → #71 (emplacements toujours affichés)
 //    • les cartes possédées qui ne sont plus dans la banque
 //
@@ -95,7 +95,7 @@ function buildAlbum(userId) {
       : { n: numbers[i], rarity, owned: false });
   });
 
-  // 🎀 Hors série : les cartes Octobre Rose (une fois les 8 liens renseignés)…
+  // 🎀 Hors série : les cartes Octobre Rose (une fois leurs liens renseignés)…
   const extra = ROSE_CARDS.filter((c) => c.url && !seen.has(c.url)).map((c) => {
     seen.add(c.url);
     const card = owned.get(c.url);

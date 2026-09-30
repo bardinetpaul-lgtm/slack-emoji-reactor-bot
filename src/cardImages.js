@@ -217,4 +217,4 @@ function cardThumbUrl(card) {
   return fileId ? `api/card-thumb/${fileId}` : cardImageUrl(card);
 }
 
-module.exports = { getCardImage, getCardThumb, cardImageUrl, cardThumbUrl, slackFileId, youtubeId };
+module.exports = { getCardImage, getCardThumb, cardImageUrl, cardThumbUrl, slackFileId, youtubeId, findMediaByFileId };

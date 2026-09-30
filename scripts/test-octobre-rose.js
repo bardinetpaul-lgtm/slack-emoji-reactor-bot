@@ -3,13 +3,13 @@
 //  🧪 Test du Booster 🎀 Octobre Rose
 //
 //  Dans une COPIE temporaire du projet (aucune donnée réelle touchée),
-//  avec 8 liens factices et une horloge simulée :
-//    • période de vente (1er → 31 octobre, heure de Paris) + 8 liens requis
-//    • répartition des 8 cartes (tirages en masse)
+//  avec les 6 vraies cartes et une horloge simulée :
+//    • période de vente (1er → 31 octobre, heure de Paris) + liens requis
+//    • répartition des 8 cartes du booster (tirages en masse)
 //    • chaque carte rose sort avant qu'une autre ne ressorte (même après restart)
 //    • stock partagé 2/jour, qui arrive à une minute aléatoire entre 9h et 10h (Paris)
 //    • achat Slack : refus hors stock sans débit, bouton « 1/2 aujourd'hui »
-//    • classeur (Hors série, OR1 → OR8, hors complétion) + Arène
+//    • classeur (Hors série, OR1 → OR6, hors complétion) + Arène
 //
 //  Usage : node scripts/test-octobre-rose.js
 // ═══════════════════════════════════════════════════════════
@@ -25,13 +25,6 @@ fs.symlinkSync(path.join(ROOT, 'node_modules'), path.join(TMP, 'node_modules'), 
 fs.cpSync(path.join(ROOT, 'public'), path.join(TMP, 'public'), { recursive: true });
 fs.mkdirSync(path.join(TMP, 'data'));
 fs.copyFileSync(path.join(ROOT, 'data', 'media-bank.json'), path.join(TMP, 'data', 'media-bank.json'));
-
-// 🖼️ 8 liens factices dans la copie
-const ROSE_PATH = path.join(TMP, 'src', 'octobreRose.js');
-let roseSrc = fs.readFileSync(ROSE_PATH, 'utf-8');
-let k = 0;
-roseSrc = roseSrc.replace(/\{ url: '', name: '' \}/g, () => { k += 1; return `{ url: 'https://slack-files.com/T0TEST-F0ROSE${k}-abc${k}', name: 'Test ${k}' }`; });
-fs.writeFileSync(ROSE_PATH, roseSrc);
 
 // ⏰ Horloge simulée (Date.now ET new Date())
 const RealDate = Date;
@@ -155,7 +148,8 @@ const at = (iso) => { NOW = RealDate.parse(iso); };
     if (allAfter === null && counts.every((n) => n > 0)) allAfter = i + 1;
   }
   check(balanced, 'écart max 1 entre la carte rose la plus et la moins sortie (40 boosters)');
-  check(allAfter !== null && allAfter <= 8, `les 8 cartes roses sont toutes sorties après ${allAfter} boosters`);
+  check(octobreRose.isReady() && ROSE_URLS.size === 6, 'les 6 cartes Octobre Rose sont renseignées');
+  check(allAfter !== null && allAfter <= 6, `les 6 cartes roses sont toutes sorties après ${allAfter} boosters`);
   check(!boosters.getBooster('common').slots.some((sl) => sl.rose) && !boosters.getBooster('epic').slots.some((sl) => sl.rose), 'aucune carte rose dans les autres boosters');
 
   // ── Stock partagé 2/jour (les 40 ci-dessus datent du 10/10) ──
@@ -209,7 +203,8 @@ const at = (iso) => { NOW = RealDate.parse(iso); };
   const album = buildAlbum('U_ALB');
   const extra = album.sections.find((x) => x.key === 'extra');
   const roseStickers = extra.stickers.filter((st) => st.rarity === 'rose');
-  check(roseStickers.length === 8 && roseStickers.map((st) => st.code).join() === 'OR1,OR2,OR3,OR4,OR5,OR6,OR7,OR8', 'classeur : 8 emplacements OR1 → OR8 dans « Hors série »');
+  check(roseStickers.length === 6 && roseStickers.map((st) => st.code).join() === 'OR1,OR2,OR3,OR4,OR5,OR6', 'classeur : 6 emplacements OR1 → OR6 dans « Hors série »');
+  check(roseCard.title === '🎀 Octobre Rose 3/6', `titre : « ${roseCard.title} »`);
   check(roseStickers[2].owned && !roseStickers[0].owned && !roseStickers[0].image, 'carte possédée visible, les autres cachées');
   check(album.stats.owned === 0, 'hors pourcentage de complétion');
   check(extra.stickers.filter((st) => st.link === roseCard.url).length === 1, 'pas de doublon « carte retirée »');
@@ -218,7 +213,7 @@ const at = (iso) => { NOW = RealDate.parse(iso); };
   const stats = getCardStats(roseCard);
   check(stats.rarity === 'rose', `Arène : carte jouable, rareté rose (archétype ${stats.archetype})`);
   const cardImages = req('cardImages.js');
-  check(Boolean(cardImages.findMediaByFileId ? cardImages.findMediaByFileId('F0ROSE3') : true), 'proxy d\'images : carte rose autorisée');
+  check(octobreRose.ROSE_CARDS.every((c) => cardImages.findMediaByFileId(cardImages.slackFileId(c.url))), 'proxy d\'images : les 6 cartes roses autorisées');
 
   origLog(process.exitCode ? '\n❌ ÉCHECS ci-dessus\n' : '\n🎉 Booster Octobre Rose OK\n');
   try { fs.rmSync(TMP, { recursive: true, force: true }); } catch { /* base SQLite encore ouverte (Windows) */ }
