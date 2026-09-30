@@ -23,7 +23,7 @@ const MAX_REWARDED_PER_DAY = 5;
 const MAX_REWARDED_VS_SAME = 2;
 const HISTORY_MAX = 1000;
 const WEEK_MS = 7 * 24 * 3600 * 1000;
-const RARITY_RANK = { common: 0, rare: 1, epic: 2, legendary: 3 };
+const RARITY_RANK = { common: 0, rare: 1, epic: 2, rose: 2, legendary: 3 };
 
 // ─────────────────────────────────────────────
 // 📦 Chargement / Sauvegarde

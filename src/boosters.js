@@ -8,6 +8,9 @@
 //    • Les 5 premières cartes sont toujours communes.
 //    • Les 3 dernières suivent une distribution PAR SLOT (tables ci-dessous).
 //    • Chaque table de slot totalise exactement 100%.
+//    • Exception : le booster 🎀 Octobre Rose (saisonnier, stock
+//      quotidien partagé) a sa propre répartition et la pseudo-rareté
+//      'rose' = une carte Octobre Rose (src/octobreRose.js).
 //
 //  Le catalogue est extensible : ajouter une entrée dans BOOSTERS
 //  (avec price + slots) suffit à créer un nouveau type de booster.
@@ -22,6 +25,7 @@ const fs = require('fs');
 const path = require('path');
 
 const { drawCardOfRarity } = require('./media');
+const octobreRose = require('./octobreRose');
 
 // ─────────────────────────────────────────────
 // 🎨 Helpers de construction du catalogue
@@ -78,10 +82,30 @@ const BOOSTERS = {
       { rare: 20, epic: 50, legendary: 30 },
     ],
   },
+  // 🎀 Octobre Rose : du 1er au 31 octobre, 2 boosters par jour pour TOUT
+  //    le monde (remis à zéro à minuit, heure de Paris).
+  //    Cartes 1-3 communes · 4-5 rare/commun/épique · 6 légendaire 30 %
+  //    · 7 Octobre Rose 30 % (2e carte rose) · 8 Octobre Rose garantie.
+  octobre_rose: {
+    type: 'octobre_rose',
+    label: 'Octobre Rose',
+    emoji: '🎀',
+    price: 65,
+    dailyStock: 2,
+    seasonal: true,
+    slots: [
+      ...commonSlots(3),
+      { rare: 40, common: 30, epic: 30 },
+      { rare: 40, common: 30, epic: 30 },
+      { legendary: 30, rare: 35, epic: 35 },
+      { rose: 30, rare: 35, epic: 35 },
+      { rose: 100 },
+    ],
+  },
 };
 
 // Ordre d'affichage des boutons d'achat.
-const BOOSTER_ORDER = ['common', 'rare', 'epic'];
+const BOOSTER_ORDER = ['common', 'rare', 'epic', 'octobre_rose'];
 
 // ─────────────────────────────────────────────
 // 🎯 Tirage d'une rareté selon une table {rarity: poids%}
@@ -106,8 +130,45 @@ function getBooster(type) {
   return BOOSTERS[type] || null;
 }
 
-function listBoosters() {
-  return BOOSTER_ORDER.map((type) => BOOSTERS[type]).filter(Boolean);
+/** Boosters en vente maintenant (le saisonnier n'apparaît qu'en saison). */
+function listBoosters(now = Date.now()) {
+  return BOOSTER_ORDER.map((type) => BOOSTERS[type]).filter((b) => b && isOnSale(b, now));
+}
+
+/** En vente : toujours, sauf le saisonnier (période + 8 cartes renseignées). */
+function isOnSale(booster, now = Date.now()) {
+  if (!booster.seasonal) return true;
+  return octobreRose.inSeason(now) && octobreRose.isReady();
+}
+
+/**
+ * Boosters encore disponibles aujourd'hui (stock partagé par tous),
+ * ou null si le booster n'a pas de stock quotidien.
+ */
+function stockLeft(booster, now = Date.now()) {
+  if (!booster.dailyStock) return null;
+  const today = octobreRose.parisDay(now);
+  const sold = Object.values(loadStore().boosters)
+    .filter((b) => b.type === booster.type && b.createdAt && octobreRose.parisDay(b.createdAt) === today).length;
+  return Math.max(0, booster.dailyStock - sold);
+}
+
+/**
+ * Raison pour laquelle on ne peut pas acheter ce booster maintenant
+ * ('closed' | 'sold_out'), ou null. À appeler JUSTE avant spend() +
+ * createPending(), sans await entre les deux (Node mono-thread).
+ */
+function purchaseBlock(booster, now = Date.now()) {
+  if (!isOnSale(booster, now)) return 'closed';
+  if (stockLeft(booster, now) === 0) return 'sold_out';
+  return null;
+}
+
+/** Texte du bouton d'achat : « 🎀 Octobre Rose (65) · 1/2 aujourd'hui ». */
+function buttonLabel(booster, now = Date.now()) {
+  const left = stockLeft(booster, now);
+  const stock = left === null ? '' : left > 0 ? ` · ${left}/${booster.dailyStock} aujourd'hui` : ' · épuisé';
+  return `${booster.emoji} ${booster.label} (${booster.price})${stock}`;
 }
 
 // ─────────────────────────────────────────────
@@ -120,10 +181,31 @@ function openBooster(type) {
   const booster = getBooster(type);
   if (!booster) return [];
 
+  let roseDrawn = null;          // url → nb de sorties (calculé au 1er besoin)
+  const inThisBooster = new Set();
+
   return booster.slots.map((distribution) => {
     const rarity = rollRarity(distribution);
-    return drawCardOfRarity(rarity);
+    if (rarity !== 'rose') return drawCardOfRarity(rarity);
+
+    // 🎀 Carte Octobre Rose : la moins sortie jusqu'ici, pas 2 fois la même par booster
+    if (!roseDrawn) roseDrawn = countRoseDrawn();
+    const card = octobreRose.drawRoseCard(roseDrawn, inThisBooster)
+      || drawCardOfRarity('epic'); // repli (cartes non renseignées) : ne devrait pas arriver
+    inThisBooster.add(card.url);
+    return card;
   });
+}
+
+/** Combien de fois chaque carte Octobre Rose est déjà sortie d'un booster. */
+function countRoseDrawn() {
+  const drawn = new Map();
+  for (const b of Object.values(loadStore().boosters)) {
+    for (const c of b.cards || []) {
+      if (c && c.rarity === 'rose') drawn.set(c.url, (drawn.get(c.url) || 0) + 1);
+    }
+  }
+  return drawn;
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -233,6 +315,10 @@ module.exports = {
   BOOSTERS,
   getBooster,
   listBoosters,
+  isOnSale,
+  stockLeft,
+  purchaseBlock,
+  buttonLabel,
   openBooster,
   createPending,
   getPending,

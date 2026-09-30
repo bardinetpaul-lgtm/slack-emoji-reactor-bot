@@ -9,6 +9,7 @@
 //  numéro et sa rareté — jamais son image, son titre ni son lien.
 //
 //  Intercalaire « Hors série » (hors pourcentage de complétion) :
+//    • les 8 cartes 🎀 Octobre Rose (emplacements OR1 → OR8, rareté 'rose')
 //    • les 10 photos anti-spam #62 → #71 (emplacements toujours affichés)
 //    • les cartes possédées qui ne sont plus dans la banque
 //
@@ -21,6 +22,7 @@ const collections = require('./collections');
 const { getAllMedia, RARITIES } = require('./media');
 const { cardThumbUrl } = require('./cardImages');
 const { SPAM_CARDS } = require('./spamCards');
+const { ROSE_CARDS } = require('./octobreRose');
 
 const SECTION_ORDER = ['common', 'rare', 'epic', 'legendary'];
 
@@ -93,12 +95,19 @@ function buildAlbum(userId) {
       : { n: numbers[i], rarity, owned: false });
   });
 
-  // 🚨 Hors série : les photos anti-spam (emplacements fixes)…
-  const extra = SPAM_CARDS.filter((c) => !seen.has(c.url)).map((c) => {
+  // 🎀 Hors série : les cartes Octobre Rose (une fois les 8 liens renseignés)…
+  const extra = ROSE_CARDS.filter((c) => c.url && !seen.has(c.url)).map((c) => {
+    seen.add(c.url);
+    const card = owned.get(c.url);
+    const sticker = card ? ownedSticker(c.number, 'rose', card, c) : { n: c.number, rarity: 'rose', owned: false };
+    return { ...sticker, code: `OR${c.number}` };
+  });
+  // 🚨 … les photos anti-spam (emplacements fixes)…
+  extra.push(...SPAM_CARDS.filter((c) => !seen.has(c.url)).map((c) => {
     seen.add(c.url);
     const card = owned.get(c.url);
     return card ? ownedSticker(c.number, 'extra', card, c) : { n: c.number, rarity: 'extra', owned: false };
-  });
+  }));
   // 🗃️ … puis les cartes possédées retirées de la banque
   extra.push(...[...owned.values()]
     .filter((c) => !seen.has(c.url))
@@ -135,7 +144,7 @@ function buildAlbum(userId) {
 
   // 🔁 Empreinte : change dès qu'une carte arrive (la page ne redessine que dans ce cas)
   const version = crypto.createHash('sha1')
-    .update(JSON.stringify(list.map((s) => s.stickers.map((st) => [st.n, st.rarity, st.owned ? st.count : 0]))))
+    .update(JSON.stringify(list.map((s) => s.stickers.map((st) => [st.code || st.n, st.rarity, st.owned ? st.count : 0]))))
     .digest('hex')
     .slice(0, 12);
 

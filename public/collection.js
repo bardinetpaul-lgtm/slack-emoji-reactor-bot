@@ -33,8 +33,11 @@
     epic:      { label: 'Épiques',     short: 'ÉPIQUE' },
     legendary: { label: 'Légendaires', short: 'LÉGENDAIRE' },
     extra:     { label: 'Hors série',  short: 'HORS SÉRIE' },
+    rose:      { label: 'Octobre Rose', short: 'OCT. ROSE' },   // cartes 🎀 (rangées dans « Hors série »)
   };
-  const RARITY_LABEL = { common: 'Commune', rare: 'Rare', epic: 'Épique', legendary: 'Légendaire', extra: 'Hors série' };
+  const RARITY_LABEL = { common: 'Commune', rare: 'Rare', epic: 'Épique', legendary: 'Légendaire', extra: 'Hors série', rose: 'Octobre Rose' };
+  // Numéro affiché : « OR3 » pour les cartes Octobre Rose, sinon le n° de la banque
+  const numLabel = (st) => st.code || String(st.n);
 
   const $ = (sel) => document.querySelector(sel);
   const el = (tag, cls, text) => {
@@ -109,7 +112,7 @@
     }
 
     const band = el('div', 'band');
-    band.appendChild(el('span', 'num', st.n ? `#${st.n}` : '★'));
+    band.appendChild(el('span', 'num', st.code || (st.n ? `#${st.n}` : '★')));
     band.appendChild(el('span', 'name', stickerName(st.title) || RARITY_LABEL[st.rarity]));
     node.append(art, band);
 
@@ -135,9 +138,9 @@
       pocket.appendChild(buildSticker(st, opts));
     } else {
       const slot = el('div', 'slot');
-      slot.appendChild(el('b', null, String(st.n)));
+      slot.appendChild(el('b', null, numLabel(st)));
       slot.appendChild(el('small', null, SECTION[st.rarity].short));
-      slot.title = `N° ${st.n} — pas encore trouvée`;
+      slot.title = `N° ${numLabel(st)} — pas encore trouvée`;
       pocket.appendChild(slot);
     }
     return pocket;
@@ -322,7 +325,7 @@
     big.tabIndex = -1;
     holder.replaceChildren(big);
 
-    $('#lb-num').textContent = `N° ${st.n || '★'} · ${(RARITY_LABEL[st.rarity] || '').toUpperCase()}`;
+    $('#lb-num').textContent = `N° ${st.code || st.n || '★'} · ${(RARITY_LABEL[st.rarity] || '').toUpperCase()}`;
     $('#lb-title').textContent = stickerName(st.title) || st.title.replace(/^[^\p{L}\p{N}#]+/u, '');
     const meta = [`${st.count} exemplaire${st.count > 1 ? 's' : ''}`];
     if (st.firstAt) meta.push(`Obtenue le ${new Date(st.firstAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}`);
@@ -387,7 +390,7 @@
     }
     if (!added.length && !dups.length) return;
 
-    const label = (st) => `#${st.n} ${stickerName(st.title)}`;
+    const label = (st) => `${st.code || `#${st.n}`} ${stickerName(st.title)}`;
     const first = added[0] || dups[0];
     if (added.length + dups.length === 1) {
       toast(added.length

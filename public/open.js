@@ -21,12 +21,15 @@
   const token = new URLSearchParams(location.search).get('t') || '';
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-  const RARITY_RANK = { common: 0, rare: 1, epic: 2, legendary: 3 };
+  const RARITY_RANK = { common: 0, rare: 1, epic: 2, rose: 2, legendary: 3 };
+  // Pour choisir l'ambiance du pack : une carte 🎀 passe devant une épique
+  const SHOW_RANK = { common: 0, rare: 1, epic: 2, rose: 2.5, legendary: 3 };
   const RARITY = {
     common:    { label: 'Commune',    plural: 'Communes',    emoji: '⚪', color: '#d7dde6' },
     rare:      { label: 'Rare',       plural: 'Rares',       emoji: '🔵', color: '#3d8bff' },
     epic:      { label: 'Épique',     plural: 'Épiques',     emoji: '🟣', color: '#b35cff' },
     legendary: { label: 'Légendaire', plural: 'Légendaires', emoji: '🟡', color: '#ffc83d' },
+    rose:      { label: 'Octobre Rose', plural: 'Octobre Rose', emoji: '🎀', color: '#ff5fa2' },
   };
 
   const $ = (sel) => document.querySelector(sel);
@@ -323,7 +326,7 @@
   let state = null; // { booster, cards, replay }
 
   function bestRarity(cards) {
-    return cards.reduce((best, c) => (RARITY_RANK[c.rarity] > RARITY_RANK[best] ? c.rarity : best), 'common');
+    return cards.reduce((best, c) => ((SHOW_RANK[c.rarity] || 0) > SHOW_RANK[best] ? c.rarity : best), 'common');
   }
 
   function preparePack() {
@@ -384,12 +387,12 @@
       text.classList.add('go');
       await sleep(r, 3000);
       fx.stopRain();
-    } else if (best === 'epic') {
+    } else if (best === 'epic' || best === 'rose') {
       atmosphere({ dark: true, beams: true });
-      sound.reveal('epic');
-      flash('epic');
-      fx.burst(innerWidth / 2, innerHeight / 2, RARITY.epic.color, 90, 11);
-      text.textContent = 'ÉPIQUE';
+      sound.reveal(best);
+      flash(best);
+      fx.burst(innerWidth / 2, innerHeight / 2, RARITY[best].color, 90, 11);
+      text.textContent = best === 'rose' ? 'OCTOBRE ROSE' : 'ÉPIQUE';
       void text.offsetWidth;
       text.classList.add('go');
       await sleep(r, 2400);
@@ -471,6 +474,7 @@
     const best = bestRarity(state.cards);
     const titles = {
       legendary: 'PACK LÉGENDAIRE ! 🏆',
+      rose: 'PACK OCTOBRE ROSE ! 🎀',
       epic: 'QUEL PACK ! 🔥',
       rare: 'PAS MAL DU TOUT ! 👌',
       common: 'BOOSTER OUVERT ✅',

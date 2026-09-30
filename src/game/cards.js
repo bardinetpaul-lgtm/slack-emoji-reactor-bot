@@ -48,11 +48,12 @@ const RARITY_MODS = {
   rare:      { mult: 1.06, cost: 0 },
   epic:      { mult: 1.11, cost: 0 },
   legendary: { mult: 1.16, cost: 0 },
+  rose:      { mult: 1.11, cost: 0 },   // 🎀 Octobre Rose (hors série) = puissance d'une épique
 };
 
 // attaquant → archétype qu'il contre
 // ✨ Spécialités tirées automatiquement pour les épiques / légendaires
-const SPECIAL_RARITIES = ['epic', 'legendary'];
+const SPECIAL_RARITIES = ['epic', 'legendary', 'rose'];
 const SPECIALTIES_BY_ARCH = {
   tank: ['bouclier', 'invocation'],
   guerrier: ['charge', 'vampire', 'explosion'],

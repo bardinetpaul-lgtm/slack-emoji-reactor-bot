@@ -12,7 +12,7 @@
 
 const { getDb } = require('./db');
 
-const RARITY_WEIGHTS = { common: 1, rare: 3, epic: 8, legendary: 20 };
+const RARITY_WEIGHTS = { common: 1, rare: 3, epic: 8, rose: 8, legendary: 20 };
 
 function record(type, userId, data = {}, { at = new Date().toISOString(), dedup = null } = {}) {
   try {

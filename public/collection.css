@@ -23,6 +23,8 @@
   --legendary-deep: #a8650b;
   --extra: #ff8a3d;
   --extra-deep: #9c3f0a;
+  --rose: #ff5fa2;
+  --rose-deep: #a3134f;
 
   --display: 'Bebas Neue', Impact, 'Arial Narrow', sans-serif;
   --text: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
@@ -272,6 +274,7 @@ button { font: inherit; color: inherit; }
 .r-epic      { --c: var(--epic); --c-deep: var(--epic-deep); }
 .r-legendary { --c: var(--legendary); --c-deep: var(--legendary-deep); }
 .r-extra     { --c: var(--extra); --c-deep: var(--extra-deep); }
+.r-rose      { --c: var(--rose); --c-deep: var(--rose-deep); }
 
 /* ─────────────────────────────────────────────
    📒 Le classeur (cuir cousu + anneaux)
@@ -509,7 +512,7 @@ button { font: inherit; color: inherit; }
   color: rgba(255, 255, 255, 0.85);
 }
 /* Foil holographique : épiques et légendaires */
-.sticker.r-epic .art::after, .sticker.r-legendary .art::after {
+.sticker.r-epic .art::after, .sticker.r-legendary .art::after, .sticker.r-rose .art::after {
   content: '';
   position: absolute;
   inset: 0;

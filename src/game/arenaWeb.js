@@ -34,6 +34,7 @@ const characters = require('./characters');
 const { getCardStats } = require('./cards');
 const collections = require('../collections');
 const { getAllMedia } = require('../media');
+const { ROSE_CARDS } = require('../octobreRose');
 const { cardImageUrl } = require('../cardImages');
 const wire = require('../../public/arena-wire');
 const { CAPTAINS } = require('./captains');
@@ -94,10 +95,13 @@ function imageFor(card, prefix) {
   return /^https?:/.test(img) ? img : `${prefix}${img}`;
 }
 
+// Banque + cartes 🎀 Octobre Rose (hors banque mais jouables dans l'Arène)
+const arenaMedia = () => [...getAllMedia(), ...ROSE_CARDS.filter((c) => c.url)];
+
 // Seulement les cartes POSSÉDÉES : une carte qu'on n'a pas n'apparaît nulle part (ni envoyée)
 function catalogueFor(userId, prefix) {
   const owned = Object.fromEntries(collections.getCollection(userId).map((c) => [c.url, c.count]));
-  return getAllMedia().filter((m) => owned[m.url] > 0).map((m) => {
+  return arenaMedia().filter((m) => owned[m.url] > 0).map((m) => {
     const s = getCardStats(m);
     return {
       url: m.url, title: m.title, rarity: s.rarity, archetype: s.archetype, cost: s.cost, specialty: s.specialty,
@@ -124,7 +128,7 @@ function combatAssets(match) {
     const p = match.engine.players[side];
     for (const url of Object.keys(p.cards)) cards.push(p.cards[url]);
   }
-  const typeOf = Object.fromEntries(getAllMedia().map((m) => [m.url, m.type]));
+  const typeOf = Object.fromEntries(arenaMedia().map((m) => [m.url, m.type]));
   const keyOf = {};
   const sprites = {};
   const images = {};
