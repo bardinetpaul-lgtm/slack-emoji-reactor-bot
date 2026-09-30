@@ -11,7 +11,17 @@
 //
 //  Options :
 //    --since=2026-07-17   date de début (défaut : lancement des boosters)
+//    --until=2026-07-17   date de fin (défaut : 1ʳᵉ carte déjà enregistrée)
 //    --force              relancer même si le rattrapage a déjà été fait
+//    --jeanpips           rattrape les JEANPIPS REÇUS en DM (réaction, attaque,
+//                         auto-react) au lieu des révélations de booster : chaque
+//                         Jeanpip reçu entre dans le classeur de son destinataire,
+//                         comme en live depuis le 25/09. Parcourt les DM de tous
+//                         les joueurs (scope im:read, sinon joueurs connus du bot).
+//                         Une période déjà appliquée est refusée (anti-doublon).
+//
+//  Exemple (Jeanpips reçus du 17/06 au 17/07) :
+//    node scripts/backfill-collections.js --jeanpips --since=2026-06-17 --until=2026-07-17T12:06:38Z
 //
 //  Anti-doublon : on ne prend que les messages ANTÉRIEURS à la première
 //  carte déjà enregistrée en live (celles-là sont déjà comptées).
@@ -33,6 +43,8 @@ const FORCE = args.includes('--force');
 const DEBUG = args.includes('--debug');
 const sinceArg = (args.find((a) => a.startsWith('--since=')) || '').split('=')[1];
 const SINCE = new Date(sinceArg || '2026-07-17T00:00:00Z');
+const untilArg = (args.find((a) => a.startsWith('--until=')) || '').split('=')[1];
+const JEANPIPS = args.includes('--jeanpips');
 
 // Slack peut renvoyer les emojis en :shortcode: → on ne s'appuie pas dessus.
 const REVEAL_RE = /\*([^*]+)\*\s*[—–-]+\s*carte \d+\/\d+/;
@@ -112,6 +124,77 @@ function parseRevealMessage(msg, bankByUrl) {
 }
 
 // ─────────────────────────────────────────────
+// 💌 Message Slack → Jeanpip reçu (ou null)
+//    Format de buildMediaBlocks, stable depuis juin : en-tête « Jeanpip »
+//    (réaction, attaque, auto-react), puis le média en image publique ou
+//    en lien « Clique ici pour voir ». Ligne de rareté seulement depuis le 16/07.
+// ─────────────────────────────────────────────
+const JEANPIP_HEADER_RE = /jeanpip|jean pip/i;
+const TITLE_IN_LINK_RE = /\*([^*]+)\*\s*\n<https?:\/\//;
+
+function parseJeanpipMessage(msg, bankByUrl) {
+  const blocks = msg.blocks || [];
+  const texts = blocks.map((b) => (b.text && b.text.text) || '');
+  if (!texts[0] || !JEANPIP_HEADER_RE.test(texts[0])) return null;
+  if (texts.some((t) => REVEAL_RE.test(t))) return null;   // révélation de booster
+
+  const imageBlock = blocks.find((b) => b.type === 'image' && b.image_url);
+  let url = imageBlock ? imageBlock.image_url : null;
+  const linkText = texts.find((t) => LINK_RE.test(t));
+  if (!url && linkText) url = linkText.match(LINK_RE)[1];
+  if (!url) return null;
+  url = decodeEntities(url);
+
+  const known = bankByUrl.get(url);
+  if (known) return { ...known };
+
+  // Média retiré de la banque depuis : on reconstruit depuis le message
+  const rarityLine = texts.find((t, i) => i > 0 && /Jeanpip/.test(t) && !LINK_RE.test(t)) || '';
+  const rarity = (RARITY_FROM_LINE.find(([re]) => re.test(rarityLine)) || [null, 'common'])[1];
+  const titleMatch = linkText && linkText.match(TITLE_IN_LINK_RE);
+  const title = (imageBlock && imageBlock.title && imageBlock.title.text) || (titleMatch && titleMatch[1]) || url;
+  return {
+    url,
+    title,
+    rarity,
+    type: /vidéo/.test(texts.join('\n')) ? 'video' : 'image',
+    orphan: true,
+  };
+}
+
+/** Période déjà appliquée qui chevauche [since, until[ (ou null). */
+function jeanpipWindowConflict(collectionsData, since, until) {
+  return (collectionsData.jeanpipBackfills || []).find((w) => since < w.until && w.since < until) || null;
+}
+
+// ─────────────────────────────────────────────
+// 👥 Destinataires possibles des Jeanpips : tous les DM du bot (im:read),
+//    sinon les joueurs connus (boosters, classeurs, liste de diffusion)
+// ─────────────────────────────────────────────
+async function listJeanpipRecipients(client, botUserId) {
+  try {
+    const ids = [];
+    let cursor;
+    do {
+      const res = await client.conversations.list({ types: 'im', limit: 200, cursor });
+      for (const c of res.channels || []) if (c.user && c.user !== botUserId && c.user !== 'USLACKBOT') ids.push(c.user);
+      cursor = res.response_metadata && res.response_metadata.next_cursor;
+    } while (cursor);
+    console.log(`👥 ${ids.length} conversation(s) privée(s) du bot à parcourir\n`);
+    return ids;
+  } catch (e) {
+    const err = e.data ? e.data.error : e.message;
+    const known = new Set([
+      ...Object.values(readJson('boosters.json', { boosters: {} }).boosters || {}).map((b) => b.owner),
+      ...Object.keys(readJson('collections.json', { users: {} }).users || {}),
+      ...(readJson('subscribers.json', { users: [] }).users || []),
+    ].filter(Boolean));
+    console.log(`👥 Liste des DM indisponible (${err}) → ${known.size} joueur(s) connu(s) du bot\n`);
+    return [...known];
+  }
+}
+
+// ─────────────────────────────────────────────
 // 📜 Tous les messages d'un DM (+ réponses en thread) dans la fenêtre
 // ─────────────────────────────────────────────
 async function fetchDmMessages(client, channel, oldest, latest) {
@@ -143,7 +226,7 @@ async function main() {
   }
 
   const existing = readJson('collections.json', { users: {} });
-  if (existing.backfill && !FORCE) {
+  if (!JEANPIPS && existing.backfill && !FORCE) {
     console.error(`❌ Rattrapage déjà effectué le ${existing.backfill.at}. Utilise --force pour relancer.`);
     process.exit(1);
   }
@@ -153,20 +236,37 @@ async function main() {
     .flatMap((u) => Object.values(u.cards || {}).map((c) => c.firstAt))
     .filter(Boolean)
     .sort();
-  const until = liveDates.length ? new Date(liveDates[0]) : new Date();
+  const until = untilArg ? new Date(untilArg) : liveDates.length ? new Date(liveDates[0]) : new Date();
+  if (Number.isNaN(SINCE.getTime()) || Number.isNaN(until.getTime()) || SINCE >= until) {
+    console.error(`❌ Période invalide : ${sinceArg || SINCE} → ${untilArg || until}`);
+    process.exit(1);
+  }
+  if (JEANPIPS) {
+    const conflict = jeanpipWindowConflict(existing, SINCE.toISOString(), until.toISOString());
+    if (conflict && !FORCE) {
+      console.error(`❌ Jeanpips déjà rattrapés sur ${conflict.since} → ${conflict.until} (le ${conflict.at}) : cette période chevauche. Utilise --force pour relancer.`);
+      process.exit(1);
+    }
+  }
 
-  console.log(`🗂️  Rattrapage des collections — ${APPLY ? '✍️  MODE ÉCRITURE' : '👀 SIMULATION (rien n\'est écrit)'}`);
+  console.log(`🗂️  Rattrapage des ${JEANPIPS ? 'JEANPIPS REÇUS' : 'boosters'} — ${APPLY ? '✍️  MODE ÉCRITURE' : '👀 SIMULATION (rien n\'est écrit)'}`);
   console.log(`   Fenêtre : ${SINCE.toISOString()} → ${until.toISOString()}\n`);
-
-  // Joueurs ayant ouvert au moins un booster
-  const boosterStore = readJson('boosters.json', { boosters: {} });
-  const owners = [...new Set(
-    Object.values(boosterStore.boosters || {}).filter((b) => b.opened).map((b) => b.owner)
-  )];
-  console.log(`👥 ${owners.length} joueur(s) ont ouvert au moins un booster\n`);
 
   const client = new WebClient(process.env.SLACK_BOT_TOKEN);
   const { user_id: botUserId } = await client.auth.test();
+
+  // Joueurs à parcourir : tous les DM (Jeanpips) ou ceux qui ont ouvert un booster
+  let owners;
+  if (JEANPIPS) {
+    owners = await listJeanpipRecipients(client, botUserId);
+  } else {
+    const boosterStore = readJson('boosters.json', { boosters: {} });
+    owners = [...new Set(
+      Object.values(boosterStore.boosters || {}).filter((b) => b.opened).map((b) => b.owner)
+    )];
+    console.log(`👥 ${owners.length} joueur(s) ont ouvert au moins un booster\n`);
+  }
+  const parse = JEANPIPS ? parseJeanpipMessage : parseRevealMessage;
   const bankByUrl = loadBankByUrl();
   const oldest = String(SINCE.getTime() / 1000);
   const latest = String(until.getTime() / 1000);
@@ -195,7 +295,7 @@ async function main() {
         }
       }
       const cards = botMessages
-        .map((m) => ({ card: parseRevealMessage(m, bankByUrl), ts: m.ts }))
+        .map((m) => ({ card: parse(m, bankByUrl), ts: m.ts }))
         .filter((x) => x.card)
         .sort((a, b) => Number(a.ts) - Number(b.ts));
 
@@ -235,7 +335,9 @@ async function main() {
   }
 
   const data = readJson('collections.json', { users: {} });
-  data.backfill = { at: new Date().toISOString(), since: SINCE.toISOString(), until: until.toISOString(), cards: plan.length };
+  const record = { at: new Date().toISOString(), since: SINCE.toISOString(), until: until.toISOString(), cards: plan.length };
+  if (JEANPIPS) data.jeanpipBackfills = [...(data.jeanpipBackfills || []), record];
+  else data.backfill = record;
   fs.writeFileSync(COLLECTIONS_PATH, JSON.stringify(data, null, 2), 'utf-8');
   console.log(`✅ ${plan.length} carte(s) ajoutée(s) à data/collections.json`);
 }
@@ -247,4 +349,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { parseRevealMessage, loadBankByUrl };
+module.exports = { parseRevealMessage, parseJeanpipMessage, jeanpipWindowConflict, loadBankByUrl };
