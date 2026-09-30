@@ -129,7 +129,10 @@ function parseRevealMessage(msg, bankByUrl) {
 //    (réaction, attaque, auto-react), puis le média en image publique ou
 //    en lien « Clique ici pour voir ». Ligne de rareté seulement depuis le 16/07.
 // ─────────────────────────────────────────────
-const JEANPIP_HEADER_RE = /jeanpip|jean pip/i;
+// En-têtes des SEULS Jeanpips reçus (réaction, envoi à l'auteur, attaque,
+// auto-react). Liste fermée : l'aperçu admin « Nouveau Jeanpip » (ajout de
+// média) ou la punition anti-spam ne sont pas des cartes reçues.
+const JEANPIP_HEADER_RE = /t['’]a envoyé un Jeanpip|tu as réagi avec jean pip|ALERTE ATTAQUE JEANPIP|tu mérites un Jeanpip/i;
 const TITLE_IN_LINK_RE = /\*([^*]+)\*\s*\n<https?:\/\//;
 
 function parseJeanpipMessage(msg, bankByUrl) {
