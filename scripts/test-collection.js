@@ -34,6 +34,9 @@ const collections = require(path.join(TMP, 'src', 'collections.js'));
 const media = require(path.join(TMP, 'src', 'media.js'));
 const home = require(path.join(TMP, 'src', 'home.js'));
 const { buildAlbum } = require(path.join(TMP, 'src', 'album.js'));
+// 🎀 Cartes Octobre Rose : emplacements OR1 → ORn en tête du « Hors série » (n° = code « ORk »)
+const ROSE = require(path.join(TMP, 'src', 'octobreRose.js')).ROSE_CARDS.filter((c) => c.url).length;
+const notRose = (st) => st.rarity !== 'rose';
 console.log = origLog;
 
 let nameCalls = 0;
@@ -104,7 +107,7 @@ async function test(name, fn) {
     assert.strictEqual(data.stats.total, bank.length);
     assert.strictEqual(data.stats.owned, 0);
     assert.deepStrictEqual(data.sections.map((s) => s.key), ['common', 'rare', 'epic', 'legendary', 'extra']);
-    assert.strictEqual(data.sections[4].stickers.length, 10, '10 emplacements anti-spam en Hors série');
+    assert.strictEqual(data.sections[4].stickers.length, ROSE + 10, `${ROSE} Octobre Rose + 10 emplacements anti-spam en Hors série`);
   });
 
   const cards = [...pick('common', 3), ...pick('rare', 1), ...pick('legendary', 1)];
@@ -128,8 +131,8 @@ async function test(name, fn) {
   await test('cartes manquantes : seulement numéro + rareté (ni image, ni titre, ni lien)', async () => {
     const data = await (await api('U_A', tokenOf('U_A'))).json();
     const missing = data.sections.flatMap((s) => s.stickers).filter((s) => !s.owned);
-    assert.strictEqual(missing.length, bank.length - 5 + 10); // + 10 anti-spam
-    for (const st of missing) assert.deepStrictEqual(Object.keys(st).sort(), ['n', 'owned', 'rarity']);
+    assert.strictEqual(missing.length, bank.length - 5 + ROSE + 10); // + Octobre Rose + 10 anti-spam
+    for (const st of missing) assert.deepStrictEqual(Object.keys(st).sort(), notRose(st) ? ['n', 'owned', 'rarity'] : ['code', 'n', 'owned', 'rarity']);
     const raw = JSON.stringify(data);
     const hidden = bank.filter((m) => !cards.includes(m));
     assert.ok(hidden.every((m) => !raw.includes(m.url)), 'aucune URL de carte manquante');
@@ -137,10 +140,10 @@ async function test(name, fn) {
 
   await test('numéros = « Surprise #N », triés dans chaque intercalaire', () => {
     const album = buildAlbum('U_A');
-    const all = album.sections.flatMap((s) => s.stickers.map((st) => st.n));
+    const all = album.sections.flatMap((s) => s.stickers.filter(notRose).map((st) => st.n));
     assert.strictEqual(new Set(all).size, all.length, 'numéros uniques');
     for (const s of album.sections) {
-      const ns = s.stickers.map((st) => st.n);
+      const ns = s.stickers.filter(notRose).map((st) => st.n);
       assert.deepStrictEqual(ns, [...ns].sort((a, b) => a - b));
     }
     const n1 = album.sections[0].stickers.find((st) => st.link === bank[0].url);
@@ -160,8 +163,8 @@ async function test(name, fn) {
     collections.addCards('U_A', [{ url: 'https://example.test/vieille.gif', title: '👻 Surprise #999', rarity: 'rare', type: 'image' }]);
     const album = buildAlbum('U_A');
     const extra = album.sections.find((s) => s.key === 'extra');
-    assert.ok(extra && extra.stickers.length === 11, '10 anti-spam + 1 ancienne');
-    assert.strictEqual(extra.stickers[10].n, 999);
+    assert.ok(extra && extra.stickers.length === ROSE + 11, 'Octobre Rose + 10 anti-spam + 1 ancienne');
+    assert.strictEqual(extra.stickers.at(-1).n, 999);
     assert.strictEqual(album.stats.total, bank.length);
     assert.strictEqual(album.stats.owned, 6);
   });
