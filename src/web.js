@@ -12,6 +12,7 @@
 //    GET  /collection/<user>?t=<token>     → classeur Panini (en direct)
 //    GET  /api/collection/<user>?t=<token> → contenu du classeur (JSON)
 //    GET  /api/card-image/<fileId>    → image d'une carte (proxy + cache)
+//    GET  /api/card-thumb/<fileId>    → sa miniature (classeur)
 //    …/arena/…, …/api/arena/…, /deck, /api/deck → Arène (src/game/arenaWeb.js)
 //    /stats, /api/stats/…             → Dashboard admin (src/stats/web.js)
 //    GET  /<fichier>                  → statiques de public/
@@ -26,7 +27,7 @@ const crypto = require('crypto');
 
 const boosters = require('./boosters');
 const { openOnce } = require('./openBooster');
-const { getCardImage, cardImageUrl } = require('./cardImages');
+const { getCardImage, getCardThumb, cardImageUrl } = require('./cardImages');
 const { buildWebOpenedBlocks } = require('./blocks');
 const { buildAlbum } = require('./album');
 const arenaWeb = require('./game/arenaWeb');
@@ -332,8 +333,8 @@ async function handleCollection(res, userId, token, { client, logger }) {
   });
 }
 
-async function handleCardImage(res, fileId, { client, logger }) {
-  const image = await getCardImage(client, fileId, logger);
+async function handleCardImage(res, fileId, { client, logger }, { thumb = false } = {}) {
+  const image = await (thumb ? getCardThumb : getCardImage)(client, fileId, logger);
   if (!image) return send(res, 404, 'Not found');
   fs.readFile(image.file, (err, data) => {
     if (err) return send(res, 404, 'Not found');
@@ -367,6 +368,9 @@ function createHandler(deps) {
       }
       if (req.method === 'GET' && (m = /^\/api\/card-image\/([A-Z0-9]+)$/.exec(pathname))) {
         return await handleCardImage(res, m[1], deps);
+      }
+      if (req.method === 'GET' && (m = /^\/api\/card-thumb\/([A-Z0-9]+)$/.exec(pathname))) {
+        return await handleCardImage(res, m[1], deps, { thumb: true });
       }
       if (await statsWeb.route(req, res, url)) return undefined;
       if (await arenaWeb.route(req, res, url)) return undefined;
