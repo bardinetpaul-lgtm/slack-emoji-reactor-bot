@@ -49,7 +49,18 @@ const orphanJune = { ts: '1', blocks: [section('Bonjour jeune <@U1>, <@U2> t\'a 
   section('🖼️ *Surprise #7*\n<https://example.test/z.png|👉 Clique ici pour voir l\'image>'), footer] };
 check('média retiré sans ligne de rareté → commun', (parseJeanpipMessage(orphanJune, bank) || {}).rarity === 'common');
 
+// Auto-react (en-tête par défaut de l'époque)
+const auto = { ts: '1', blocks: [section('Hey <@U1>, tu as posté un message et tu mérites un Jeanpip ! :jeanpip:'), { type: 'divider' },
+  section('🖼️ *🔵 Surprise #3*\n<https://files.slack.com/files-pri/T1-F1/a.jpg|👉 Clique ici pour voir l\'image>'), footer] };
+check('auto-react : carte retrouvée', Boolean(parseJeanpipMessage(auto, bank)));
+
 // Ce qui n'est PAS un Jeanpip reçu
+const addMediaPreview = { ts: '1', blocks: [section('🖼️ *Nouveau Jeanpip 🔵 Rare*'), { type: 'divider' },
+  section('🖼️ *🔵 Surprise #3*\n<https://files.slack.com/files-pri/T1-F1/a.jpg|👉 Clique ici pour voir l\'image>'), footer] };
+check('aperçu admin « Nouveau Jeanpip » (ajout de média) ignoré', parseJeanpipMessage(addMediaPreview, bank) === null);
+const spam = { ts: '1', blocks: [section('🚨 Spammer c\'est mal. (1/10)'), { type: 'divider' },
+  section('🖼️ *Troll*\n<https://example.test/troll.png|👉 Clique ici pour voir l\'image>'), footer] };
+check('punition anti-spam ignorée', parseJeanpipMessage(spam, bank) === null);
 const reveal = { ts: '1', blocks: [section('🎴 *🔵 Surprise #3* — carte 2/8'),
   section('🖼️ *🔵 Surprise #3*\n<https://files.slack.com/files-pri/T1-F1/a.jpg|👉 Clique ici pour voir l\'image>')] };
 check('révélation de booster ignorée', parseJeanpipMessage(reveal, bank) === null);
