@@ -19,6 +19,7 @@ const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'jeanpip-preview-'));
 const PORT = parseInt(process.argv[2], 10) || 3100;
 
 fs.cpSync(path.join(ROOT, 'src'), path.join(TMP, 'src'), { recursive: true });
+fs.symlinkSync(path.join(ROOT, 'node_modules'), path.join(TMP, 'node_modules'), 'junction');
 fs.symlinkSync(path.join(ROOT, 'public'), path.join(TMP, 'public'), 'junction'); // éditions CSS/JS visibles en live
 fs.mkdirSync(path.join(TMP, 'data'));
 fs.copyFileSync(path.join(ROOT, 'data', 'media-bank.json'), path.join(TMP, 'data', 'media-bank.json'));
@@ -54,6 +55,7 @@ console.log('   Ctrl+C pour arrêter\n');
 
 process.on('SIGINT', () => {
   fs.unlinkSync(path.join(TMP, 'public')); // retirer le lien AVANT de supprimer (ne jamais toucher au vrai public/)
+  try { require(path.join(TMP, 'src', 'db.js')).close(); } catch { /* base jamais ouverte */ }   // Windows : fichier ouvert = non supprimable
   fs.rmSync(TMP, { recursive: true, force: true });
   process.exit(0);
 });

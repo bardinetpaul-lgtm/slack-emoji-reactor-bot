@@ -19,6 +19,7 @@ const path = require('path');
 const ROOT = path.join(__dirname, '..');
 const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'jeanpip-arena-chars-'));
 fs.cpSync(path.join(ROOT, 'src'), path.join(TMP, 'src'), { recursive: true });
+fs.symlinkSync(path.join(ROOT, 'node_modules'), path.join(TMP, 'node_modules'), 'junction');
 fs.mkdirSync(path.join(TMP, 'data'));
 fs.copyFileSync(path.join(ROOT, 'data', 'media-bank.json'), path.join(TMP, 'data', 'media-bank.json'));
 
@@ -113,6 +114,7 @@ console.log = origLog;
 const fresh = characters.renderSvg(added.media);
 check('un Jeanpip tout juste ajouté a son personnage (avant même son analyse)', added.ok && fresh.includes('<path') && !/NaN|undefined/.test(fresh));
 
+try { require(path.join(TMP, 'src', 'db.js')).close(); } catch { /* base jamais ouverte */ }   // Windows : fichier ouvert = non supprimable
 fs.rmSync(TMP, { recursive: true, force: true });
 console.log(failures ? `\n❌ ${failures} échec(s)` : '\n✅ Tout est bon');
 process.exit(failures ? 1 : 0);

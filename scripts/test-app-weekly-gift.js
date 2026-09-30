@@ -17,6 +17,7 @@ const Module = require('module');
 const ROOT = path.join(__dirname, '..');
 const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'jeanpip-smoke-gift-'));
 fs.cpSync(path.join(ROOT, 'src'), path.join(TMP, 'src'), { recursive: true });
+fs.symlinkSync(path.join(ROOT, 'node_modules'), path.join(TMP, 'node_modules'), 'junction');
 fs.cpSync(path.join(ROOT, 'public'), path.join(TMP, 'public'), { recursive: true });
 fs.mkdirSync(path.join(TMP, 'data'));
 fs.copyFileSync(path.join(ROOT, 'data', 'media-bank.json'), path.join(TMP, 'data', 'media-bank.json'));
@@ -124,6 +125,7 @@ process.on('unhandledRejection', (e) => { origLog('❌ unhandledRejection', e); 
   check(!JSON.stringify(homeAfter).includes('weekly_gift_open'), 'plus rien à offrir : section masquée');
   check(!logs.some((l) => l.startsWith('ERR')), 'aucune erreur loguée');
 
+  try { require(path.join(TMP, 'src', 'db.js')).close(); } catch { /* base jamais ouverte */ }   // Windows : fichier ouvert = non supprimable
   fs.rmSync(TMP, { recursive: true, force: true });
   origLog(process.exitCode ? '\n❌ ÉCHECS ci-dessus\n' : '\n🎉 Crédits du vendredi côté Slack OK\n');
   process.exit(process.exitCode || 0);

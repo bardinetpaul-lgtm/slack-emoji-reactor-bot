@@ -61,6 +61,7 @@ function attackMode(userId, isAdmin) {
  * @param {Function} ctx.formatRemaining  - ms → « 42 min »
  * @param {Array<{id, fixed}>} [ctx.autoTargets] - cibles auto-react (admins)
  * @param {string|null} [ctx.collectionUrl] - lien du classeur web (null si page web désactivée)
+ * @param {string|null} [ctx.statsUrl] - lien du dashboard /stats (admins)
  * @param {string|null} [ctx.deckUrl] - lien « Mon deck » de l'Arène (null si page web désactivée)
  * @param {object} [ctx.arena] - état Arène du joueur (src/arenaSlack.js homeState) : bloc « ⚔️ Arène »
  */
@@ -168,7 +169,7 @@ function buildHomeView(userId, ctx) {
 
   // 👑 Panneau admin (jamais construit pour un non-admin)
   if (ctx.isAdmin) {
-    blocks.push(...buildAdminBlocks(ctx.autoTargets || []));
+    blocks.push(...buildAdminBlocks(ctx.autoTargets || [], ctx.statsUrl));
   }
 
   blocks.push({ type: 'divider' });
@@ -201,10 +202,15 @@ _Ton plus ancien Jeanpip sort du compteur dans ${ctx.formatRemaining(nextFreeMs)
   return { type: 'context', elements: [{ type: 'mrkdwn', text }] };
 }
 
-function buildAdminBlocks(autoTargets) {
+function buildAdminBlocks(autoTargets, statsUrl = null) {
   const blocks = [
     { type: 'divider' },
     { type: 'header', text: { type: 'plain_text', text: '👑 Admin', emoji: true } },
+    ...(statsUrl ? [{
+      type: 'actions',
+      block_id: 'home_admin_stats',
+      elements: [{ ...button('📊 Stats du jeu', 'open_stats_web'), url: statsUrl }],
+    }] : []),
     {
       type: 'actions',
       block_id: 'home_admin',

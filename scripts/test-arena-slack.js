@@ -19,6 +19,7 @@ const path = require('path');
 const ROOT = path.join(__dirname, '..');
 const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'jeanpip-arena-slack-'));
 fs.cpSync(path.join(ROOT, 'src'), path.join(TMP, 'src'), { recursive: true });
+fs.symlinkSync(path.join(ROOT, 'node_modules'), path.join(TMP, 'node_modules'), 'junction');
 fs.mkdirSync(path.join(TMP, 'data'));
 fs.copyFileSync(path.join(ROOT, 'data', 'media-bank.json'), path.join(TMP, 'data', 'media-bank.json'));
 
@@ -154,6 +155,7 @@ const lastTo = (u) => [...sent].reverse().find((m) => m.userId === u);
   check('récap perdant : défaite, carte volée', lose.text.includes('Défaite') && flat(lose.blocks).includes('part chez'));
 
   matches.stop();
+  try { require(path.join(TMP, 'src', 'db.js')).close(); } catch { /* base jamais ouverte */ }   // Windows : fichier ouvert = non supprimable
   fs.rmSync(TMP, { recursive: true, force: true });
   console.log(failures ? `\n❌ ${failures} échec(s)` : '\n✅ Tout est bon');
   process.exit(failures ? 1 : 0);

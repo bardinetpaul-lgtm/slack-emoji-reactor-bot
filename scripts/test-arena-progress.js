@@ -19,6 +19,7 @@ const path = require('path');
 const ROOT = path.join(__dirname, '..');
 const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'jeanpip-arena-progress-'));
 fs.cpSync(path.join(ROOT, 'src'), path.join(TMP, 'src'), { recursive: true });
+fs.symlinkSync(path.join(ROOT, 'node_modules'), path.join(TMP, 'node_modules'), 'junction');
 fs.mkdirSync(path.join(TMP, 'data'));
 fs.copyFileSync(path.join(ROOT, 'data', 'media-bank.json'), path.join(TMP, 'data', 'media-bank.json'));
 
@@ -103,6 +104,7 @@ check('Capitaine déjà dans le deck sans exemplaire en plus : refusé', matches
 const m2 = matches.createMatchFor('P1', 'P2', T0, {});
 check('sans arène précisée : le jardin', !m2.ok || matches.getMatch(m2.id).arena === 'jardin');
 
+try { require(path.join(TMP, 'src', 'db.js')).close(); } catch { /* base jamais ouverte */ }   // Windows : fichier ouvert = non supprimable
 fs.rmSync(TMP, { recursive: true, force: true });
 console.log(failures ? `\n❌ ${failures} échec(s)` : '\n✅ Tout est bon');
 process.exit(failures ? 1 : 0);

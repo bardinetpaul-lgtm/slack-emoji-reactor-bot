@@ -158,6 +158,35 @@ slack-emoji-reactor-bot/
     └── media.js          # Gestion des médias (local + Giphy)
 ```
 
+## 📊 Dashboard /stats et base SQLite
+
+Les crédits (soldes + grand livre de chaque mouvement) et le journal des stats vivent dans `data/jeanpip.db` (SQLite, non versionné). Les autres données restent dans les fichiers JSON de `data/`.
+
+**Premier déploiement** (VM `BS-LORIENT-DASHBOARD`) :
+
+```bash
+node --version                     # ≥ 18
+cd /root/slack-emoji-reactor-bot
+cp -r data data.bak-$(date +%F)    # sauvegarde
+git pull
+npm install                        # installe better-sqlite3
+node scripts/backfill-events.js    # rattrapage de l'historique (relançable sans doublon)
+systemctl restart slack-reactor
+journalctl -u slack-reactor -n 50  # « Bot lancé », aucune erreur SQLite
+```
+
+Au premier démarrage, `data/credits.json` est importé (log « credits.json importé dans SQLite : N solde(s), total X ») puis n'est plus écrit (il reste en place) ; le marqueur `data/credits.json.imported` garde la date et le total. Si la base est inutilisable, le bot refuse de démarrer (message dans les logs). Il refuse aussi de démarrer — plutôt que de réimporter en silence un `credits.json` périmé — si la base a disparu après l'import, ou si `credits.json` a été réécrit après l'import.
+
+**Accès** : onglet Accueil du bot → 👑 Admin → 📊 Stats du jeu (admins `JEANPIP_ADMINS` seulement, lien valable 24 h).
+
+**Retour arrière** : `node scripts/export-credits-json.js` (réécrit `credits.json` avec les soldes actuels, l'ancien est sauvegardé) **puis** redéployer le commit précédent et `systemctl restart slack-reactor`.
+
+**Redéployer après un retour arrière** : l'ancienne version a continué d'écrire `credits.json`, c'est lui qui fait foi. Avant le redémarrage : `mv data/jeanpip.db data/jeanpip.db.avant-retour-arriere && rm -f data/jeanpip.db-wal data/jeanpip.db-shm data/credits.json.imported`, puis `node scripts/backfill-events.js` et `systemctl restart slack-reactor` (credits.json est réimporté). Sans ça, le bot refuse de démarrer et l'indique dans les logs.
+
+**Sauvegarde** : `node -e "require('better-sqlite3')('data/jeanpip.db').backup('data/jeanpip-backup-$(date +%F).db').then(() => console.log('ok'))"` (copie cohérente même bot lancé), avec les autres fichiers de `data/` et `data/credits.json.imported`.
+
+**Aperçu local** : `node scripts/preview-stats.js` (données simulées).
+
 ## 🐛 Dépannage
 
 | Problème | Solution |

@@ -110,7 +110,7 @@ function give(fromId, toId, amount, now = new Date()) {
 
   data.users[fromId] = allowance - amount;
   save(data);
-  const recipientBalance = credits.addCredit(toId, amount);
+  const recipientBalance = credits.addCredit(toId, amount, { source: 'weekly_gift', ref: fromId });
   return { ok: true, remaining: data.users[fromId], recipientBalance };
 }
 

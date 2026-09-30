@@ -22,6 +22,7 @@ const { getCardStats } = require('./cards');
 const deckRules = require('./deck');
 const arenaStore = require('./arenaStore');
 const { settleMatch } = require('./settle');
+const events = require('../events');
 const collections = require('../collections');
 const arenas = require('./arenas');
 const shop = require('./shop');
@@ -208,7 +209,7 @@ function startMatch(match, now) {
       const rarity = shop.tokenRarity(t);
       const price = shop.PRICES[rarity];
       const card = shop.drawCard(rarity, deck.map((c) => c.url));
-      if (!card || !credits.spend(p.userId, price)) continue;   // solde insuffisant : l'achat saute
+      if (!card || !credits.spend(p.userId, price, { source: 'arena_shop', item: rarity, ref: match.id })) continue;   // solde insuffisant : l'achat saute
       deck.push({ url: card.url, title: card.title, rarity: card.rarity, rented: true });
       copies[card.url] = 1;
       p.rented.push({ url: card.url, title: card.title, rarity: card.rarity, price });
@@ -223,6 +224,7 @@ function startMatch(match, now) {
       }
     }
     p.deckUrls = urls;
+    p.played = deck.map((c) => ({ url: c.url, title: c.title, rarity: c.rarity, rented: Boolean(c.rented) }));   // 📒 stats
     const captain = captainOf(collection, urls, p.captain);
     const captainCard = captain ? { url: captain, title: byUrl[captain].title, rarity: byUrl[captain].rarity } : null;
     players[side] = { userId: p.userId, deck, copies, captain, captainCard };
@@ -238,6 +240,21 @@ function startMatch(match, now) {
 // 🏁 Fin / annulation
 // ─────────────────────────────────────────────
 
+// 📒 Journal des stats : un événement par combat terminé ou annulé
+function recordMatchEvent(match, cancelled, now) {
+  const winner = !cancelled && match.engine && match.engine.result ? match.engine.result.winner : null;
+  const result = cancelled ? 'cancelled' : winner ? 'win' : 'draw';
+  const players = ['A', 'B'].map((side) => ({
+    userId: match.players[side].userId,
+    outcome: cancelled ? 'cancelled' : !winner ? 'draw' : winner === side ? 'win' : 'loss',
+    deck: match.players[side].played || null,
+  }));
+  const side = winner && match.summary && match.summary[winner];
+  const loot = side && side.loot ? { url: side.loot.url, title: side.loot.title, rarity: side.loot.rarity } : null;
+  events.record('match_finished', null, { matchId: match.id, result, players, loot },
+    { at: new Date(now).toISOString(), dedup: `match:${match.id}` });
+}
+
 function finish(match, now) {
   match.status = 'ended';
   match.endedAt = now;
@@ -246,6 +263,7 @@ function finish(match, now) {
     players: { A: match.players.A.userId, B: match.players.B.userId },
     result: match.engine.result,
   }, { now });
+  recordMatchEvent(match, false, now);
   broadcast(match);
   notifyEnd(match);
 }
@@ -260,6 +278,7 @@ function cancel(match, reason, now = Date.now()) {
     cancelled: true,
     result: null,
   }, { now });
+  recordMatchEvent(match, true, now);
   broadcast(match);
   notifyEnd(match);
 }

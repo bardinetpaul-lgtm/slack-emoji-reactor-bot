@@ -19,6 +19,7 @@ const collections = require('../collections');
 const credits = require('../credits');
 const boosters = require('../boosters');
 const arenaStore = require('./arenaStore');
+const events = require('../events');
 
 const REWARD_BOOSTER = 'common';
 const REWARD_CREDITS = 10;
@@ -78,7 +79,9 @@ function settleMatch({ matchId, players, result, cancelled }, { random = Math.ra
   if (arenaStore.consumeReward(w.userId, l.userId, now)) {
     w.rewarded = true;
     w.boosterId = boosters.createPending(w.userId, REWARD_BOOSTER);
-    credits.addCredit(w.userId, REWARD_CREDITS);
+    events.record('booster_granted', w.userId, { boosterId: w.boosterId, boosterType: REWARD_BOOSTER, reason: 'arena' },
+      { at: new Date(now).toISOString(), dedup: `booster_created:${w.boosterId}` });
+    credits.addCredit(w.userId, REWARD_CREDITS, { source: 'arena_reward', ref: matchId });
     w.credits = REWARD_CREDITS;
   }
 

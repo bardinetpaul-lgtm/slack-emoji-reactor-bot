@@ -17,6 +17,7 @@ const path = require('path');
 const ROOT = path.join(__dirname, '..');
 const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'jeanpip-arena-place-'));
 fs.cpSync(path.join(ROOT, 'src'), path.join(TMP, 'src'), { recursive: true });
+fs.symlinkSync(path.join(ROOT, 'node_modules'), path.join(TMP, 'node_modules'), 'junction');
 fs.mkdirSync(path.join(TMP, 'data'));
 const overrides = {};
 for (const a of ['tank', 'guerrier', 'tireur', 'essaim', 'sort', 'pompe']) for (let i = 1; i <= 8; i += 1) overrides[`${a}${i}`] = { archetype: a, specialty: 'none' };
@@ -108,6 +109,7 @@ const tower = (s, side, lane) => s.buildings.find((b) => b.side === side && b.ki
   check('fantôme : zone d\'impact pour un Sort', board.renderGhost({ x: 180, y: 150, ok: true, archetype: 'sort' }).includes('data-fx="ghost-spell"'));
 }
 
+try { require(path.join(TMP, 'src', 'db.js')).close(); } catch { /* base jamais ouverte */ }   // Windows : fichier ouvert = non supprimable
 fs.rmSync(TMP, { recursive: true, force: true });
 console.log(failures ? `\n❌ ${failures} échec(s)` : '\n✅ Tout est bon');
 process.exit(failures ? 1 : 0);

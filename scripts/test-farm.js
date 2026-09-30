@@ -15,6 +15,7 @@ const path = require('path');
 const ROOT = path.join(__dirname, '..');
 const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'jeanpip-farm-'));
 fs.cpSync(path.join(ROOT, 'src'), path.join(TMP, 'src'), { recursive: true });
+fs.symlinkSync(path.join(ROOT, 'node_modules'), path.join(TMP, 'node_modules'), 'junction');
 fs.mkdirSync(path.join(TMP, 'data'));
 const FARM_MODULE = path.join(TMP, 'src', 'farm.js');
 
@@ -79,6 +80,7 @@ farm.record('UD', 15, T0 + MIN);
 farm.record('UD', 15, T0 + 2 * MIN);
 check('limite baissée à 2 avec 3 déjà faits : pénalité au suivant', farm.record('UD', 2, T0 + 3 * MIN) === true);
 
+try { require(path.join(TMP, 'src', 'db.js')).close(); } catch { /* base jamais ouverte */ }   // Windows : fichier ouvert = non supprimable
 fs.rmSync(TMP, { recursive: true, force: true });
 console.log(failures ? `\n❌ ${failures} échec(s)\n` : '\n🎉 Anti-farm persistant OK\n');
 process.exit(failures ? 1 : 0);

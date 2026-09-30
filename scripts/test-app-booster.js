@@ -27,6 +27,7 @@ if (!process.argv[2]) {
 const ROOT = path.join(__dirname, '..');
 const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'jeanpip-smoke-'));
 fs.cpSync(path.join(ROOT, 'src'), path.join(TMP, 'src'), { recursive: true });
+fs.symlinkSync(path.join(ROOT, 'node_modules'), path.join(TMP, 'node_modules'), 'junction');
 fs.cpSync(path.join(ROOT, 'public'), path.join(TMP, 'public'), { recursive: true });
 fs.mkdirSync(path.join(TMP, 'data'));
 fs.copyFileSync(path.join(ROOT, 'data', 'media-bank.json'), path.join(TMP, 'data', 'media-bank.json'));
@@ -97,6 +98,13 @@ process.on('unhandledRejection', (e) => { origLog('❌ unhandledRejection', e); 
   })();
   const btns = buyMsg.blocks.find((b) => b.type === 'actions').elements;
   check(buyMsg.text.includes('acheté'), 'achat OK');
+  {
+    const conn = require(path.join(TMP, 'src', 'db.js')).getDb();
+    const mv = conn.prepare("SELECT * FROM credit_moves WHERE kind = 'spend' ORDER BY id DESC").get();
+    check(mv && mv.source === 'booster' && mv.item && mv.amount < 0, 'grand livre : achat de booster sourcé (booster/<type>)');
+    const ev = conn.prepare("SELECT * FROM events WHERE type = 'booster_bought' ORDER BY id DESC").get();
+    check(ev && ev.user_id === 'U1' && mv && JSON.parse(ev.data).price === -mv.amount, 'événement booster_bought avec le prix');
+  }
   if (MODE === 'web') {
     check(btns.length === 2 && /\/open\/b_.+\?t=[a-f0-9]{64}$/.test(btns[0].url), 'DM : bouton ouverture animée (lien signé) + bouton Slack');
   } else {
@@ -144,6 +152,7 @@ process.on('unhandledRejection', (e) => { origLog('❌ unhandledRejection', e); 
   const errs = logs.filter((l) => l.startsWith('ERR'));
   check(errs.length === 0, `aucune erreur loguée${errs.length ? ' : ' + errs.join(' | ') : ''}`);
 
+  try { require(path.join(TMP, 'src', 'db.js')).close(); } catch { /* base jamais ouverte */ }   // Windows : fichier ouvert = non supprimable
   fs.rmSync(TMP, { recursive: true, force: true });
   process.exit(process.exitCode || 0);
 })();

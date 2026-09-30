@@ -40,6 +40,7 @@ const path = require('path');
 const ROOT = path.join(__dirname, '..');
 const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'jeanpip-balance-'));
 fs.cpSync(path.join(ROOT, 'src'), path.join(TMP, 'src'), { recursive: true });
+fs.symlinkSync(path.join(ROOT, 'node_modules'), path.join(TMP, 'node_modules'), 'junction');
 fs.mkdirSync(path.join(TMP, 'data'));
 
 const FIGHTERS = ['tank', 'guerrier', 'tireur', 'essaim'];
@@ -440,6 +441,7 @@ console.log(`(indicatif) bon commun contre mauvais deck « tout rare »    → $
 
 }
 
+try { require(path.join(TMP, 'src', 'db.js')).close(); } catch { /* base jamais ouverte */ }   // Windows : fichier ouvert = non supprimable
 fs.rmSync(TMP, { recursive: true, force: true });
 console.log(failures ? `\n❌ Équilibrage hors critères (${failures})` : '\n✅ Équilibrage dans les critères');
 process.exit(failures ? 1 : 0);

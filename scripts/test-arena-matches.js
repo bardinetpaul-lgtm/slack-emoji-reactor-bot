@@ -15,6 +15,7 @@ const path = require('path');
 const ROOT = path.join(__dirname, '..');
 const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'jeanpip-arena-matches-'));
 fs.cpSync(path.join(ROOT, 'src'), path.join(TMP, 'src'), { recursive: true });
+fs.symlinkSync(path.join(ROOT, 'node_modules'), path.join(TMP, 'node_modules'), 'junction');
 fs.mkdirSync(path.join(TMP, 'data'));
 fs.copyFileSync(path.join(ROOT, 'data', 'media-bank.json'), path.join(TMP, 'data', 'media-bank.json'));
 
@@ -165,6 +166,17 @@ check('à 2:00 le combat se termine tout seul', matches.getMatch(m5.id).status =
 matches.step(T + 121 * S + 11 * 60 * S);
 check('combats terminés purgés après 10 min', matches.getMatch(m5.id) === null);
 
+// ─── 📒 Journal des stats ───
+{
+  const conn = require(path.join(TMP, 'src', 'db.js')).getDb();
+  const rows = conn.prepare("SELECT data FROM events WHERE type = 'match_finished'").all().map((r) => JSON.parse(r.data));
+  check('match_finished enregistré pour chaque combat terminé/annulé', rows.length > 0);
+  const played = rows.filter((d) => d.result !== 'cancelled');
+  check('match_finished : decks joués présents', played.length > 0 && played.every((d) => d.players.every((p) => Array.isArray(p.deck) && p.deck.length > 0)));
+  check('match_finished : issue cohérente', rows.every((d) => d.players.length === 2 && d.players.every((p) => ['win', 'loss', 'draw', 'cancelled'].includes(p.outcome))));
+}
+
+try { require(path.join(TMP, 'src', 'db.js')).close(); } catch { /* base jamais ouverte */ }   // Windows : fichier ouvert = non supprimable
 fs.rmSync(TMP, { recursive: true, force: true });
 console.log(failures ? `\n❌ ${failures} échec(s)` : '\n✅ Tout est bon');
 process.exit(failures ? 1 : 0);

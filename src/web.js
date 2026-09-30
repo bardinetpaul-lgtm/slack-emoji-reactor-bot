@@ -13,6 +13,7 @@
 //    GET  /api/collection/<user>?t=<token> → contenu du classeur (JSON)
 //    GET  /api/card-image/<fileId>    → image d'une carte (proxy + cache)
 //    …/arena/…, …/api/arena/…, /deck, /api/deck → Arène (src/game/arenaWeb.js)
+//    /stats, /api/stats/…             → Dashboard admin (src/stats/web.js)
 //    GET  /<fichier>                  → statiques de public/
 //
 //  Désactivé si WEB_PUBLIC_URL est vide (ouverture Slack uniquement).
@@ -30,6 +31,9 @@ const { buildWebOpenedBlocks } = require('./blocks');
 const { buildAlbum } = require('./album');
 const arenaWeb = require('./game/arenaWeb');
 const arenaMatches = require('./game/matches');
+const statsWeb = require('./stats/web');
+const collections = require('./collections');
+const { getAllMedia } = require('./media');
 
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 const SECRET_PATH = path.join(__dirname, '..', 'data', 'web-secret');
@@ -364,6 +368,7 @@ function createHandler(deps) {
       if (req.method === 'GET' && (m = /^\/api\/card-image\/([A-Z0-9]+)$/.exec(pathname))) {
         return await handleCardImage(res, m[1], deps);
       }
+      if (await statsWeb.route(req, res, url)) return undefined;
       if (await arenaWeb.route(req, res, url)) return undefined;
       if (req.method === 'GET' && pathname !== '/') {
         return serveStatic(res, pathname);
@@ -391,6 +396,7 @@ function startWebServer({ client, logger = console, port = WEB_PORT, host = '127
   }
   getSecret();
   configureArena({ client, logger });
+  configureStats({ client, logger });
   arenaMatches.start();   // boucle 10 Hz des combats (idempotent)
   const server = http.createServer(createHandler({ client, logger, onOpened }));
   server.on('error', (err) => logger.error('[web] serveur:', err.message));
@@ -406,4 +412,21 @@ function configureArena({ client = null, logger = console } = {}) {
 }
 configureArena();   // les liens (Slack) sont constructibles avant le démarrage du serveur
 
-module.exports = { startWebServer, buildOpenUrl, buildCollectionUrl, buildDeckUrl, buildArenaUrl, isEnabled, signToken, verifyToken };
+// 📊 Dashboard /stats : mêmes secret et réponses
+function configureStats({ client = null, logger = console } = {}) {
+  statsWeb.configure({
+    publicUrl: WEB_PUBLIC_URL, getSecret, send, sendJson, servePage, displayName, client, logger,
+    catalogSize: () => getAllMedia().length,
+    ownedCopies: (userId) => collections.countCopies(userId),
+    boosterPrice: (boosters.getBooster('common') || {}).price || 20,
+  });
+}
+configureStats();
+
+/** Lien du dashboard /stats (admins seulement ; null sinon ou si la page web est désactivée). */
+function buildStatsUrl(userId) {
+  if (!isEnabled()) return null;
+  return statsWeb.buildStatsUrl(userId);
+}
+
+module.exports = { startWebServer, buildOpenUrl, buildCollectionUrl, buildDeckUrl, buildArenaUrl, buildStatsUrl, isEnabled, signToken, verifyToken };
