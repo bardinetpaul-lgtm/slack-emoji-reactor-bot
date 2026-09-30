@@ -83,7 +83,8 @@ const BOOSTERS = {
     ],
   },
   // 🎀 Octobre Rose : du 1er au 31 octobre, 2 boosters par jour pour TOUT
-  //    le monde (remis à zéro à minuit, heure de Paris).
+  //    le monde, qui arrivent chaque jour à une minute aléatoire entre
+//    9h et 10h (heure de Paris).
   //    Cartes 1-3 communes · 4-5 rare/commun/épique · 6 légendaire 30 %
   //    · 7 Octobre Rose 30 % (2e carte rose) · 8 Octobre Rose garantie.
   octobre_rose: {
@@ -155,19 +156,27 @@ function stockLeft(booster, now = Date.now()) {
 
 /**
  * Raison pour laquelle on ne peut pas acheter ce booster maintenant
- * ('closed' | 'sold_out'), ou null. À appeler JUSTE avant spend() +
+ * ('closed' | 'not_yet' | 'sold_out'), ou null. À appeler JUSTE avant spend() +
  * createPending(), sans await entre les deux (Node mono-thread).
  */
 function purchaseBlock(booster, now = Date.now()) {
   if (!isOnSale(booster, now)) return 'closed';
+  if (booster.dailyStock && !octobreRose.hasDropped(now)) return 'not_yet';
   if (stockLeft(booster, now) === 0) return 'sold_out';
   return null;
 }
 
+/** Phrases affichées avant l'arrivée du stock / quand il est épuisé. */
+const DROP_TEXT = `Les boosters du jour arrivent ${octobreRose.DROP_WINDOW.text} (heure de Paris).`;
+const RESTOCK_TEXT = `Ils reviennent demain ${octobreRose.DROP_WINDOW.text} (heure de Paris).`;
+
 /** Texte du bouton d'achat : « 🎀 Octobre Rose (65) · 1/2 aujourd'hui ». */
 function buttonLabel(booster, now = Date.now()) {
   const left = stockLeft(booster, now);
-  const stock = left === null ? '' : left > 0 ? ` · ${left}/${booster.dailyStock} aujourd'hui` : ' · épuisé';
+  let stock = '';
+  if (left === 0) stock = ' · épuisé, retour demain';
+  else if (left !== null && !octobreRose.hasDropped(now)) stock = ` · arrive ${octobreRose.DROP_WINDOW.text}`;
+  else if (left !== null) stock = ` · ${left}/${booster.dailyStock} aujourd'hui`;
   return `${booster.emoji} ${booster.label} (${booster.price})${stock}`;
 }
 
@@ -319,6 +328,8 @@ module.exports = {
   stockLeft,
   purchaseBlock,
   buttonLabel,
+  RESTOCK_TEXT,
+  DROP_TEXT,
   openBooster,
   createPending,
   getPending,

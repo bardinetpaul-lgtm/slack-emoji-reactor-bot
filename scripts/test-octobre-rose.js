@@ -7,7 +7,7 @@
 //    • période de vente (1er → 31 octobre, heure de Paris) + 8 liens requis
 //    • répartition des 8 cartes (tirages en masse)
 //    • chaque carte rose sort avant qu'une autre ne ressorte (même après restart)
-//    • stock partagé 2/jour, remis à zéro à minuit Paris
+//    • stock partagé 2/jour, qui arrive à une minute aléatoire entre 9h et 10h (Paris)
 //    • achat Slack : refus hors stock sans débit, bouton « 1/2 aujourd'hui »
 //    • classeur (Hors série, OR1 → OR8, hors complétion) + Arène
 //
@@ -172,13 +172,24 @@ const at = (iso) => { NOW = RealDate.parse(iso); };
   check(boosters.stockLeft(rose) === 1, 'stock 1/2');
   await buy('UB');
   check(credits.getBalance('UB') === 135 && boosters.stockLeft(rose) === 0, 'UB achète le dernier');
-  check(boosters.buttonLabel(rose).endsWith('· épuisé'), 'bouton « épuisé »');
+  check(boosters.buttonLabel(rose) === '🎀 Octobre Rose (65) · épuisé, retour demain', `bouton : « ${boosters.buttonLabel(rose)} »`);
+  check(JSON.stringify(published.at(-1)).includes("Épuisé pour aujourd'hui") && JSON.stringify(published.at(-1)).includes('reviennent demain entre 9h et 10h'), 'Accueil : « épuisé, ils reviennent demain entre 9h et 10h »');
   await buy('UC');
-  check(posted.at(-1).text.includes("Plus de Booster") && credits.getBalance('UC') === 200, 'UC refusé : stock épuisé, rien débité');
+  check(posted.at(-1).text.includes("Plus de Booster") && posted.at(-1).text.includes('reviennent demain entre 9h et 10h') && credits.getBalance('UC') === 200, 'UC refusé : stock épuisé, rien débité');
   check(boosters.countPending('UC') === 0, 'UC n\'a pas de booster');
 
-  at('2026-10-11T22:00:00Z'); // minuit Paris → 12/10
-  check(boosters.stockLeft(rose) === 2, 'minuit (Paris) → stock remis à 2');
+  // ⏰ Le lendemain, le stock arrive à une minute aléatoire entre 9h et 10h
+  const drops = ['2026-10-12', '2026-10-13', '2026-10-14', '2026-10-15', '2026-10-16'].map(octobreRose.dropMinute);
+  check(drops.every((m) => m >= 540 && m < 600), `heures d'arrivée entre 9h et 10h (${drops.map((m) => `9h${String(m - 540).padStart(2, '0')}`).join(', ')})`);
+  check(new Set(drops).size > 1, "l'heure d'arrivée change d'un jour à l'autre");
+  const drop12 = RealDate.parse('2026-10-12T07:00:00Z') + (octobreRose.dropMinute('2026-10-12') - 540) * 60000; // 9h Paris = 7h UTC (heure d'été)
+  NOW = drop12 - 60000;
+  check(boosters.stockLeft(rose) === 2 && boosters.purchaseBlock(rose) === 'not_yet', "1 min avant l'arrivée : stock 2 mais pas encore en vente");
+  check(boosters.buttonLabel(rose) === '🎀 Octobre Rose (65) · arrive entre 9h et 10h', `bouton : « ${boosters.buttonLabel(rose)} »`);
+  await buy('UC');
+  check(posted.at(-1).text.includes('Pas encore') && posted.at(-1).text.includes('entre 9h et 10h') && credits.getBalance('UC') === 200, 'UC refusé avant 9h-10h, rien débité');
+  NOW = drop12;
+  check(boosters.purchaseBlock(rose) === null && boosters.buttonLabel(rose).endsWith("2/2 aujourd'hui"), "à l'heure d'arrivée : 2/2 en vente");
   await buy('UC');
   check(credits.getBalance('UC') === 135, 'UC achète le lendemain');
 
