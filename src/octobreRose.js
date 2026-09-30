@@ -27,7 +27,7 @@ const ROSE_CARD_DEFS = [
   { url: 'https://slack-files.com/T6EFSEHCN-F0C58G350TH-96dcd80914', name: '' },
   { url: 'https://slack-files.com/T6EFSEHCN-F0C58G3MMQF-c2e9b44439', name: '' },
   { url: 'https://slack-files.com/T6EFSEHCN-F0C58G4T7AT-ae35265d42', name: '' },
-  { url: '', name: '' },
+  { url: 'https://slack-files.com/T6EFSEHCN-F0C5TRGUVPE-4816d97d52', name: '' },
   { url: '', name: '' },
   { url: '', name: '' },
 ];
