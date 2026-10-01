@@ -184,6 +184,47 @@ const give = (s, side, urls) => { s.players[side].hand = urls.slice(); s.players
   }
 }
 
+// ═══ 🏹 Tireurs : tir en reculant ═══
+{
+  const depthOf = (u) => (u.side === 'A' ? u.y : 100 - u.y);
+  const inRiver = (u) => u.y >= 45 && u.y <= 55 && ![28, 72].some((bx) => Math.abs(u.x - bx) <= 5);
+  // Tireurs A contre Guerriers B, même couloir
+  const k = match();
+  give(k, 'A', ['tireur1']);
+  give(k, 'B', ['guerrier3']);
+  engine.applyAction(k, 'A', { type: 'deploy', url: 'tireur1', lane: 1 });
+  engine.applyAction(k, 'B', { type: 'deploy', url: 'guerrier3', lane: 1 });
+  let firedWhileBacking = false; let stoodAtContact = false; let wet = false; let behindBase = false;
+  for (let t = 0; t < 20000; t += 100) {
+    const before = new Map(k.units.filter((u) => u.url === 'tireur1').map((u) => [u.id, depthOf(u)]));
+    run(k, 100);
+    for (const u of k.units.filter((x) => x.url === 'tireur1')) {
+      const was = before.get(u.id);
+      if (was === undefined) continue;
+      if (u.attackY !== null && depthOf(u) < was - 1e-6) firedWhileBacking = true;
+      if (u.attackY !== null && Math.abs(depthOf(u) - was) < 1e-9 && k.units.some((g) => g.side === 'B' && engine.distance(g, u) <= g.range + engine.KITE.contact)) stoodAtContact = true;
+      if (inRiver(u)) wet = true;
+      if (depthOf(u) < engine.KITE.minDepth - 1e-6) behindBase = true;
+    }
+  }
+  check('Tireur : tire en reculant quand un Guerrier approche', firedWhileBacking);
+  check('Tireur : rattrapé au corps à corps, il fait face (ne recule plus)', stoodAtContact);
+  check('Tireur : ne recule jamais dans la rivière ni derrière sa base', !wet && !behindBase);
+  check('le Guerrier bat toujours le Tireur', k.poses.find((p) => p.url === 'tireur1').status === 'destroyed');
+
+  // Face à une tour : il reste à portée, sans reculer
+  const b = match();
+  give(b, 'A', ['tireur2']);
+  engine.applyAction(b, 'A', { type: 'deploy', url: 'tireur2', lane: 0 });
+  let backedFromTower = false;
+  for (let t = 0; t < 15000; t += 100) {
+    const before = new Map(b.units.map((u) => [u.id, depthOf(u)]));
+    run(b, 100);
+    for (const u of b.units) if (before.has(u.id) && depthOf(u) < before.get(u.id) - 1e-6) backedFromTower = true;
+  }
+  check('Tireur : ne recule pas devant un bâtiment', !backedFromTower);
+}
+
 // ═══ 🏳 Rappel ═══
 {
   const s = match();

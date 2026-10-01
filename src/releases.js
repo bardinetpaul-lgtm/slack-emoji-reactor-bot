@@ -23,6 +23,7 @@ const RELEASES = [
       '🖥️ Arène : l\'écran de combat est repensé pour l\'ordinateur. Terrain, chrono, élixir et cartes tiennent dans la fenêtre, sans défiler.',
       '⌨️ Arène : chaque carte affiche sa touche du clavier (1 à 8) pour la choisir, Échap pour annuler.',
       '🎁 Arène : plus de plafond de récompense. Chaque victoire rapporte son booster Commun et ses 10 JP$, quel que soit le nombre de combats du jour.',
+      '🏹 Arène : les Tireurs gardent leurs distances. Quand un ennemi de corps à corps approche, ils continuent de tirer en reculant ; une fois rattrapés, ils font face.',
       '🐛 Arène : cliquer une carte puis cliquer le terrain pour la poser fonctionne à tous les coups (le clic sur la carte était parfois perdu).',
       '⏳ Arène : pendant la préparation, le décompte reste visible quand tu parcours ta collection.',
       '💰 Les crédits changent de nom : ce sont maintenant des *JP$*. Ton solde ne change pas.',
