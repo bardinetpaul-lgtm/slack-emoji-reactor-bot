@@ -20,7 +20,7 @@ fs.copyFileSync(path.join(ROOT, 'data', 'media-bank.json'), path.join(TMP, 'data
 
 const origLog = console.log;
 console.log = () => {};   // media.js annonce le catalogue au chargement
-const { settleMatch } = require(path.join(TMP, 'src', 'game', 'settle.js'));
+const { settleMatch, REWARD_CREDITS } = require(path.join(TMP, 'src', 'game', 'settle.js'));
 const collections = require(path.join(TMP, 'src', 'collections.js'));
 const credits = require(path.join(TMP, 'src', 'credits.js'));
 const boosters = require(path.join(TMP, 'src', 'boosters.js'));
@@ -98,19 +98,19 @@ const c = settleMatch({ matchId: 'm3', players: { A: 'UE', B: 'UF' }, cancelled:
 check('annulé : rien de perdu', c.settled && c.cancelled && collections.getCount('UE', 'e1') === 1);
 check('annulé : pas de stats', arenaStore.getStats('UE').wins + arenaStore.getStats('UE').losses + arenaStore.getStats('UE').draws === 0);
 
-// ─── 💰 Plafond : 3e victoire contre le même adversaire ───
-for (let i = 0; i < 3; i += 1) {
+// ─── 💰 Aucun plafond : 7 victoires le même jour contre le même adversaire, toutes récompensées ───
+for (let i = 0; i < 7; i += 1) {
   give('UG', [`g${i}`]);
   give('UH', [`h${i}`]);
 }
-const results = [0, 1, 2].map((i) => settleMatch({
+const results = [0, 1, 2, 3, 4, 5, 6].map((i) => settleMatch({
   matchId: `cap${i}`,
   players: { A: 'UG', B: 'UH' },
   result: { winner: 'A', reason: 'qg', poses: [pose('B', `h${i}`, 'destroyed')] },
 }, { now: T0 }));
-check('2 premières victoires récompensées', results[0].A.boosterId && results[1].A.boosterId);
-check('3e contre le même adversaire : pas de pack ni JP$', !results[2].A.boosterId && results[2].A.credits === 0 && results[2].A.rewarded === false);
-check('3e : le butin s\'applique quand même', results[2].A.loot && collections.getCount('UG', 'h2') === 1);
+check('7 victoires : pack + JP$ à chaque fois', results.every((r) => r.A.boosterId && r.A.rewarded === true && r.A.credits === REWARD_CREDITS));
+check('7 boosters distincts', new Set(results.map((r) => r.A.boosterId)).size === 7);
+check('le butin s\'applique toujours', results[6].A.loot && collections.getCount('UG', 'h6') === 1);
 
 // ─── 🏳 Rappel : carte sauvée même en cas de défaite, hors butin ───
 give('UK', ['k1', 'k2']);

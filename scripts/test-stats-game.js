@@ -75,6 +75,13 @@ check('doublon dans un deck compté une fois', u1.plays === 2);
 check('JP$ arène', a.kpis.rewards === 10 && a.kpis.shop === 25);
 check('joueurs actifs arène', a.tables.players[0].userId === 'UA' && a.tables.players[0].matches === 3);
 check('filtre joueur UC', game.arena({ ...f, user: 'UC' }, { db }).kpis.matches === 1);
+// 🏆 Classement : UA (1 victoire, 1 nul, 1 annulé) devant UB (1 défaite, 1 nul) ; UC n'a qu'un combat annulé
+const [first, second] = a.tables.ranking;
+check('classement : 2 joueurs classés (combat annulé seul = non classé)', a.tables.ranking.length === 2 && a.kpis.fighters === 2);
+check('classement : UA 1er, 1 victoire / 2 combats = 50 %, 10 JP$', first.userId === 'UA' && first.wins === 1 && first.draws === 1 && first.losses === 0 && first.played === 2 && first.winRate === 50 && first.rewards === 10);
+check('classement : UB 2e, 1 défaite, 1 nul, 0 %', second.userId === 'UB' && second.losses === 1 && second.draws === 1 && second.winRate === 0 && second.rewards === 0);
+const fHour = time.normalizeFilters({ from: d(10, 14), to: d(10, 16), grain: 'hour' });
+check('combats par heure', game.arena(fHour, { db }).series.decisive.join() === '0,1,0' && game.activity(fHour, { db }).series.labels.length === 3);
 
 const act = game.activity(f, { db });
 check('3 réactions', act.kpis.reactions === 3 && act.series.reactions.join() === '1,2');

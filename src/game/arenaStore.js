@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════
 //  🗄️ MODULE STOCKAGE DE L'ARÈNE
-//  Decks sauvegardés, stats V/D/N, plafonds de récompense du jour,
+//  Decks sauvegardés, stats V/D/N,
 //  matchs déjà réglés (idempotence) et historique court (top semaine).
 //  Persistant : survit aux redémarrages du bot.
 //
@@ -8,7 +8,7 @@
 //    { decks: { U123: { active: 0, decks: [{ name, cards: [url ≤ 8, doublons permis] }] × 3 } },
 //      (ancien format accepté : { U123: [url × 8] } → repris en « Deck 1 »)
 //      stats: { U123: { wins, losses, draws, streak, bestStreak, bestLoot } },
-//      rewards: { U123: { day: 'YYYY-MM-DD', total, vs: { U456: n } } },
+//      rewards: { … },   // ancien compteur des plafonds de récompense (retirés en v2.1), plus lu
 //      settled: { <matchId>: ISO },
 //      history: [{ matchId, at, winnerId, loserId, draw }],
 //      tutorial: { U123: ISO } }   // 🎓 tuto vu (affiché à la 1re ouverture)
@@ -19,8 +19,6 @@ const path = require('path');
 
 const ARENA_PATH = path.join(__dirname, '..', '..', 'data', 'arena.json');
 
-const MAX_REWARDED_PER_DAY = 5;
-const MAX_REWARDED_VS_SAME = 2;
 const HISTORY_MAX = 1000;
 const WEEK_MS = 7 * 24 * 3600 * 1000;
 const RARITY_RANK = { common: 0, rare: 1, epic: 2, rose: 2, legendary: 3 };
@@ -51,8 +49,6 @@ function save(data) {
   }
 }
 
-// Jour calendaire à Paris (les plafonds repartent à minuit, heure française)
-const parisDay = (now) => new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Paris' }).format(new Date(now));
 
 // ─────────────────────────────────────────────
 // 🃏 Decks
@@ -191,25 +187,6 @@ function weeklyTop(now = Date.now(), limit = 5) {
 }
 
 // ─────────────────────────────────────────────
-// 💰 Plafonds de récompense (pack + crédits)
-//    5 victoires récompensées / jour, dont 2 max contre le même adversaire.
-//    Retourne true (et compte la victoire) si elle est récompensée.
-// ─────────────────────────────────────────────
-
-function consumeReward(winnerId, loserId, now = Date.now()) {
-  const data = load();
-  const day = parisDay(now);
-  let r = data.rewards[winnerId];
-  if (!r || r.day !== day) r = { day, total: 0, vs: {} };
-  if (r.total >= MAX_REWARDED_PER_DAY || (r.vs[loserId] || 0) >= MAX_REWARDED_VS_SAME) return false;
-  r.total += 1;
-  r.vs[loserId] = (r.vs[loserId] || 0) + 1;
-  data.rewards[winnerId] = r;
-  save(data);
-  return true;
-}
-
-// ─────────────────────────────────────────────
 // 🔒 Idempotence du règlement de fin de combat
 // ─────────────────────────────────────────────
 
@@ -228,14 +205,11 @@ module.exports = {
   getDecks,
   setDecks,
   getCaptain,
-  MAX_REWARDED_PER_DAY,
-  MAX_REWARDED_VS_SAME,
   getDeck,
   setDeck,
   getStats,
   recordResult,
   weeklyTop,
-  consumeReward,
   isSettled,
   markSettled,
   hasSeenTutorial,

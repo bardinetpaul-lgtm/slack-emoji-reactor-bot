@@ -551,7 +551,6 @@ ${DeckEditor.roleText(e.archetype)}`;
     if (s.loot) line('Butin', `${s.loot.title} rejoint ta collection`);
     if (s.stolen) line('Volée', `${s.stolen.title} part chez ton adversaire`);
     if (s.boosterId) line('Récompense', `1 booster Commun + ${s.credits} JP$`);
-    else if (won) line('Récompense', 'plafond du jour atteint : pas de pack ni de JP$, le butin compte quand même');
   }
 
   // ─────────────────────────────────────────────

@@ -111,9 +111,12 @@ function arena(f, { db }) {
     const players = m.data.players || [];
     for (const p of players) {
       if (!p.userId) continue;
-      const s = playersMap.get(p.userId) || { userId: p.userId, matches: 0, wins: 0 };
+      const s = playersMap.get(p.userId) || { userId: p.userId, matches: 0, wins: 0, losses: 0, draws: 0, cancelled: 0 };
       s.matches += 1;
       if (p.outcome === 'win') s.wins += 1;
+      else if (p.outcome === 'loss') s.losses += 1;
+      else if (p.outcome === 'draw') s.draws += 1;
+      else s.cancelled += 1;
       playersMap.set(p.userId, s);
     }
     if (m.data.result === 'cancelled') continue;
@@ -136,9 +139,21 @@ function arena(f, { db }) {
       .get(...[source, kind, f.from, f.to, ...(f.user ? [f.user] : [])]);
     return round(Math.abs(r.t));
   };
+  // 🏆 Classement : victoires, puis % de victoire (combats allés au bout), puis combats joués
+  const rewardOf = new Map(db.prepare(`SELECT user_id AS userId, SUM(amount) AS t FROM credit_moves
+    WHERE source = 'arena_reward' AND kind = 'earn' AND at >= ? AND at <= ? GROUP BY user_id`).all(f.from, f.to).map((r) => [r.userId, r.t]));
+  const ranking = [...playersMap.values()]
+    .map((p) => {
+      const played = p.wins + p.losses + p.draws;
+      return { ...p, played, winRate: played ? round((p.wins / played) * 100, 0) : 0, rewards: round(rewardOf.get(p.userId) || 0) };
+    })
+    .filter((p) => p.played > 0)
+    .sort((a, b) => b.wins - a.wins || b.winRate - a.winRate || b.played - a.played || a.userId.localeCompare(b.userId))
+    .slice(0, 30);
   return {
     kpis: {
       matches: matches.length,
+      fighters: ranking.length,
       decisive: sum(series.decisive),
       draws: sum(series.draws),
       cancelled: sum(series.cancelled),
@@ -153,6 +168,7 @@ function arena(f, { db }) {
         .sort((a, b) => b.plays - a.plays || b.winRate - a.winRate)
         .slice(0, 10),
       players: [...playersMap.values()].sort((a, b) => b.matches - a.matches).slice(0, 10),
+      ranking,
     },
     since: firstAt(db, 'match_finished', " AND json_extract(data, '$.players[0].deck') IS NOT NULL"),
   };

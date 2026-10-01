@@ -13,6 +13,7 @@
     <form id="filters" class="filters">
       <label>Période
         <select name="range">
+          <option value="1">24 heures</option>
           <option value="7">7 jours</option>
           <option value="30" selected>30 jours</option>
           <option value="90">90 jours</option>
@@ -24,7 +25,8 @@
       <label class="custom">au <input type="date" name="to"></label>
       <label>Par
         <select name="grain">
-          <option value="day">jour</option>
+          <option value="hour">heure</option>
+          <option value="day" selected>jour</option>
           <option value="week">semaine</option>
           <option value="month">mois</option>
         </select>
@@ -54,7 +56,7 @@
       <div class="kpis"></div>
       <div class="grid">
         <figure><figcaption>Masse en circulation</figcaption><canvas id="c-mass"></canvas></figure>
-        <figure><figcaption>Créés vs consommés (barres) · flux net (ligne)</figcaption><canvas id="c-flow"></canvas></figure>
+        <figure><figcaption>Créés vs consommés</figcaption><canvas id="c-flow"></canvas></figure>
         <figure><figcaption>Moyenne et médiane par joueur</figcaption><canvas id="c-perplayer"></canvas></figure>
         <figure><figcaption>Créés par source · consommés par usage</figcaption><canvas id="c-sources"></canvas></figure>
       </div>
@@ -94,6 +96,7 @@
       <p class="since"></p>
       <div class="kpis"></div>
       <div class="grid">
+        <figure><figcaption>🏆 Classement des joueurs</figcaption><div class="table" id="t-ranking"></div></figure>
         <figure><figcaption>Combats</figcaption><canvas id="c-matches"></canvas></figure>
         <figure><figcaption>Cartes les plus jouées</figcaption><div class="table" id="t-topcards"></div></figure>
       </div>

@@ -30,7 +30,13 @@
   for (const name of ['range', 'from', 'to', 'grain', 'user', 'source']) {
     if (params.get(name)) form.elements[name].value = params.get(name);
   }
+  // Par heure : 7 jours maximum (au-delà, les barres sont illisibles)
+  function clampHourRange() {
+    const v = form.elements;
+    if (v.grain.value === 'hour' && ['30', '90', 'all'].includes(v.range.value)) v.range.value = '7';
+  }
   function syncUrl() {
+    clampHourRange();
     const q = new URLSearchParams({ t: token });
     for (const name of ['range', 'from', 'to', 'grain', 'user', 'source']) if (form.elements[name].value) q.set(name, form.elements[name].value);
     history.replaceState(null, '', `?${q}`);
@@ -108,7 +114,7 @@
       ], d);
       const s = d.series;
       chart('c-mass', { data: { labels: s.labels, datasets: [line('Masse', s.mass, 0, { fill: true, backgroundColor: `${COLORS[0]}26` })] }, options: { plugins: { legend: { display: false } } } });
-      chart('c-flow', { data: { labels: s.labels, datasets: [bar('Créés', s.created, 2), bar('Consommés', s.consumed, 1), line('Flux net', s.net, 0)] } });
+      chart('c-flow', { data: { labels: s.labels, datasets: [bar('Créés', s.created, 2), bar('Consommés', s.consumed, 1)] } });
       chart('c-perplayer', { data: { labels: s.labels, datasets: [line('Moyenne', s.mean, 0), line('Médiane', s.median, 1)] } });
       const src = d.tables.bySource; const use = d.tables.byUse;
       chart('c-sources', {
@@ -142,10 +148,12 @@
     },
     arena(d) {
       since('arena', d.since);
-      kpis('arena', [{ key: 'matches', text: 'Combats' }, { key: 'decisive', text: 'Avec vainqueur' }, { key: 'draws', text: 'Nuls' }, { key: 'cancelled', text: 'Annulés', invert: true },
+      kpis('arena', [{ key: 'matches', text: 'Combats' }, { key: 'fighters', text: 'Joueurs classés' }, { key: 'decisive', text: 'Avec vainqueur' }, { key: 'draws', text: 'Nuls' }, { key: 'cancelled', text: 'Annulés', invert: true },
         { key: 'rewards', text: 'JP$ gagnés' }, { key: 'shop', text: 'JP$ dépensés (boutique)' }], d);
       const s = d.series;
       chart('c-matches', { type: 'bar', data: { labels: s.labels, datasets: [bar('Avec vainqueur', s.decisive, 0, { stack: 'a' }), bar('Nuls', s.draws, 1, { stack: 'a' }), bar('Annulés', s.cancelled, 2, { stack: 'a' })] }, options: { scales: { x: { stacked: true }, y: { stacked: true } } } });
+      table('t-ranking', [['#', 1], ['Joueur'], ['Victoires', 1], ['Défaites', 1], ['Nuls', 1], ['% victoire', 1], ['Combats', 1], ['JP$ gagnés', 1]],
+        d.tables.ranking.map((p, i) => [['🥇', '🥈', '🥉'][i] || String(i + 1), who(p.userId), fmt(p.wins, 0), fmt(p.losses, 0), fmt(p.draws, 0), `${fmt(p.winRate, 0)} %`, fmt(p.played, 0), fmt(p.rewards)]));
       table('t-topcards', [['Carte'], ['Rareté'], ['Jouée', 1], ['Victoires', 1], ['% victoire', 1]],
         d.tables.topCards.map((c) => [c.title || c.url, label(c.rarity), fmt(c.plays, 0), fmt(c.wins, 0), `${fmt(c.winRate, 0)} %`]));
     },

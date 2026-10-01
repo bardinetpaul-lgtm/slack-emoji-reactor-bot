@@ -78,6 +78,23 @@ check('filtre joueur : masse UA = 45', ecoUser.kpis.mass === 45 && ecoUser.kpis.
 const ecoSrc = economy({ ...f, source: 'booster' }, { db, boosterPrice: 20 });
 check('filtre source : consommés booster = 85', ecoSrc.kpis.consumed === 85 && ecoSrc.kpis.created === 0);
 
+// 🕐 Grain « heure » (heure de Paris, UTC+2 en septembre)
+check('clé heure : 10h30 UTC = 12h à Paris', time.bucketKey('2026-09-27T10:30:00Z', 'hour') === '2026-09-27 12h');
+check('buckets heure', time.bucketsBetween('2026-09-10T08:10:00Z', '2026-09-10T10:05:00Z', 'hour').join() === '2026-09-10 10h,2026-09-10 11h,2026-09-10 12h');
+check('heure d’hiver : les deux « 02h » font un seul bucket', time.bucketsBetween('2026-10-24T23:30:00Z', '2026-10-25T02:30:00Z', 'hour').join() === '2026-10-25 01h,2026-10-25 02h,2026-10-25 03h');
+check('par heure sur plus de 7 jours → BAD_FILTER', bad({ from: '2026-09-01T00:00:00Z', to: '2026-09-10T00:00:00Z', grain: 'hour' }));
+const fh = time.normalizeFilters({ from: '2026-09-10T08:00:00Z', to: '2026-09-10T10:59:59Z', grain: 'hour' });
+const ecoH = economy(fh, { db, boosterPrice: 20 });
+check('par heure : 3 heures', ecoH.series.labels.join() === '2026-09-10 10h,2026-09-10 11h,2026-09-10 12h');
+check('par heure : créés 10 · 30 · 0', ecoH.series.created.join() === '10,30,0');
+check('par heure : consommés 0 · 0 · 45', ecoH.series.consumed.join() === '0,0,45');
+check('par heure : masse 130 · 160 · 115', ecoH.series.mass.join() === '130,160,115');
+
+// 📈 Inflation : le suivi démarre DANS la période → base = soldes d'ouverture (et non 0)
+const fAll = time.normalizeFilters({ from: '2026-08-25T00:00:00Z', to: '2026-09-11T23:59:59+02:00', grain: 'day' });
+check('inflation calculée quand la période commence avant le suivi', economy(fAll, { db, boosterPrice: 20 }).kpis.inflationPct === -56.7);
+check('inflation : aucune donnée → non calculée', economy(time.normalizeFilters({ from: '2026-08-01T00:00:00Z', to: '2026-08-20T00:00:00Z' }), { db }).kpis.inflationPct === null);
+
 bal.run('UA', 46);
 check('écart ledger détecté', economy(f, { db, boosterPrice: 20 }).kpis.ledgerGap === 1);
 bal.run('UA', 45);
