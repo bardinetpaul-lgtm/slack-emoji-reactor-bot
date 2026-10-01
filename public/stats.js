@@ -144,7 +144,8 @@
       const s = d.series;
       chart('c-newcards', { data: { labels: s.labels, datasets: [bar('Ajoutées au catalogue', s.added, 1), line('Découvertes', s.discovered, 0)] } });
       chart('c-cardsavg', { data: { labels: s.labels, datasets: [line('Moyenne', s.mean, 0), line('Médiane', s.median, 1)] } });
-      table('t-perplayer', [['Joueur'], ['Cartes', 1], ['% catalogue', 1]], d.tables.perPlayer.map((p) => [who(p.userId), fmt(p.cards, 0), `${fmt(p.pct)} %`]));
+      table('t-perplayer', [['Joueur'], ['Classeur', 1], ['% classeur', 1], ['dont Hors série', 1], ['Obtenues un jour', 1]],
+        d.tables.perPlayer.map((p) => [who(p.userId), `${fmt(p.cards, 0)} / ${fmt(p.total, 0)}`, `${fmt(p.pct)} %`, fmt(p.extra, 0), fmt(p.discovered, 0)]));
     },
     arena(d) {
       since('arena', d.since);

@@ -4,7 +4,7 @@
 //  Octobre Rose (jamais via les réactions, les autres boosters ni
 //  la boutique de l'Arène). Comme les photos anti-spam, elles ne sont
 //  pas dans la banque de médias : intercalaire « Hors série » du
-//  classeur, hors pourcentage de complétion, absentes de l'Arène.
+//  classeur (comptées dans la complétion depuis la v2.1.2), absentes de l'Arène.
 //
 //  Rareté interne : 'rose'. Titre : « 🎀 Octobre Rose N/6 ».
 //

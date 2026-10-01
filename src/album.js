@@ -8,7 +8,7 @@
 //  Confidentialité : pour une carte NON possédée, on n'envoie que son
 //  numéro et sa rareté — jamais son image, son titre ni son lien.
 //
-//  Intercalaire « Hors série » (hors pourcentage de complétion) :
+//  Intercalaire « Hors série » (compté dans le total et le pourcentage depuis la v2.1.2) :
 //    • les 6 cartes 🎀 Octobre Rose (emplacements OR1 → OR6, rareté 'rose')
 //    • les 10 photos anti-spam #62 → #71 (emplacements toujours affichés)
 //    • les cartes possédées qui ne sont plus dans la banque
@@ -120,7 +120,7 @@ function buildAlbum(userId) {
   })).filter((s) => s.stickers.length);
   if (extra.length) list.push({ key: 'extra', stickers: extra });
 
-  // 📊 Statistiques (le « Hors série » ne compte pas dans la complétion)
+  // 📊 Statistiques : tous les emplacements comptent, « Hors série » compris (v2.1.2)
   const byRarity = {};
   let total = 0;
   let got = 0;
@@ -135,7 +135,6 @@ function buildAlbum(userId) {
         copies += st.count;
         unique += 1;
       }
-      if (s.key === 'extra') continue;
       total += 1;
       if (st.owned) got += 1;
     }

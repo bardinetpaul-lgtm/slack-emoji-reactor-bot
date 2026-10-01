@@ -104,7 +104,7 @@ async function test(name, fn) {
     const data = await (await api('U_A', tokenOf('U_A'))).json();
     assert.strictEqual(data.status, 'ok');
     assert.strictEqual(data.owner.name, 'Nom-U_A');
-    assert.strictEqual(data.stats.total, bank.length);
+    assert.strictEqual(data.stats.total, bank.length + ROSE + 10, 'banque + Hors série (Octobre Rose + 10 anti-spam)');
     assert.strictEqual(data.stats.owned, 0);
     assert.deepStrictEqual(data.sections.map((s) => s.key), ['common', 'rare', 'epic', 'legendary', 'extra']);
     assert.strictEqual(data.sections[4].stickers.length, ROSE + 10, `${ROSE} Octobre Rose + 10 emplacements anti-spam en Hors série`);
@@ -159,14 +159,14 @@ async function test(name, fn) {
     assert.strictEqual(next.stats.owned, 6);
   });
 
-  await test('carte possédée retirée de la banque → intercalaire « Hors série », hors complétion', () => {
+  await test('carte possédée retirée de la banque → intercalaire « Hors série », comptée dans la complétion', () => {
     collections.addCards('U_A', [{ url: 'https://example.test/vieille.gif', title: '👻 Surprise #999', rarity: 'rare', type: 'image' }]);
     const album = buildAlbum('U_A');
     const extra = album.sections.find((s) => s.key === 'extra');
     assert.ok(extra && extra.stickers.length === ROSE + 11, 'Octobre Rose + 10 anti-spam + 1 ancienne');
     assert.strictEqual(extra.stickers.at(-1).n, 999);
-    assert.strictEqual(album.stats.total, bank.length);
-    assert.strictEqual(album.stats.owned, 6);
+    assert.strictEqual(album.stats.total, bank.length + ROSE + 11);
+    assert.strictEqual(album.stats.owned, 7, '6 cartes de la banque + la carte Hors série');
   });
 
   await test('nom Slack mis en cache (un seul users.info par joueur)', async () => {
