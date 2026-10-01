@@ -422,6 +422,11 @@ function configureStats({ client = null, logger = console } = {}) {
     publicUrl: WEB_PUBLIC_URL, getSecret, send, sendJson, servePage, displayName, client, logger,
     catalogSize: () => getAllMedia().length,
     ownedCopies: (userId) => collections.countCopies(userId),
+    // mêmes chiffres que le classeur du joueur (possédées / total, Hors série à part)
+    albumStats: (userId) => {
+      const { stats } = buildAlbum(userId);
+      return { owned: stats.owned, total: stats.total, extra: (stats.byRarity.extra || { owned: 0 }).owned };
+    },
     boosterPrice: (boosters.getBooster('common') || {}).price || 20,
   });
 }
