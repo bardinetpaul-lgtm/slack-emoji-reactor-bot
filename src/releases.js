@@ -16,7 +16,7 @@
 
 const RELEASES = [
   {
-    version: '2.2',
+    version: '2.1.1',
     date: '2026-10-01',
     title: 'Le Capitaine Guerrier rééquilibré',
     changes: [

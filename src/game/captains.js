@@ -42,7 +42,7 @@ const CAPTAINS = {
 // Valeurs utilisées par le moteur (réglables, validées par la simulation)
 const TUNING = {
   tankHp: 1.5,
-  // v2.2 : 1,35 / 1,3 → 1,2 / 1,15. Le Rush gagnait 69 % de ses combats entre joueurs simples
+  // v2.1.1 : 1,35 / 1,3 → 1,2 / 1,15. Le Rush gagnait 69 % de ses combats entre joueurs simples
   // et 61 % entre bons joueurs (matrice Capitaine contre Capitaine) ; il retombe à 59 % / 50 %.
   rushSpeed: 1.2,
   rushDps: 1.15,
