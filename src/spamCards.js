@@ -3,7 +3,7 @@
 //  Les 10 photos troll envoyées en rafale à un spammeur. Elles ne
 //  sont PAS dans la banque de médias (jamais tirées au hasard) mais
 //  entrent dans la collection de celui qui les reçoit : intercalaire
-//  « Hors série » du classeur, hors pourcentage de complétion.
+//  « Hors série » du classeur (comptées dans la complétion depuis la v2.1.2).
 //
 //  Numéros FIXES #62 → #71 (« Surprise #N ») : ne jamais les modifier
 //  (réservés dans src/media.js, RESERVED_NUMBER_MAX).

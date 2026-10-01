@@ -206,7 +206,7 @@ const at = (iso) => { NOW = RealDate.parse(iso); };
   check(roseStickers.length === 6 && roseStickers.map((st) => st.code).join() === 'OR1,OR2,OR3,OR4,OR5,OR6', 'classeur : 6 emplacements OR1 → OR6 dans « Hors série »');
   check(roseCard.title === '🎀 Octobre Rose 3/6', `titre : « ${roseCard.title} »`);
   check(roseStickers[2].owned && !roseStickers[0].owned && !roseStickers[0].image, 'carte possédée visible, les autres cachées');
-  check(album.stats.owned === 0, 'hors pourcentage de complétion');
+  check(album.stats.owned === 1 && album.stats.total === album.sections.reduce((n, s) => n + s.stickers.length, 0), 'comptée dans la complétion (Hors série inclus dans le total)');
   check(extra.stickers.filter((st) => st.link === roseCard.url).length === 1, 'pas de doublon « carte retirée »');
 
   // ── Arène ──

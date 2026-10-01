@@ -16,6 +16,14 @@
 
 const RELEASES = [
   {
+    version: '2.1.2',
+    date: '2026-10-01',
+    title: 'Le Hors série compte dans le classeur',
+    changes: [
+      '📒 Classeur : les cartes Hors série (Octobre Rose, photos anti-spam, cartes retirées du jeu) comptent maintenant dans ton total et ton pourcentage de complétion.',
+    ],
+  },
+  {
     version: '2.1.1',
     date: '2026-10-01',
     title: 'Le Capitaine Guerrier rééquilibré',

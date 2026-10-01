@@ -83,9 +83,9 @@ function cards(f, { db, catalogSize = 0, ownedCopies = 0, albumStats = null }) {
   }
   while (bucket < keys.length) { snapshot(bucket); bucket += 1; }
 
-  // Par joueur : le MÊME chiffre que son classeur (cartes possédées aujourd'hui, hors « Hors série »).
-  // « discovered » = toutes les cartes obtenues un jour : il compte aussi les cartes perdues en Arène
-  // et le Hors série, d'où un total plus élevé que le classeur.
+  // Par joueur : le MÊME chiffre que son classeur (cartes possédées aujourd'hui, Hors série compris).
+  // « discovered » = toutes les cartes obtenues un jour : il compte aussi les cartes perdues en Arène,
+  // d'où un total qui peut dépasser celui du classeur.
   const perPlayer = [...perUser.entries()]
     .map(([userId, n]) => {
       const a = albumStats ? albumStats(userId) : null;

@@ -137,14 +137,17 @@ const wait = (ms) => new Promise((r) => realSetTimeout(r, ms));
     assert.strictEqual(collections.getCount('U_SPAM', SPAM_CARDS[0].url), 2);
   });
 
-  await test('classeur : Hors série = les 10 anti-spam, hors pourcentage', () => {
+  await test('classeur : Hors série = les 10 anti-spam, comptées dans le %', () => {
     const album = buildAlbum('U_SPAM');
     const extra = spamOnly(album);
     assert.deepStrictEqual(extra.map((s) => s.n), SPAM_CARDS.map((c) => c.number));
     assert.ok(extra.every((s) => s.owned && s.rarity === 'extra'));
     assert.match(extra[0].image, /^api\/card-thumb\/F[A-Z0-9]+$/);
     assert.deepStrictEqual(album.stats.byRarity.extra, { total: 10 + ROSE, owned: 10 });   // + emplacements Octobre Rose vides
-    assert.ok(album.stats.owned < 10, 'les cartes anti-spam ne comptent pas dans le %');
+    const byKey = Object.values(album.stats.byRarity);
+    assert.strictEqual(album.stats.owned, byKey.reduce((n, r) => n + r.owned, 0), 'possédées = toutes les sections, Hors série compris');
+    assert.strictEqual(album.stats.total, byKey.reduce((n, r) => n + r.total, 0));
+    assert.ok(album.stats.owned >= 10, 'les 10 cartes anti-spam comptent dans le %');
   });
 
   await test('classeur d\'un non-spammeur : 10 emplacements Hors série vides', () => {
