@@ -17,7 +17,7 @@ const stats = require('./index');
 const TTL_MS = 24 * 3600 * 1000;
 const PAGE_ASSETS = ['stats.css', 'stats.js', 'vendor/chart.umd.js'];
 
-let ctx = null;   // { publicUrl, getSecret, send, sendJson, servePage, displayName, client, logger, catalogSize, ownedCopies, boosterPrice }
+let ctx = null;   // { publicUrl, getSecret, send, sendJson, servePage, displayName, client, logger, catalogSize, ownedCopies, albumStats, boosterPrice }
 
 function configure(context) {
   ctx = context;
@@ -69,6 +69,7 @@ function handleBlock(res, block, q) {
     const data = stats.run(block, filters, {
       catalogSize: ctx.catalogSize(),
       ownedCopies: ctx.ownedCopies(filters.user),
+      albumStats: ctx.albumStats,
       boosterPrice: ctx.boosterPrice,
     });
     ctx.sendJson(res, 200, { ok: true, ...data });

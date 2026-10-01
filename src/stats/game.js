@@ -53,7 +53,7 @@ function boosters(f, { db }) {
 }
 
 // 🃏 Cartes
-function cards(f, { db, catalogSize = 0, ownedCopies = 0 }) {
+function cards(f, { db, catalogSize = 0, ownedCopies = 0, albumStats = null }) {
   const keys = bucketsBetween(f.from, f.to, f.grain);
   const at = indexer(keys, f.grain);
   const added = loadEvents(db, ['card_added'], { ...f, user: null });
@@ -83,9 +83,16 @@ function cards(f, { db, catalogSize = 0, ownedCopies = 0 }) {
   }
   while (bucket < keys.length) { snapshot(bucket); bucket += 1; }
 
+  // Par joueur : le MÊME chiffre que son classeur (cartes possédées aujourd'hui, hors « Hors série »).
+  // « discovered » = toutes les cartes obtenues un jour : il compte aussi les cartes perdues en Arène
+  // et le Hors série, d'où un total plus élevé que le classeur.
   const perPlayer = [...perUser.entries()]
-    .map(([userId, n]) => ({ userId, cards: n, pct: catalogSize ? round((n / catalogSize) * 100, 1) : null }))
-    .sort((a, b) => b.cards - a.cards);
+    .map(([userId, n]) => {
+      const a = albumStats ? albumStats(userId) : null;
+      if (!a) return { userId, cards: n, total: catalogSize, pct: catalogSize ? round((n / catalogSize) * 100, 1) : null, extra: null, discovered: n };
+      return { userId, cards: a.owned, total: a.total, pct: a.total ? round((a.owned / a.total) * 100, 1) : null, extra: a.extra, discovered: n };
+    })
+    .sort((a, b) => b.cards - a.cards || b.discovered - a.discovered);
   const byRarity = Object.entries(countBy(inPeriod, (e) => e.data.rarity || '?')).map(([key, count]) => ({ key, count })).sort((a, b) => b.count - a.count);
   const last = keys.length - 1;
   return {

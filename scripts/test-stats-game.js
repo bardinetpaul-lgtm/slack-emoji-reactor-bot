@@ -64,6 +64,11 @@ check('1 carte ajoutée dans la période (u2)', c.kpis.added === 1 && c.series.a
 check('3 découvertes', c.kpis.discovered === 3 && c.series.discovered.join() === '1,2');
 check('par joueur : UA 2 (50 %), UB 1', c.tables.perPlayer[0].userId === 'UA' && c.tables.perPlayer[0].cards === 2 && c.tables.perPlayer[0].pct === 50);
 check('moyenne / médiane fin de période', c.kpis.mean === 1.5 && c.kpis.median === 1.5);
+// 📒 Avec le classeur : même chiffre que le joueur (possédées, hors Hors série), l'historique à part
+const cAlbum = game.cards(f, { db, catalogSize: 4, ownedCopies: 7, albumStats: (u) => (u === 'UA' ? { owned: 1, total: 3, extra: 1 } : { owned: 1, total: 3, extra: 0 }) });
+const ua = cAlbum.tables.perPlayer.find((p) => p.userId === 'UA');
+check('par joueur = classeur : UA 1 / 3 (33,3 %), 1 hors série, 2 obtenues un jour', ua.cards === 1 && ua.total === 3 && ua.pct === 33.3 && ua.extra === 1 && ua.discovered === 2);
+check('sans classeur branché : repli sur l’historique', c.tables.perPlayer[0].discovered === 2 && c.tables.perPlayer[0].extra === null);
 check('par rareté', c.tables.byRarity.find((x) => x.key === 'common').count === 2);
 
 const a = game.arena(f, { db });
