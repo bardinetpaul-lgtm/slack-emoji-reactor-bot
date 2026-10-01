@@ -182,7 +182,7 @@ function scheduleFarmRelease(client, userId, logger, delayMs = farm.FARM_PENALTY
             type: 'section',
             text: {
               type: 'mrkdwn',
-              text: `✅ *Ton accès au Jeanpip est rétabli !* :${TARGET_EMOJI}:\n\nTa pénalité anti-farm est terminée. Tu peux de nouveau :\n• 📤 Envoyer des Jeanpips aux autres\n• 💰 Gagner des crédits\n\n_Reste sous ${farmMaxPerHour()} Jeanpips par heure pour éviter un nouveau bridage._ 😉`,
+              text: `✅ *Ton accès au Jeanpip est rétabli !* :${TARGET_EMOJI}:\n\nTa pénalité anti-farm est terminée. Tu peux de nouveau :\n• 📤 Envoyer des Jeanpips aux autres\n• 💰 Gagner des JP$\n\n_Reste sous ${farmMaxPerHour()} Jeanpips par heure pour éviter un nouveau bridage._ 😉`,
             },
           },
         ],
@@ -430,13 +430,13 @@ app.event('reaction_added', async ({ event, client, logger }) => {
         limit: 1,
       });
       if (!result.messages || result.messages.length === 0) {
-        logger.warn('⚠️  Message original introuvable → aucun crédit');
+        logger.warn('⚠️  Message original introuvable → aucun JP$');
         return;
       }
       originalAuthorId = result.messages[0].user || null;
     } catch (historyError) {
       const reason = historyError.data ? historyError.data.error : historyError.message;
-      logger.warn(`🚫 Bot absent de la conversation (${reason}) → aucun crédit pour <@${reactingUserId}>`);
+      logger.warn(`🚫 Bot absent de la conversation (${reason}) → aucun JP$ pour <@${reactingUserId}>`);
       return;
     }
 
@@ -454,7 +454,7 @@ app.event('reaction_added', async ({ event, client, logger }) => {
     //    Le réacteur reçoit quand même SON image.
     const delivers = broadcast.isSubscribed(originalAuthorId);
     if (!delivers) {
-      logger.info(`📮 <@${originalAuthorId}> n'est pas dans la liste de diffusion → rien ne lui est envoyé, aucun crédit pour <@${reactingUserId}>`);
+      logger.info(`📮 <@${originalAuthorId}> n'est pas dans la liste de diffusion → rien ne lui est envoyé, aucun JP$ pour <@${reactingUserId}>`);
     }
 
     // ✅ Bot présent + message d'autrui + destinataire inscrit → le Jeanpip compte.
@@ -473,7 +473,7 @@ app.event('reaction_added', async ({ event, client, logger }) => {
             type: 'section',
             text: {
               type: 'mrkdwn',
-              text: `🚜 *ALERTE ANTI-FARM !* :${TARGET_EMOJI}:\n\nTu as posé *plus de ${farmMaxPerHour()} Jeanpips en moins d'une heure*.\n\n*Pendant 1 heure :*\n• ❌ Tes Jeanpips n'envoient plus rien aux autres\n• ❌ Tu n'accumules plus de crédits\n• ✅ Tu continues à *recevoir* des Jeanpips\n• ✅ Tu peux toujours *ouvrir tes boosters*\n\n_Lève le pied, ça revient tout seul dans 1 h._ 😉`,
+              text: `🚜 *ALERTE ANTI-FARM !* :${TARGET_EMOJI}:\n\nTu as posé *plus de ${farmMaxPerHour()} Jeanpips en moins d'une heure*.\n\n*Pendant 1 heure :*\n• ❌ Tes Jeanpips n'envoient plus rien aux autres\n• ❌ Tu n'accumules plus de JP$\n• ✅ Tu continues à *recevoir* des Jeanpips\n• ✅ Tu peux toujours *ouvrir tes boosters*\n\n_Lève le pied, ça revient tout seul dans 1 h._ 😉`,
             },
           },
         ],
@@ -486,7 +486,7 @@ app.event('reaction_added', async ({ event, client, logger }) => {
 
     if (farmBlocked) {
       const remaining = getFarmPenaltyRemaining(reactingUserId);
-      logger.info(`🚜 <@${reactingUserId}> sous pénalité anti-farm (${formatRemaining(remaining)} restantes) → ni crédit ni envoi aux autres`);
+      logger.info(`🚜 <@${reactingUserId}> sous pénalité anti-farm (${formatRemaining(remaining)} restantes) → ni JP$ ni envoi aux autres`);
     }
 
     // 📊 Score / crédits : uniquement si le Jeanpip est réellement délivré
@@ -505,7 +505,7 @@ app.event('reaction_added', async ({ event, client, logger }) => {
       //    Seule TA réaction crédite : l'attaque et l'auto-react ne créditent pas.
       const newBalance = credits.addCredit(reactingUserId, settings.getCreditsPerJeanpip(), { source: 'reaction', ref: channelId });
       events.record('reaction', reactingUserId, { channel: channelId });
-      logger.info(`💰 Crédits de <@${reactingUserId}> : ${newBalance}`);
+      logger.info(`💰 JP$ de <@${reactingUserId}> : ${newBalance}`);
       refreshHomeIfSeen(client, reactingUserId, logger);
     }
 
@@ -600,13 +600,13 @@ app.command('/jeanpip-attack', async ({ command, ack, client, logger }) => {
       const balance = credits.getBalance(userId);
       const canAfford = balance >= ATTACK_PRICE;
       await safeSendDM(client, userId, {
-        text: `⚔️ Tu n'as pas d'Attaque Jeanpip gratuite — achète-la pour ${ATTACK_PRICE} crédits !`,
+        text: `⚔️ Tu n'as pas d'Attaque Jeanpip gratuite — achète-la pour ${ATTACK_PRICE} JP$ !`,
         blocks: [
           {
             type: 'section',
             text: {
               type: 'mrkdwn',
-              text: `⚔️ *Tu n'as pas d'Attaque Jeanpip gratuite.*\n\nTon score cette semaine : *${currentScore}/${scores.ATTACK_THRESHOLD}* :${TARGET_EMOJI}: (envoie-en ${scores.ATTACK_THRESHOLD} pour la débloquer gratuitement)\n\n💰 *Ou achète-la maintenant : ${ATTACK_PRICE} crédits* — ton solde : *${balance}*${canAfford ? '' : `\n\n❌ _Il te manque ${ATTACK_PRICE - balance} crédit(s)._`}`,
+              text: `⚔️ *Tu n'as pas d'Attaque Jeanpip gratuite.*\n\nTon score cette semaine : *${currentScore}/${scores.ATTACK_THRESHOLD}* :${TARGET_EMOJI}: (envoie-en ${scores.ATTACK_THRESHOLD} pour la débloquer gratuitement)\n\n💰 *Ou achète-la maintenant : ${ATTACK_PRICE} JP$* — ton solde : *${balance}*${canAfford ? '' : `\n\n❌ _Il te manque ${ATTACK_PRICE - balance} JP$._`}`,
             },
           },
           ...(canAfford ? [{
@@ -614,7 +614,7 @@ app.command('/jeanpip-attack', async ({ command, ack, client, logger }) => {
             elements: [{
               type: 'button',
               style: 'danger',
-              text: { type: 'plain_text', text: `⚔️ Lancer l'attaque dans #${command.channel_name} (${ATTACK_PRICE} crédits)` },
+              text: { type: 'plain_text', text: `⚔️ Lancer l'attaque dans #${command.channel_name} (${ATTACK_PRICE} JP$)` },
               action_id: 'buy_attack',
               value: channelId,
             }],
@@ -649,7 +649,7 @@ app.action('buy_attack', async ({ ack, body, action, client, logger }) => {
     if (farmRemaining > 0) {
       await safeSendDM(client, userId, {
         text: `🚜 Anti-farm : tu ne peux pas lancer d'attaque pour le moment.`,
-        blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `🚜 *Tu es sous pénalité anti-farm.*\n\nRéessaie dans *${formatRemaining(farmRemaining)}*. _Aucun crédit n'a été débité._` } }],
+        blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `🚜 *Tu es sous pénalité anti-farm.*\n\nRéessaie dans *${formatRemaining(farmRemaining)}*. _Aucun JP$ n'a été débité._` } }],
       }, logger);
       return;
     }
@@ -663,7 +663,7 @@ app.action('buy_attack', async ({ ack, body, action, client, logger }) => {
           channel: body.channel.id,
           ts: body.message.ts,
           text: `⚔️ Attaque Jeanpip achetée !`,
-          blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `⚔️ *Attaque Jeanpip achetée et lancée dans <#${channelId}> !* (-${ATTACK_PRICE} crédits)` } }],
+          blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `⚔️ *Attaque Jeanpip achetée et lancée dans <#${channelId}> !* (-${ATTACK_PRICE} JP$)` } }],
         });
       } catch (updateError) {
         logger.error(`❌ Impossible de désactiver le bouton :`, updateError.message);
@@ -684,7 +684,7 @@ app.action('buy_attack', async ({ ack, body, action, client, logger }) => {
  * Retourne true si l'attaque est partie.
  */
 async function launchAttack(client, userId, channelId, logger, { consumeFree = false, price = 0 } = {}) {
-  logger.info(`⚔️  Attaque Jeanpip lancée par <@${userId}> dans <#${channelId}>${price ? ` (payée ${price} crédits)` : ''}`);
+  logger.info(`⚔️  Attaque Jeanpip lancée par <@${userId}> dans <#${channelId}>${price ? ` (payée ${price} JP$)` : ''}`);
 
   // 🔎 Récupérer les 7 dernières personnes uniques (avec leur dernier message)
   let victims;
@@ -694,7 +694,7 @@ async function launchAttack(client, userId, channelId, logger, { consumeFree = f
     logger.error(`❌ Impossible de lire l'historique du channel:`, histError.message);
     await safeSendDM(client, userId, {
       text: `❌ Je n'arrive pas à lire ce channel. Suis-je bien invité dedans ?`,
-      blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `❌ *Je n'arrive pas à lire ce channel.*\nAssure-toi que le bot est invité dans le channel (\`/invite @${botName}\`).${price ? '\n\n_Aucun crédit n\'a été débité._' : ''}` } }],
+      blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `❌ *Je n'arrive pas à lire ce channel.*\nAssure-toi que le bot est invité dans le channel (\`/invite @${botName}\`).${price ? '\n\n_Aucun JP$ n\'a été débité._' : ''}` } }],
     }, logger);
     return false;
   }
@@ -702,7 +702,7 @@ async function launchAttack(client, userId, channelId, logger, { consumeFree = f
   if (victims.length === 0) {
     await safeSendDM(client, userId, {
       text: `😅 Personne à attaquer dans ce channel !`,
-      blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `😅 *Personne à attaquer dans ce channel !*\n\nPersonne n'y a posté récemment… ou personne n'est inscrit à la liste de diffusion Jeanpip 📮\n\n_${price ? 'Aucun crédit n\'a été débité.' : 'Ton attaque n\'a pas été consommée.'}_` } }],
+      blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `😅 *Personne à attaquer dans ce channel !*\n\nPersonne n'y a posté récemment… ou personne n'est inscrit à la liste de diffusion Jeanpip 📮\n\n_${price ? 'Aucun JP$ n\'a été débité.' : 'Ton attaque n\'a pas été consommée.'}_` } }],
     }, logger);
     return false;
   }
@@ -712,7 +712,7 @@ async function launchAttack(client, userId, channelId, logger, { consumeFree = f
       const balance = credits.getBalance(userId);
       await safeSendDM(client, userId, {
         text: `❌ Solde insuffisant pour l'Attaque Jeanpip`,
-        blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `❌ *Il te manque ${price - balance} crédit(s)* pour acheter l'Attaque Jeanpip.\n\n💰 Ton solde : *${balance}* · Prix : *${price}*` } }],
+        blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `❌ *Il te manque ${price - balance} JP$* pour acheter l'Attaque Jeanpip.\n\n💰 Ton solde : *${balance}* · Prix : *${price}*` } }],
       }, logger);
       return false;
     }
@@ -842,7 +842,7 @@ app.command('/jeanpip-give-credits', async ({ command, ack, client, logger }) =>
     if (!targetId || !Number.isFinite(amount) || amount === 0) {
       await safeSendDM(client, adminId, {
         text: `❓ Usage : /jeanpip-give-credits @utilisateur <montant>`,
-        blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `❓ *Usage :* \`/jeanpip-give-credits @utilisateur <montant>\`\nEx : \`/jeanpip-give-credits @paul 50\` pour ajouter, \`/jeanpip-give-credits @paul -20\` pour retirer.\nLe montant doit être non nul (demi-crédits acceptés, ex. \`2,5\`).` } }],
+        blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `❓ *Usage :* \`/jeanpip-give-credits @utilisateur <montant>\`\nEx : \`/jeanpip-give-credits @paul 50\` pour ajouter, \`/jeanpip-give-credits @paul -20\` pour retirer.\nLe montant doit être non nul (demi-JP$ acceptés, ex. \`2,5\`).` } }],
       }, logger);
       return;
     }
@@ -879,7 +879,7 @@ app.command('/jeanpip-addmedia', async ({ command, ack, client, logger }) => {
       type: 'section',
       text: {
         type: 'mrkdwn',
-        text: `❓ *Usage :* \`/jeanpip-addmedia <lien> <rareté> [@auteur] [titre optionnel]\`\n\n*Raretés acceptées :* \`commun\` ⚪ · \`rare\` 🔵 · \`epique\` 🟣 · \`legendaire\` 🟡\n\n*@auteur* (optionnel) : la personne qui t'a envoyé le média gagne ${AUTHOR_REWARDS.common} ⚪ · ${AUTHOR_REWARDS.rare} 🔵 · ${AUTHOR_REWARDS.epic} 🟣 · ${AUTHOR_REWARDS.legendary} 🟡 crédits selon la rareté.\n\nEx : \`/jeanpip-addmedia https://media.giphy.com/media/xxx/giphy.gif rare @paul Super Jeanpip\``,
+        text: `❓ *Usage :* \`/jeanpip-addmedia <lien> <rareté> [@auteur] [titre optionnel]\`\n\n*Raretés acceptées :* \`commun\` ⚪ · \`rare\` 🔵 · \`epique\` 🟣 · \`legendaire\` 🟡\n\n*@auteur* (optionnel) : la personne qui t'a envoyé le média gagne ${AUTHOR_REWARDS.common} ⚪ · ${AUTHOR_REWARDS.rare} 🔵 · ${AUTHOR_REWARDS.epic} 🟣 · ${AUTHOR_REWARDS.legendary} 🟡 JP$ selon la rareté.\n\nEx : \`/jeanpip-addmedia https://media.giphy.com/media/xxx/giphy.gif rare @paul Super Jeanpip\``,
       },
     }];
 
@@ -986,18 +986,18 @@ app.command('/jeanpip-credits', async ({ command, ack, client, logger }) => {
   try {
     const balance = credits.getBalance(userId);
     await safeSendDM(client, userId, {
-      text: `💰 Tu as ${balance} crédits`,
+      text: `💰 Tu as ${balance} JP$`,
       blocks: [
         {
           type: 'section',
           text: {
             type: 'mrkdwn',
-            text: `💰 *Tu as ${balance} crédit(s) JeanPip !*\n\nTu gagnes *+${creditsPerJeanpipLabel()} crédit(s)* à chaque fois que tu poses une réaction :${TARGET_EMOJI}: sur un message.\n\n🎁 Dépense-les en boosters avec \`/jeanpip-booster\`\n⚔️ ou achète une Attaque Jeanpip (*${ATTACK_PRICE}* crédits) avec \`/jeanpip-attack\` !`,
+            text: `💰 *Tu as ${balance} JP$ !*\n\nTu gagnes *+${creditsPerJeanpipLabel()} JP$* à chaque fois que tu poses une réaction :${TARGET_EMOJI}: sur un message.\n\n🎁 Dépense-les en boosters avec \`/jeanpip-booster\`\n⚔️ ou achète une Attaque Jeanpip (*${ATTACK_PRICE}* JP$) avec \`/jeanpip-attack\` !`,
           },
         },
       ],
     }, logger);
-    logger.info(`💰 /jeanpip-credits : <@${userId}> a ${balance} crédits`);
+    logger.info(`💰 /jeanpip-credits : <@${userId}> a ${balance} JP$`);
   } catch (error) {
     logger.error('❌ Erreur dans /jeanpip-credits:', error);
   }
@@ -1030,11 +1030,11 @@ app.command('/jeanpip-booster', async ({ command, ack, client, logger }) => {
           type: 'section',
           text: {
             type: 'mrkdwn',
-            text: `💰 Ton solde : *${balance}* crédit(s)\n\nChaque booster contient *8 cartes*. Plus le booster est cher, plus tes chances de tomber sur du 🔵 rare, 🟣 épique ou 🟡 légendaire sont élevées !`,
+            text: `💰 Ton solde : *${balance}* JP$\n\nChaque booster contient *8 cartes*. Plus le booster est cher, plus tes chances de tomber sur du 🔵 rare, 🟣 épique ou 🟡 légendaire sont élevées !`,
           },
         },
         { type: 'actions', elements: buttons },
-        { type: 'context', elements: [{ type: 'mrkdwn', text: boosters.listBoosters().map((b) => `${b.emoji} ${b.label} · ${b.price} crédits${b.dailyStock ? ` · ${b.dailyStock}/jour pour tout le monde${boosters.stockLeft(b) === 0 ? ` (épuisé aujourd'hui, retour demain entre 9h et 10h)` : ''}` : ''}`).join('   ') }] },
+        { type: 'context', elements: [{ type: 'mrkdwn', text: boosters.listBoosters().map((b) => `${b.emoji} ${b.label} · ${b.price} JP$${b.dailyStock ? ` · ${b.dailyStock}/jour pour tout le monde${boosters.stockLeft(b) === 0 ? ` (épuisé aujourd'hui, retour demain entre 9h et 10h)` : ''}` : ''}`).join('   ') }] },
       ],
     }, logger);
     logger.info(`🎁 /jeanpip-booster : boutique envoyée à <@${userId}> (solde ${balance})`);
@@ -1075,7 +1075,7 @@ ${boosters.RESTOCK_TEXT} Sois rapide 😉`
         : `⏳ *Le Booster ${booster.emoji} ${booster.label} n'est plus en vente.*`;
       sendDM(client, userId, { text: why, blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `${why}
 
-_Aucun crédit n'a été débité._` } }] })
+_Aucun JP$ n'a été débité._` } }] })
         .catch((e) => logger.error('❌ DM booster indisponible:', e.message));
       logger.info(`🚫 Achat refusé (${blocked}) : <@${userId}> ${booster.type}`);
       refreshHomeIfSeen(client, userId, logger);
@@ -1087,13 +1087,13 @@ _Aucun crédit n'a été débité._` } }] })
       const balance = credits.getBalance(userId);
       const missing = booster.price - balance;
       await sendDM(client, userId, {
-        text: `❌ Il te manque ${missing} crédits`,
+        text: `❌ Il te manque ${missing} JP$`,
         blocks: [
           {
             type: 'section',
             text: {
               type: 'mrkdwn',
-              text: `❌ *Il te manque ${missing} crédit(s)* pour le Booster ${booster.emoji} ${booster.label}.\n\n💰 Ton solde : *${balance}* · Prix : *${booster.price}*\n\nRéagis avec :${TARGET_EMOJI}: pour gagner des crédits ! 💪`,
+              text: `❌ *Il te manque ${missing} JP$* pour le Booster ${booster.emoji} ${booster.label}.\n\n💰 Ton solde : *${balance}* · Prix : *${booster.price}*\n\nRéagis avec :${TARGET_EMOJI}: pour gagner des JP$ ! 💪`,
             },
           },
         ],
@@ -1133,7 +1133,7 @@ _Aucun crédit n'a été débité._` } }] })
         type: 'section',
         text: {
           type: 'mrkdwn',
-          text: `${booster.emoji} *Booster ${booster.label} acheté !* 🎉\n\n💰 Nouveau solde : *${balance}* crédit(s)\n\nClique pour révéler tes 8 cartes 👇`,
+          text: `${booster.emoji} *Booster ${booster.label} acheté !* 🎉\n\n💰 Nouveau solde : *${balance}* JP$\n\nClique pour révéler tes 8 cartes 👇`,
         },
       },
       { type: 'actions', elements: openButtons },
@@ -1447,7 +1447,7 @@ app.view('home_attack_submit', async ({ ack, body, view, client, logger }) => {
     return ack(fieldError('channel', `🚜 Pénalité anti-farm : réessaie dans ${formatRemaining(farmRemaining)}.`));
   }
   if (mode === 'paid' && credits.getBalance(userId) < ATTACK_PRICE) {
-    return ack(fieldError('channel', `Solde insuffisant : il te faut ${ATTACK_PRICE} crédits.`));
+    return ack(fieldError('channel', `Solde insuffisant : il te faut ${ATTACK_PRICE} JP$.`));
   }
   if (attackPurchaseLocks.has(userId)) {
     return ack(fieldError('channel', 'Une attaque est déjà en cours de lancement…'));
@@ -1478,7 +1478,7 @@ app.action('weekly_gift_open', async ({ ack, body, client, logger }) => {
   await ack();
   const userId = body.user.id;
   if (weeklyGift.getAllowance(userId) <= 0) {
-    await refreshHome(client, userId, logger); // crédits expirés entre-temps
+    await refreshHome(client, userId, logger); // JP$ expirés entre-temps
     return;
   }
   await openModal(client, body, home.buildWeeklyGiftModal(userId), logger);
@@ -1496,17 +1496,17 @@ app.view('weekly_gift_submit', async ({ ack, body, view, client, logger }) => {
     return ack({
       soi: fieldError('user', 'Tu ne peux pas te les offrir à toi-même 😉'),
       non_inscrit: fieldError('user', "Cette personne n'est pas inscrite à la liste de diffusion."),
-      montant: fieldError('amount', 'Nombre entier de crédits attendu (au moins 1).'),
-      solde: fieldError('amount', allowance > 0 ? `Il ne te reste que ${allowance} crédit(s) à offrir.` : "Tu n'as plus de crédits à offrir cette semaine."),
+      montant: fieldError('amount', 'Nombre entier de JP$ attendu (au moins 1).'),
+      solde: fieldError('amount', allowance > 0 ? `Il ne te reste que ${allowance} JP$ à offrir.` : "Tu n'as plus de JP$ à offrir cette semaine."),
     }[result.error]);
   }
 
   await ack();
-  logger.info(`🎁 <@${userId}> a offert ${amount} crédit(s) du vendredi à <@${targetId}> (reste ${result.remaining})`);
+  logger.info(`🎁 <@${userId}> a offert ${amount} JP$ du vendredi à <@${targetId}> (reste ${result.remaining})`);
   try {
     await safeSendDM(client, targetId, {
-      text: `🎁 <@${userId}> t'a offert ${amount} crédits JeanPip !`,
-      blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `🎁 *<@${userId}> t'a offert ${amount} crédit(s) JeanPip !* 💰\n\nNouveau solde : *${formatCredits(result.recipientBalance)}* crédit(s)\n\nDépense-les avec \`/jeanpip-booster\` ou depuis l'onglet *Accueil* du bot ! 🎁` } }],
+      text: `🎁 <@${userId}> t'a offert ${amount} JP$ !`,
+      blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `🎁 *<@${userId}> t'a offert ${amount} JP$ !* 💰\n\nNouveau solde : *${formatCredits(result.recipientBalance)}* JP$\n\nDépense-les avec \`/jeanpip-booster\` ou depuis l'onglet *Accueil* du bot ! 🎁` } }],
     }, logger);
   } catch (error) {
     logger.error(`❌ DM de don à <@${targetId}> impossible :`, error.message);
@@ -1519,16 +1519,16 @@ app.view('weekly_gift_submit', async ({ ack, body, view, client, logger }) => {
 async function runWeeklyGift(client, logger) {
   const granted = weeklyGift.distributeIfDue(broadcast.getSubscribers());
   if (granted.length === 0) return;
-  logger.info(`🎁 Crédits du vendredi : ${weeklyGift.WEEKLY_AMOUNT} à offrir pour ${granted.length} inscrit(s)`);
+  logger.info(`🎁 JP$ du vendredi : ${weeklyGift.WEEKLY_AMOUNT} à offrir pour ${granted.length} inscrit(s)`);
 
-  const text = `🎁 JeanPip vous donne ${weeklyGift.WEEKLY_AMOUNT} crédits que vous ne pouvez pas garder pour vous, depuis votre dashboard accordez-les aux personnes de votre choix. Bonne fin de semaine !`;
+  const text = `🎁 JeanPip vous donne ${weeklyGift.WEEKLY_AMOUNT} JP$ que vous ne pouvez pas garder pour vous, depuis votre dashboard accordez-les aux personnes de votre choix. Bonne fin de semaine !`;
   for (const userId of granted) {
     try {
       await safeSendDM(client, userId, {
         text,
         blocks: [
           { type: 'section', text: { type: 'mrkdwn', text } },
-          { type: 'context', elements: [{ type: 'mrkdwn', text: `_Onglet *Accueil* du bot → « 🎁 Offrir des crédits ». Ce qui n'est pas donné est perdu vendredi prochain 9h._` }] },
+          { type: 'context', elements: [{ type: 'mrkdwn', text: `_Onglet *Accueil* du bot → « 🎁 Offrir des JP$ ». Ce qui n'est pas donné est perdu vendredi prochain 9h._` }] },
         ],
       }, logger);
     } catch (error) {
@@ -1704,10 +1704,10 @@ app.view('admin_credit_value_submit', async ({ ack, body, view, client, logger }
 
   await ack();
   const label = (n) => String(n).replace('.', ',');
-  logger.info(`⚙️ <@${adminId}> a réglé 1 Jeanpip = ${result.value} crédit(s) (avant : ${result.previous})`);
+  logger.info(`⚙️ <@${adminId}> a réglé 1 Jeanpip = ${result.value} JP$ (avant : ${result.previous})`);
   try {
     await sendAdminResult(client, adminId, {
-      text: `⚙️ *Réglage enregistré : 1 Jeanpip envoyé = ${label(result.value)} crédit(s).*\nAvant : ${label(result.previous)}. S'applique aux prochains Jeanpips (pas de rétroactivité).`,
+      text: `⚙️ *Réglage enregistré : 1 Jeanpip envoyé = ${label(result.value)} JP$.*\nAvant : ${label(result.previous)}. S'applique aux prochains Jeanpips (pas de rétroactivité).`,
     }, logger);
     // Le solde affiché ne change pas, mais la ligne « +N crédit(s) » oui → on republie
     for (const userId of homeViewers) await refreshHome(client, userId, logger);
@@ -1819,7 +1819,7 @@ app.command('/jeanpip-help', async ({ command, ack, client, logger }) => {
             type: 'mrkdwn',
             text: `⚔️ *Attaque Jeanpip — \`/jeanpip-attack\`*\nEnvoie un Jeanpip aux *7 dernières personnes* ayant posté dans le channel où tu lances la commande !\n\n*Comment débloquer :*\n• Envoie *${scores.ATTACK_THRESHOLD} Jeanpips* dans la semaine\n• Tu reçois un DM de notification quand c'est débloqué\n• Lance \`/jeanpip-attack\` dans le channel de ton choix\n• Ton compteur repart à 0, tu peux redébloquer ensuite !
 
-💰 *Pas envie d'attendre ?* Achète une attaque pour *${ATTACK_PRICE} crédits* : lance `/jeanpip-attack` et clique sur le bouton.\n\n⚠️ _Si tu ne l'actives pas avant dimanche 20h → tu perds l'attaque_${isAdmin ? '\n\n👑 *Tu es admin : accès illimité + panneau 👑 Admin dans l\'onglet Accueil (ou `/jeanpip-give @user`, `/jeanpip-auto`) !*' : ''}`,
+💰 *Pas envie d'attendre ?* Achète une attaque pour *${ATTACK_PRICE} JP$* : lance `/jeanpip-attack` et clique sur le bouton.\n\n⚠️ _Si tu ne l'actives pas avant dimanche 20h → tu perds l'attaque_${isAdmin ? '\n\n👑 *Tu es admin : accès illimité + panneau 👑 Admin dans l\'onglet Accueil (ou `/jeanpip-give @user`, `/jeanpip-auto`) !*' : ''}`,
           },
         },
         { type: 'divider' },
@@ -1830,7 +1830,7 @@ app.command('/jeanpip-help', async ({ command, ack, client, logger }) => {
             text: `📮 *Liste de diffusion — \`/jeanpip\`*\n${isSubscribed
               ? '✅ *Tu es inscrit* : tu reçois les Jeanpips que les autres t\'envoient.'
               : '🔕 *Tu n\'es pas inscrit* : personne ne peut t\'envoyer de Jeanpip.'
-            }\n\nPar défaut *personne* n'est inscrit. Tant que tu n'es pas dans la liste :\n• Quand quelqu'un réagit à ton message, tu ne reçois rien\n• Tu reçois quand même *ton* image quand c'est *toi* qui réagis\n• Tes boosters fonctionnent normalement\n\n⚠️ _Envoyer un Jeanpip à quelqu'un qui n'est pas inscrit ne rapporte aucun crédit._\n\nTape \`/jeanpip\` pour entrer ou sortir de la liste.`,
+            }\n\nPar défaut *personne* n'est inscrit. Tant que tu n'es pas dans la liste :\n• Quand quelqu'un réagit à ton message, tu ne reçois rien\n• Tu reçois quand même *ton* image quand c'est *toi* qui réagis\n• Tes boosters fonctionnent normalement\n\n⚠️ _Envoyer un Jeanpip à quelqu'un qui n'est pas inscrit ne rapporte aucun JP$._\n\nTape \`/jeanpip\` pour entrer ou sortir de la liste.`,
           },
         },
         { type: 'divider' },
@@ -1838,7 +1838,7 @@ app.command('/jeanpip-help', async ({ command, ack, client, logger }) => {
           type: 'section',
           text: {
             type: 'mrkdwn',
-            text: `🎁 *Boosters JeanPip — \`/jeanpip-booster\`*\nTu as *${creditBalance}* crédit(s) 💰\n\n*Comment gagner des crédits :*\n• *+${creditsPerJeanpipLabel()} crédit(s)* à chaque réaction :${TARGET_EMOJI}: que TU poses (spam exclu)\n\n*Comment les dépenser :*\n• \`/jeanpip-booster\` → achète un booster (${boosters.listBoosters().map((b) => `${b.emoji} ${b.price}`).join(' · ')})\n• \`/jeanpip-attack\` → achète une Attaque Jeanpip (${ATTACK_PRICE}) si tu n'en as pas de gratuite\n• Chaque booster = *8 cartes* révélées une par une\n• Plus le booster est cher, plus les cartes rares sont probables !\n\n_Tape \`/jeanpip-credits\` pour voir ton solde à tout moment._`,
+            text: `🎁 *Boosters JeanPip — \`/jeanpip-booster\`*\nTu as *${creditBalance}* JP$ 💰\n\n*Comment gagner des JP$ :*\n• *+${creditsPerJeanpipLabel()} JP$* à chaque réaction :${TARGET_EMOJI}: que TU poses (spam exclu)\n\n*Comment les dépenser :*\n• \`/jeanpip-booster\` → achète un booster (${boosters.listBoosters().map((b) => `${b.emoji} ${b.price}`).join(' · ')})\n• \`/jeanpip-attack\` → achète une Attaque Jeanpip (${ATTACK_PRICE}) si tu n'en as pas de gratuite\n• Chaque booster = *8 cartes* révélées une par une\n• Plus le booster est cher, plus les cartes rares sont probables !\n\n_Tape \`/jeanpip-credits\` pour voir ton solde à tout moment._`,
           },
         },
         { type: 'divider' },
@@ -1854,7 +1854,7 @@ app.command('/jeanpip-help', async ({ command, ack, client, logger }) => {
           type: 'section',
           text: {
             type: 'mrkdwn',
-            text: `🚜 *Anti-farm*\nSi tu poses *plus de ${farmMaxPerHour()} Jeanpips en 1 heure*, tu prends une alerte et pendant *1 heure* :\n• ❌ Tes Jeanpips n'envoient plus rien aux autres\n• ❌ Tu n'accumules plus de crédits\n• ✅ Tu continues à *recevoir* des Jeanpips\n• ✅ Tu peux toujours *ouvrir tes boosters*\n\n_Le Jeanpip se déguste, il ne se farme pas._`,
+            text: `🚜 *Anti-farm*\nSi tu poses *plus de ${farmMaxPerHour()} Jeanpips en 1 heure*, tu prends une alerte et pendant *1 heure* :\n• ❌ Tes Jeanpips n'envoient plus rien aux autres\n• ❌ Tu n'accumules plus de JP$\n• ✅ Tu continues à *recevoir* des Jeanpips\n• ✅ Tu peux toujours *ouvrir tes boosters*\n\n_Le Jeanpip se déguste, il ne se farme pas._`,
           },
         },
         { type: 'divider' },
@@ -1862,7 +1862,7 @@ app.command('/jeanpip-help', async ({ command, ack, client, logger }) => {
           type: 'section',
           text: {
             type: 'mrkdwn',
-            text: `📋 *Toutes les commandes*\n\`/jeanpip\` → Entrer ou sortir de la liste de diffusion\n\`/jeanpip-help\` → Affiche ce message avec ton score actuel\n\`/jeanpip-attack\` → Lance une Attaque Jeanpip sur le channel (gratuite si débloquée, sinon ${ATTACK_PRICE} crédits)\n\`/jeanpip-credits\` → Affiche ton solde de crédits\n\`/jeanpip-booster\` → Ouvre la boutique de boosters${isAdmin ? '\n`/jeanpip-give @user` → (admin) Offre une Attaque Jeanpip à quelqu\'un\n`/jeanpip-give-credits @user <montant>` → (admin) Crédite le porte-monnaie de quelqu\'un\n`/jeanpip-addmedia <lien> <rareté> [@auteur] [titre]` → (admin) Ajoute un média à la banque (l\'auteur gagne des crédits)\n`/jeanpip-auto add|remove|list` → (admin) Gère les cibles auto-react' : ''}`,
+            text: `📋 *Toutes les commandes*\n\`/jeanpip\` → Entrer ou sortir de la liste de diffusion\n\`/jeanpip-help\` → Affiche ce message avec ton score actuel\n\`/jeanpip-attack\` → Lance une Attaque Jeanpip sur le channel (gratuite si débloquée, sinon ${ATTACK_PRICE} JP$)\n\`/jeanpip-credits\` → Affiche ton solde de JP$\n\`/jeanpip-booster\` → Ouvre la boutique de boosters${isAdmin ? '\n`/jeanpip-give @user` → (admin) Offre une Attaque Jeanpip à quelqu\'un\n`/jeanpip-give-credits @user <montant>` → (admin) Crédite le porte-monnaie de quelqu\'un\n`/jeanpip-addmedia <lien> <rareté> [@auteur] [titre]` → (admin) Ajoute un média à la banque (l\'auteur gagne des JP$)\n`/jeanpip-auto add|remove|list` → (admin) Gère les cibles auto-react' : ''}`,
           },
         },
         {
@@ -1919,7 +1919,7 @@ function createCardLook(client, media, logger) {
 
   // 🎁 Crédits JeanPip du vendredi 9h (vérifié toutes les 5 min, rattrapé au redémarrage)
   const weeklyGiftTick = () => runWeeklyGift(app.client, console)
-    .catch((error) => console.error('❌ Crédits du vendredi :', error.message));
+    .catch((error) => console.error('❌ JP$ du vendredi :', error.message));
   weeklyGiftTick();
   setInterval(weeklyGiftTick, 5 * 60 * 1000);
 

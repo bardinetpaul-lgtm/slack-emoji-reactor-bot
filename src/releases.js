@@ -18,8 +18,13 @@ const RELEASES = [
   {
     version: '2.1',
     date: '2026-10-01',
-    title: 'Les nouveautés dans l\'Accueil',
+    title: 'L\'Arène sur grand écran',
     changes: [
+      '🖥️ Arène : l\'écran de combat est repensé pour l\'ordinateur. Terrain, chrono, élixir et cartes tiennent dans la fenêtre, sans défiler.',
+      '⌨️ Arène : chaque carte affiche sa touche du clavier (1 à 8) pour la choisir, Échap pour annuler.',
+      '🐛 Arène : cliquer une carte puis cliquer le terrain pour la poser fonctionne à tous les coups (le clic sur la carte était parfois perdu).',
+      '⏳ Arène : pendant la préparation, le décompte reste visible quand tu parcours ta collection.',
+      '💰 Les crédits changent de nom : ce sont maintenant des *JP$*. Ton solde ne change pas.',
       '📰 Nouveau bouton *Nouveautés* dans l\'Accueil : tout ce qui change dans le jeu, version par version.',
       '🏷️ Le numéro de version du jeu est maintenant affiché en bas de l\'Accueil.',
     ],
@@ -29,10 +34,10 @@ const RELEASES = [
     date: '2026-09-30',
     title: 'Le jeu Jeanpip',
     changes: [
-      '💰 Des crédits à chaque Jeanpip envoyé, et l\'Attaque Jeanpip à débloquer chaque semaine.',
+      '💰 Des JP$ à chaque Jeanpip envoyé, et l\'Attaque Jeanpip à débloquer chaque semaine.',
       '🎁 Les boosters de 8 cartes, avec leur ouverture animée.',
       '📒 Le classeur : toute ta collection rangée comme un album Panini.',
-      '🎁 Chaque vendredi 9h, 20 crédits JeanPip à offrir aux autres.',
+      '🎁 Chaque vendredi 9h, 20 JP$ à offrir aux autres.',
       '⚔️ L\'Arène : monte ton deck et affronte les autres joueurs.',
       '🎀 Le booster Octobre Rose et ses 6 cartes exclusives.',
     ],

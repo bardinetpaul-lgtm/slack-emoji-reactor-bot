@@ -82,11 +82,11 @@ process.on('unhandledRejection', (e) => { origLog('❌ unhandledRejection', e); 
   const weeklyGift = require(path.join(TMP, 'src', 'weeklyGift.js'));
   const check = (ok, msg) => { origLog(`  ${ok ? '✅' : '❌'} ${msg}`); if (!ok) process.exitCode = 1; };
 
-  origLog('\n🧪 app.js — crédits du vendredi');
+  origLog('\n🧪 app.js — JP$ du vendredi');
   check(logs.some((l) => l.includes('Bot lancé')), 'le bot démarre');
 
   // 🎁 Distribution au démarrage
-  const fridayDMs = posted.filter((m) => m.text && m.text.includes('JeanPip vous donne 20 crédits'));
+  const fridayDMs = posted.filter((m) => m.text && m.text.includes('JeanPip vous donne 20 JP$'));
   check(fridayDMs.length === 2, `DM du vendredi envoyé aux 2 inscrits (${fridayDMs.length})`);
   check(fridayDMs[0] && fridayDMs[0].text.includes('aux personnes de votre choix'), 'texte : « aux personnes de votre choix »');
   check(weeklyGift.getAllowance('U1') === 20, 'U1 : 20 à offrir (les 3 de la semaine passée sont perdus)');
@@ -95,10 +95,10 @@ process.on('unhandledRejection', (e) => { origLog('❌ unhandledRejection', e); 
   const ack = async () => {};
   await actions.weekly_gift_open({ ack, body: { user: { id: 'U1' }, trigger_id: 't' }, client: fakeClient, logger });
   const modalView = opened.at(-1) && opened.at(-1).view;
-  check(modalView && modalView.callback_id === 'weekly_gift_submit', 'bouton → modale « Offrir des crédits »');
+  check(modalView && modalView.callback_id === 'weekly_gift_submit', 'bouton → modale « Offrir des JP$ »');
   const home = require(path.join(TMP, 'src', 'home.js'));
   const homeView = home.buildHomeView('U1', { isAdmin: false, attackPrice: 50, creditsPerJeanpipLabel: '0,5', targetEmoji: 'jeanpip', farmRemainingMs: 0, farmQuota: { used: 0, max: 10, nextFreeMs: 0 }, formatRemaining: String });
-  check(JSON.stringify(homeView).includes('weekly_gift_open'), 'Accueil : bouton « Offrir des crédits » affiché');
+  check(JSON.stringify(homeView).includes('weekly_gift_open'), 'Accueil : bouton « Offrir des JP$ » affiché');
 
   // 📰 Nouveautés : version au démarrage + bouton → modale
   const { currentVersion } = require(path.join(TMP, 'src', 'releases.js'));
@@ -133,6 +133,6 @@ process.on('unhandledRejection', (e) => { origLog('❌ unhandledRejection', e); 
 
   try { require(path.join(TMP, 'src', 'db.js')).close(); } catch { /* base jamais ouverte */ }   // Windows : fichier ouvert = non supprimable
   fs.rmSync(TMP, { recursive: true, force: true });
-  origLog(process.exitCode ? '\n❌ ÉCHECS ci-dessus\n' : '\n🎉 Crédits du vendredi côté Slack OK\n');
+  origLog(process.exitCode ? '\n❌ ÉCHECS ci-dessus\n' : '\n🎉 JP$ du vendredi côté Slack OK\n');
   process.exit(process.exitCode || 0);
 })();

@@ -115,15 +115,15 @@
         type: 'bar',
         data: {
           labels: [...src.map((x) => `+ ${label(x.key)}`), ...use.map((x) => `− ${label(x.key)}`)],
-          datasets: [{ label: 'Crédits', data: [...src.map((x) => x.credits), ...use.map((x) => x.credits)], backgroundColor: [...src.map(() => COLORS[2]), ...use.map(() => COLORS[1])], borderRadius: 4 }],
+          datasets: [{ label: 'JP$', data: [...src.map((x) => x.credits), ...use.map((x) => x.credits)], backgroundColor: [...src.map(() => COLORS[2]), ...use.map(() => COLORS[1])], borderRadius: 4 }],
         },
         options: { indexAxis: 'y', plugins: { legend: { display: false } } },
       });
     },
     purchases(d) {
-      kpis('purchases', [{ key: 'purchases', text: 'Achats' }, { key: 'credits', text: 'Crédits dépensés' }, { key: 'buyers', text: 'Acheteurs' }], d);
+      kpis('purchases', [{ key: 'purchases', text: 'Achats' }, { key: 'credits', text: 'JP$ dépensés' }, { key: 'buyers', text: 'Acheteurs' }], d);
       chart('c-items', { type: 'bar', data: { labels: d.series.labels, datasets: Object.entries(d.series.byItem).map(([k, v], i) => bar(label(k), v, i, { stack: 'a' })) }, options: { scales: { x: { stacked: true }, y: { stacked: true } } } });
-      table('t-items', [['Article'], ['Achats', 1], ['Crédits', 1], ['Acheteurs', 1]], d.tables.items.map((x) => [label(x.key), fmt(x.count, 0), fmt(x.credits), fmt(x.buyers, 0)]));
+      table('t-items', [['Article'], ['Achats', 1], ['JP$', 1], ['Acheteurs', 1]], d.tables.items.map((x) => [label(x.key), fmt(x.count, 0), fmt(x.credits), fmt(x.buyers, 0)]));
     },
     boosters(d) {
       kpis('boosters', [{ key: 'bought', text: 'Achetés' }, { key: 'granted', text: 'Gagnés (arène)' }, { key: 'opened', text: 'Ouverts' }, { key: 'stock', text: 'Non ouverts (stock)' }], d);
@@ -143,7 +143,7 @@
     arena(d) {
       since('arena', d.since);
       kpis('arena', [{ key: 'matches', text: 'Combats' }, { key: 'decisive', text: 'Avec vainqueur' }, { key: 'draws', text: 'Nuls' }, { key: 'cancelled', text: 'Annulés', invert: true },
-        { key: 'rewards', text: 'Crédits gagnés' }, { key: 'shop', text: 'Crédits dépensés (boutique)' }], d);
+        { key: 'rewards', text: 'JP$ gagnés' }, { key: 'shop', text: 'JP$ dépensés (boutique)' }], d);
       const s = d.series;
       chart('c-matches', { type: 'bar', data: { labels: s.labels, datasets: [bar('Avec vainqueur', s.decisive, 0, { stack: 'a' }), bar('Nuls', s.draws, 1, { stack: 'a' }), bar('Annulés', s.cancelled, 2, { stack: 'a' })] }, options: { scales: { x: { stacked: true }, y: { stacked: true } } } });
       table('t-topcards', [['Carte'], ['Rareté'], ['Jouée', 1], ['Victoires', 1], ['% victoire', 1]],

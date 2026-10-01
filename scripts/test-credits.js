@@ -35,7 +35,7 @@ const invariant = (conn) => conn.prepare(`
 {
   const { tmp, credits, db } = freshProject(JSON.stringify({ users: { UA: 42, UB: 12.5, UZ: 0 } }));
   check('import : solde UA', credits.getBalance('UA') === 42);
-  check('import : demi-crédit UB', credits.getBalance('UB') === 12.5);
+  check('import : demi-JP$ UB', credits.getBalance('UB') === 12.5);
   const conn = db.getDb();
   const opening = conn.prepare("SELECT user_id, amount, source FROM credit_moves WHERE kind = 'opening' ORDER BY user_id").all();
   check('import : 2 mouvements opening (solde 0 ignoré)', opening.length === 2 && opening[0].source === 'migration');
@@ -141,5 +141,5 @@ const invariant = (conn) => conn.prepare(`
   fs.rmSync(tmp, { recursive: true, force: true });
 }
 
-console.log(failures ? `\n❌ ${failures} échec(s)` : '\n🎉 Crédits SQLite OK');
+console.log(failures ? `\n❌ ${failures} échec(s)` : '\n🎉 JP$ SQLite OK');
 process.exit(failures ? 1 : 0);

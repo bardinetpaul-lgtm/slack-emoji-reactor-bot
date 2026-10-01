@@ -71,7 +71,7 @@ check('butin : annoncé au perdant', r.B.stolen && r.B.stolen.url === r.A.loot.u
 check('butin : le perdant ne le garde pas', collections.getCount('UB', r.A.loot.url) === 0);
 check('récap : pertes listées', r.A.lost.length === 1 && r.B.lost.length === 2);
 check('récompense : pack booster Commun en attente', r.A.boosterId && boosters.getPending(r.A.boosterId).type === 'common' && boosters.getPending(r.A.boosterId).owner === 'UA');
-check('récompense : +10 crédits', credits.getBalance('UA') === 10 && r.A.credits === 10);
+check('récompense : +10 JP$', credits.getBalance('UA') === 10 && r.A.credits === 10);
 check('perdant : aucune récompense', !r.B.boosterId && credits.getBalance('UB') === 0);
 check('stats enregistrées', arenaStore.getStats('UA').wins === 1 && arenaStore.getStats('UB').losses === 1);
 
@@ -109,7 +109,7 @@ const results = [0, 1, 2].map((i) => settleMatch({
   result: { winner: 'A', reason: 'qg', poses: [pose('B', `h${i}`, 'destroyed')] },
 }, { now: T0 }));
 check('2 premières victoires récompensées', results[0].A.boosterId && results[1].A.boosterId);
-check('3e contre le même adversaire : pas de pack ni crédits', !results[2].A.boosterId && results[2].A.credits === 0 && results[2].A.rewarded === false);
+check('3e contre le même adversaire : pas de pack ni JP$', !results[2].A.boosterId && results[2].A.credits === 0 && results[2].A.rewarded === false);
 check('3e : le butin s\'applique quand même', results[2].A.loot && collections.getCount('UG', 'h2') === 1);
 
 // ─── 🏳 Rappel : carte sauvée même en cas de défaite, hors butin ───

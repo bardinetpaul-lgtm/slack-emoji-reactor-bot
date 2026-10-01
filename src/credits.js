@@ -82,7 +82,7 @@ function ensureImported() {
       }
     })();
     fs.writeFileSync(MARKER_PATH, JSON.stringify({ at, users: count, total }, null, 2), 'utf-8');
-    console.log(`💰 credits.json importé dans SQLite : ${count} solde(s), total ${total} crédit(s)`);
+    console.log(`💰 credits.json importé dans SQLite : ${count} solde(s), total ${total} JP$`);
   }
   imported = true;
 }

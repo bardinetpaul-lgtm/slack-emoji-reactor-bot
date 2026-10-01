@@ -84,10 +84,10 @@ bal.run('UA', 45);
 
 // 🛒 Achats
 const pu = purchases(f, { db });
-check('4 achats, 110 crédits, 2 acheteurs', pu.kpis.purchases === 4 && pu.kpis.credits === 110 && pu.kpis.buyers === 2);
+check('4 achats, 110 JP$, 2 acheteurs', pu.kpis.purchases === 4 && pu.kpis.credits === 110 && pu.kpis.buyers === 2);
 const common = pu.tables.items.find((x) => x.key === 'booster/common');
 check('booster/common : 2 achats, 2 acheteurs', common.count === 2 && common.buyers === 2 && common.credits === 40);
-check('classement par crédits', pu.tables.items[0].key === 'booster/rare');
+check('classement par JP$', pu.tables.items[0].key === 'booster/rare');
 check('familles', pu.tables.families.find((x) => x.family === 'booster').count === 3);
 check('série par article', pu.series.byItem['booster/common'].join() === '0,2');
 

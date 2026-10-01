@@ -45,7 +45,7 @@ const check = (ok, msg) => { oLog(`  ${ok ? '✅' : '❌'} ${msg}`); if (!ok) pr
   oLog('\n🧪 Attribution des médias');
   let a = await submit({ url: 'https://x.test/1.gif', rarity: 'legendary', author: 'UAUTH' });
   check(a === undefined, 'modale : ack sans erreur');
-  check(credits.getBalance('UAUTH') === 30, 'légendaire → +30 crédits');
+  check(credits.getBalance('UAUTH') === 30, 'légendaire → +30 JP$');
   check(posted.some((m) => m.channel === 'D_UAUTH' && m.text.includes('+30')), 'auteur notifié en DM');
   check(posted.some((m) => m.channel === 'D_UADMIN' && m.blocks[0].text.text.includes('Attribué à <@UAUTH>')), 'admin voit l’attribution');
   check(bank().at(-1).author === 'UAUTH', 'auteur enregistré sur le média');

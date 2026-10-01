@@ -168,6 +168,20 @@ const give = (s, side, urls) => { s.players[side].hand = urls.slice(); s.players
   const bt = { x: cmp.units[0].x, y: cmp.units[0].y };
   run(cmp, 1000);
   check('Charge : le groupe touché fonce (vitesse ×2)', fast > engine.distance(cmp.units[0], bt) * 1.8);
+
+  // Charge dans le camp ennemi (les deux camps : la profondeur est vue de son propre camp)
+  for (const side of ['A', 'B']) {
+    const far = match(player('UA', DECK_A, { captain: 'guerrier1' }), player('UB', DECK_B, { captain: 'guerrier3' }));
+    const url = side === 'A' ? 'guerrier2' : 'guerrier4';
+    give(far, side, [url]);
+    engine.applyAction(far, side, { type: 'deploy', url, lane: 1 });
+    run(far, 1000);
+    const depthOf = (u) => (side === 'A' ? u.y : 100 - u.y);
+    for (let i = 0; i < 60 && far.units.some((u) => u.side === side) && depthOf(far.units.find((u) => u.side === side)) < 60; i += 1) run(far, 500);
+    const u = far.units.find((x) => x.side === side);
+    const res = u ? engine.applyAction(far, side, { type: 'power', x: u.x, depth: depthOf(u) }) : { ok: false };
+    check(`Charge dans le camp ennemi (camp ${side}) : acceptée et appliquée`, Boolean(u) && depthOf(u) >= 60 && res.ok && u.chargeUntil > far.timeMs);
+  }
 }
 
 // ═══ 🏳 Rappel ═══

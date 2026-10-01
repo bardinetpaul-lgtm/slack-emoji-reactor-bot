@@ -138,7 +138,7 @@
       ['', 'Victoire', 'Défaite', 'Nul'],
       ['Carte posée détruite', 'perdue', 'perdue', 'perdue'],
       ['Carte posée survivante', 'revient', 'perdue', 'revient'],
-      ['Récompense', '🎁 booster + 10 crédits + 🃏 1 carte volée', '—', '—'],
+      ['Récompense', '🎁 booster + 10 JP$ + 🃏 1 carte volée', '—', '—'],
     ];
     rows.forEach((r, i) => {
       const tr = el('tr');

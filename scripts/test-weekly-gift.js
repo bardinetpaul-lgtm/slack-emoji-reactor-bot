@@ -88,5 +88,5 @@ check('… puis plus rien', weeklyGift.distributeIfDue(broadcast.getSubscribers(
 
 try { require(path.join(TMP, 'src', 'db.js')).close(); } catch { /* base jamais ouverte */ }   // Windows : fichier ouvert = non supprimable
 fs.rmSync(TMP, { recursive: true, force: true });
-console.log(failures ? `\n❌ ${failures} échec(s)\n` : '\n🎉 Crédits du vendredi OK\n');
+console.log(failures ? `\n❌ ${failures} échec(s)\n` : '\n🎉 JP$ du vendredi OK\n');
 process.exit(failures ? 1 : 0);

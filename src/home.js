@@ -75,7 +75,7 @@ function buildHomeView(userId, ctx) {
 
   const blocks = [
     { type: 'header', text: { type: 'plain_text', text: '🤖 Jeanpip', emoji: true } },
-    section(`💰 *Ton solde : ${formatCredits(balance)} crédit(s)*\n_+${ctx.creditsPerJeanpipLabel} crédit(s) à chaque réaction :${ctx.targetEmoji}: que tu poses (Jeanpip délivré, hors spam/farm)._`),
+    section(`💰 *Ton solde : ${formatCredits(balance)} JP$*\n_+${ctx.creditsPerJeanpipLabel} JP$ à chaque réaction :${ctx.targetEmoji}: que tu poses (Jeanpip délivré, hors spam/farm)._`),
     { type: 'divider' },
   ];
 
@@ -83,8 +83,8 @@ function buildHomeView(userId, ctx) {
   const giftAllowance = weeklyGift.getAllowance(userId);
   if (giftAllowance > 0) {
     blocks.push(section(
-      `🎁 *Tu as ${giftAllowance} crédit(s) JeanPip à offrir*\n_Tu ne peux pas les garder : donne-les aux inscrits de ton choix. Ce qui n'est pas donné est perdu vendredi 9h._`,
-      button('🎁 Offrir des crédits', 'weekly_gift_open', { style: 'primary' }),
+      `🎁 *Tu as ${giftAllowance} JP$ à offrir*\n_Tu ne peux pas les garder : donne-les aux inscrits de ton choix. Ce qui n'est pas donné est perdu vendredi 9h._`,
+      button('🎁 Offrir des JP$', 'weekly_gift_open', { style: 'primary' }),
     ));
     blocks.push({ type: 'divider' });
   }
@@ -103,10 +103,10 @@ function buildHomeView(userId, ctx) {
     attackText = `⚔️ *Attaque Jeanpip :* ✅ *débloquée, gratuite !* À lancer avant dimanche 20h.`;
   } else if (balance >= ctx.attackPrice) {
     const missing = Math.max(0, scores.ATTACK_THRESHOLD - score);
-    attackText = `⚔️ *Attaque Jeanpip :* ${ctx.attackPrice} crédits\n_Ou envoie encore ${missing} Jeanpip(s) cette semaine pour la débloquer gratuitement._`;
+    attackText = `⚔️ *Attaque Jeanpip :* ${ctx.attackPrice} JP$\n_Ou envoie encore ${missing} Jeanpip(s) cette semaine pour la débloquer gratuitement._`;
   } else {
     const missing = Math.max(0, scores.ATTACK_THRESHOLD - score);
-    attackText = `⚔️ *Attaque Jeanpip :* ${ctx.attackPrice} crédits — ❌ il te manque *${formatCredits(ctx.attackPrice - balance)}* crédit(s).\n_Ou envoie encore ${missing} Jeanpip(s) cette semaine pour la débloquer gratuitement._`;
+    attackText = `⚔️ *Attaque Jeanpip :* ${ctx.attackPrice} JP$ — ❌ il te manque *${formatCredits(ctx.attackPrice - balance)}* JP$.\n_Ou envoie encore ${missing} Jeanpip(s) cette semaine pour la débloquer gratuitement._`;
     attackButton = null;
   }
 
@@ -203,7 +203,7 @@ ${seasonal.emoji} *Booster ${seasonal.label}* : 1 ou 2 cartes exclusives qu'on n
 function buildFarmQuotaBlock(ctx) {
   let text;
   if (ctx.farmRemainingMs > 0) {
-    text = `🚜 *Pénalité anti-farm :* encore *${ctx.formatRemaining(ctx.farmRemainingMs)}* — tes Jeanpips n'envoient rien aux autres et ne rapportent pas de crédits.`;
+    text = `🚜 *Pénalité anti-farm :* encore *${ctx.formatRemaining(ctx.farmRemainingMs)}* — tes Jeanpips n'envoient rien aux autres et ne rapportent pas de JP$.`;
   } else {
     const { used, max, nextFreeMs } = ctx.farmQuota;
     const full = used >= max;
@@ -233,16 +233,16 @@ function buildAdminBlocks(autoTargets, statsUrl = null) {
       block_id: 'home_admin',
       elements: [
         button('🎁 Offrir une attaque', 'admin_give_attack_open'),
-        button('💳 Crédits ±', 'admin_credits_open'),
+        button('💳 JP$ ±', 'admin_credits_open'),
         button('🖼️ Ajouter un média', 'admin_addmedia_open'),
         button('⚔️ Type de carte', 'admin_card_type_open'),
         button('🗑️ Retirer un média', 'admin_removemedia_open'),
         button('🎪 Ajouter une cible', 'admin_target_add_open'),
-        button('⚙️ Crédits par Jeanpip', 'admin_credit_value_open'),
+        button('⚙️ JP$ par Jeanpip', 'admin_credit_value_open'),
         button('🚜 Limite anti-farm', 'admin_farm_limit_open'),
       ],
     },
-    { type: 'context', elements: [{ type: 'mrkdwn', text: `⚙️ Réglages actuels : *1 Jeanpip envoyé = ${formatCredits(settings.getCreditsPerJeanpip())} crédit(s)* · 🚜 *anti-farm : ${settings.getFarmMaxPerHour()} Jeanpips/h max*` }] },
+    { type: 'context', elements: [{ type: 'mrkdwn', text: `⚙️ Réglages actuels : *1 Jeanpip envoyé = ${formatCredits(settings.getCreditsPerJeanpip())} JP$* · 🚜 *anti-farm : ${settings.getFarmMaxPerHour()} Jeanpips/h max*` }] },
     section(`🎪 *Cibles auto-react (${autoTargets.length})*${autoTargets.length ? '' : '\n_Aucune cible auto-react configurée._'}`),
   ];
 
@@ -287,7 +287,7 @@ function buildAttackModal(userId, { isAdmin, attackPrice }) {
   const cost = {
     admin: '👑 *Illimitée* (admin)',
     free: '✅ *Gratuite* (débloquée cette semaine)',
-    paid: `💰 *${attackPrice} crédits* — ton solde : *${formatCredits(credits.getBalance(userId))}*`,
+    paid: `💰 *${attackPrice} JP$* — ton solde : *${formatCredits(credits.getBalance(userId))}*`,
   }[mode];
 
   return modal('home_attack_submit', 'Attaque Jeanpip', '⚔️ Lancer', [
@@ -336,13 +336,13 @@ function buildReleaseNotesModal(list = releases.RELEASES) {
 /** 🎁 Modale « Offrir des crédits » (crédits JeanPip du vendredi). */
 function buildWeeklyGiftModal(userId) {
   const allowance = weeklyGift.getAllowance(userId);
-  return modal('weekly_gift_submit', 'Offrir des crédits', '🎁 Offrir', [
-    section(`🎁 Il te reste *${allowance} crédit(s)* à offrir cette semaine.\n_Ils vont dans le porte-monnaie de la personne choisie. Tu peux les répartir entre plusieurs personnes._`),
+  return modal('weekly_gift_submit', 'Offrir des JP$', '🎁 Offrir', [
+    section(`🎁 Il te reste *${allowance} JP$* à offrir cette semaine.\n_Ils vont dans le porte-monnaie de la personne choisie. Tu peux les répartir entre plusieurs personnes._`),
     userInput('À qui ?'),
     {
       type: 'input',
       block_id: 'amount',
-      label: { type: 'plain_text', text: 'Combien de crédits ?' },
+      label: { type: 'plain_text', text: 'Combien de JP$ ?' },
       element: {
         type: 'number_input',
         action_id: 'value',
@@ -363,14 +363,14 @@ function buildGiveAttackModal() {
 }
 
 function buildCreditsModal() {
-  return modal('admin_credits_submit', 'Crédits ±', 'Valider', [
+  return modal('admin_credits_submit', 'JP$ ±', 'Valider', [
     userInput('Personne'),
     {
       type: 'input',
       block_id: 'amount',
       label: { type: 'plain_text', text: 'Montant' },
       element: { type: 'plain_text_input', action_id: 'value', placeholder: { type: 'plain_text', text: 'ex. 50, 2,5 ou -20' } },
-      hint: { type: 'plain_text', text: 'Positif = cadeau (la personne est notifiée). Négatif = correction (sans notification). Demi-crédits acceptés.' },
+      hint: { type: 'plain_text', text: 'Positif = cadeau (la personne est notifiée). Négatif = correction (sans notification). Demi-JP$ acceptés.' },
     },
   ]);
 }
@@ -419,7 +419,7 @@ function buildAddMediaModal() {
       optional: true,
       label: { type: 'plain_text', text: 'Auteur (optionnel)' },
       element: { type: 'users_select', action_id: 'value', placeholder: { type: 'plain_text', text: 'Qui t’a envoyé ce média ?' } },
-      hint: { type: 'plain_text', text: `La personne reçoit des crédits selon la rareté : ${Object.entries(AUTHOR_REWARDS).map(([key, n]) => `${RARITIES[key].emoji} ${n}`).join(' · ')}. Elle est notifiée en DM.` },
+      hint: { type: 'plain_text', text: `La personne reçoit des JP$ selon la rareté : ${Object.entries(AUTHOR_REWARDS).map(([key, n]) => `${RARITIES[key].emoji} ${n}`).join(' · ')}. Elle est notifiée en DM.` },
     },
   ]);
 }
@@ -534,7 +534,7 @@ function buildRemoveMediaModal() {
       },
       hint: { type: 'plain_text', text: `Du plus récent au plus ancien${removable.length > MAX_REMOVABLE_SHOWN ? ` (les ${MAX_REMOVABLE_SHOWN} derniers)` : ''}. Seuls les médias ajoutés en live sont listés.` },
     },
-    { type: 'context', elements: [{ type: 'mrkdwn', text: `_Le média ne sortira plus au tirage. Ceux qui l'ont déjà le gardent (« Hors série » du classeur), son numéro n'est pas réattribué et les crédits de l'auteur ne sont pas repris. Tu recevras un aperçu en DM._` }] },
+    { type: 'context', elements: [{ type: 'mrkdwn', text: `_Le média ne sortira plus au tirage. Ceux qui l'ont déjà le gardent (« Hors série » du classeur), son numéro n'est pas réattribué et les JP$ de l'auteur ne sont pas repris. Tu recevras un aperçu en DM._` }] },
   ]);
 }
 
@@ -547,11 +547,11 @@ function buildAddTargetModal() {
 
 /** ⚙️ Modale « Crédits par Jeanpip » (valeur actuelle pré-remplie). */
 function buildCreditValueModal() {
-  return modal('admin_credit_value_submit', 'Crédits par Jeanpip', 'Enregistrer', [
+  return modal('admin_credit_value_submit', 'JP$ par Jeanpip', 'Enregistrer', [
     {
       type: 'input',
       block_id: 'value',
-      label: { type: 'plain_text', text: '1 Jeanpip envoyé = combien de crédits ?' },
+      label: { type: 'plain_text', text: '1 Jeanpip envoyé = combien de JP$ ?' },
       element: {
         type: 'plain_text_input',
         action_id: 'value',

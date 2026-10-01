@@ -72,7 +72,7 @@ const u2 = a.tables.topCards.find((x) => x.url === 'u2');
 check('u2 jouée 4 fois (présence par deck), 1 victoire → 25 %', u2.plays === 4 && u2.wins === 1 && u2.winRate === 25);
 const u1 = a.tables.topCards.find((x) => x.url === 'u1');
 check('doublon dans un deck compté une fois', u1.plays === 2);
-check('crédits arène', a.kpis.rewards === 10 && a.kpis.shop === 25);
+check('JP$ arène', a.kpis.rewards === 10 && a.kpis.shop === 25);
 check('joueurs actifs arène', a.tables.players[0].userId === 'UA' && a.tables.players[0].matches === 3);
 check('filtre joueur UC', game.arena({ ...f, user: 'UC' }, { db }).kpis.matches === 1);
 
