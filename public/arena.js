@@ -196,7 +196,7 @@
       }
       if (on) b.classList.add('selected');
       b.setAttribute('aria-pressed', String(on));
-      b.append(cardFace(c), costBadge(c.cost));
+      b.append(cardFace(c), costBadge(c.cost), el('span', 'key', String(index + 1)));   // ⌨️ touche (affichée sur ordinateur)
       // 💎 rareté (cadre + étiquette) · 🎭 rôle
       const rarity = DeckEditor.RARITIES[c.rarity] ? c.rarity : 'common';
       const role = DeckEditor.ROLES[c.archetype];
@@ -210,18 +210,27 @@
       if (spec) { const sp = el('span', 'spec', spec.emoji); sp.title = `${spec.label} : ${spec.desc}`; b.append(sp); }
       if (c.echo) b.append(el('span', 'tag', 'Écho'));
       else if (c.rented) b.append(el('span', 'tag rented', 'Achetée'));
+      // clavier (Entrée / Espace) ; à la souris et au doigt, c'est le « pointerup » de la main qui choisit
       b.addEventListener('click', (e) => {
         e.stopPropagation();
         if (swallowClick) return;
-        const why = view && blockOf(c, view);
-        if (why) flash(blockText(why, c), 88);   // on dit pourquoi, tout de suite
-        if (why && why.reason === 'pump_active') return;
-        selectCard(on ? null : { index, url: c.url });
+        tapCard(index);
       });
       return b;
     }));
 
     updateCharge(v);
+  }
+
+  /** Toucher une carte de la main : la choisit (ou la repose si elle l'était déjà). */
+  function tapCard(index) {
+    const c = view && (view.players[view.you].hand || [])[index];
+    if (!c) return;
+    const why = blockOf(c, view);
+    if (why) flash(blockText(why, c), 88);   // on dit pourquoi, tout de suite
+    if (why && why.reason === 'pump_active') return;
+    const on = Boolean(selected) && selected.index === index;
+    selectCard(on ? null : { index, url: c.url });
   }
 
   function selectCard(slot) {
@@ -449,13 +458,22 @@ ${DeckEditor.roleText(e.archetype)}`;
     if (!drag) return;
     const d = drag;
     drag = null;
-    if (!d.moved) return;   // simple toucher : géré par le « click »
-    swallowClick = true;
+    swallowClick = true;   // le « click » qui suit (s'il arrive) ne compte pas une 2e fois
     setTimeout(() => { swallowClick = false; }, 0);
+    // Simple toucher : choisi ICI, pas dans le « click » de la carte. La main est reconstruite
+    // à chaque changement d'état : si elle l'est entre l'appui et le relâché, ce « click » n'arrive jamais.
+    if (!d.moved) {
+      const hand = (view && view.players[view.you].hand) || [];
+      if (hand[d.index] && hand[d.index].url === d.url) tapCard(d.index);
+      return;
+    }
     const pt = boardPoint(e.clientX, e.clientY);
     if (renderer) renderer.setGhost(null);
-    if (pt) deployAt(pt.x, pt.y);
-    else selectCard(null);
+    if (pt) { deployAt(pt.x, pt.y); return; }
+    // Relâché sur la main : un clic qui a bougé de quelques pixels (pavé tactile), pas un glisser raté.
+    // La carte reste choisie, il n'y a plus qu'à toucher le terrain.
+    const under = document.elementFromPoint(e.clientX, e.clientY);
+    if (!(under && under.closest('#hand'))) selectCard(null);
   });
 
   document.addEventListener('keydown', (e) => {
@@ -529,11 +547,10 @@ ${DeckEditor.roleText(e.archetype)}`;
     if (s.kept.length) line('Cartes revenues', s.kept.map((c) => c.title).join(', '));
     const rec = ((v.result && v.result.poses) || []).filter((p) => p.side === v.you && p.status === 'recalled');
     if (rec.length) line('Sauvées par Rappel', rec.map((c) => c.title).join(', '));
-    if (v.rented && v.rented.length) line('Achetées pour ce combat', v.rented.map((c) => `${c.title} (${c.price} crédits)`).join(', '));
+    if (v.rented && v.rented.length) line('Achetées pour ce combat', v.rented.map((c) => `${c.title} (${c.price} JP$)`).join(', '));
     if (s.loot) line('Butin', `${s.loot.title} rejoint ta collection`);
     if (s.stolen) line('Volée', `${s.stolen.title} part chez ton adversaire`);
-    if (s.boosterId) line('Récompense', `1 booster Commun + ${s.credits} crédits`);
-    else if (won) line('Récompense', 'plafond du jour atteint : pas de pack ni de crédits, le butin compte quand même');
+    if (s.boosterId) line('Récompense', `1 booster Commun + ${s.credits} JP$`);
   }
 
   // ─────────────────────────────────────────────
@@ -555,6 +572,7 @@ ${DeckEditor.roleText(e.archetype)}`;
       if (p === 'running') setTimeout(() => flash('Le combat commence ! Le tuto reviendra à ta prochaine préparation.', 30), 50);
     }
     document.body.classList.toggle('wide', p === 'preparing');
+    document.body.classList.toggle('fight', p === 'running');   // 🖥️ sur ordinateur : terrain + panneau côte à côte
     if (p !== shownPhase) {
       shownPhase = p;
       window.scrollTo(0, 0);

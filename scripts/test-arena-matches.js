@@ -100,7 +100,7 @@ matches.step(T + 100);
 check('abandon : combat terminé', matches.getMatch(m1.id).status === 'ended');
 check('onEnd appelé avec le récap', ended.length === 1 && ended[0].summary.settled);
 check('abandon : UA perd sa carte posée', totalCards('UA') === before - 1);
-check('abandon : UB récompensé (+10 crédits)', credits.getBalance('UB') === 10);
+check('abandon : UB récompensé (+10 JP$)', credits.getBalance('UB') === 10);
 check('plus occupés après la fin', !matches.isBusy('UA') && !matches.isBusy('UB'));
 check('abonné : phase fin avec le récap', views[views.length - 1].phase === 'ended' && views[views.length - 1].summary);
 unsub();

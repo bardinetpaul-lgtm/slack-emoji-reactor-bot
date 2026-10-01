@@ -60,6 +60,12 @@ const BRIDGES = [28, 72];         // x des 2 ponts
 const BRIDGE_HALF = 5;            // demi-largeur d'un pont
 const RIVER = { low: 45, high: 55 };
 const XK = 0.6;
+// 🏹 Tir en reculant : un tireur (portée ≥ minRange) garde ses distances. Dès qu'une unité de
+//    plus courte portée entre sous « keep » × sa portée, il continue de tirer en reculant à
+//    « speed » × sa vitesse : il ne fuit pas, il retarde le corps à corps. Une fois rattrapé
+//    (à « contact » près de la portée adverse), il fait face : sinon le Guerrier, qui avance OU frappe
+//    à chaque pas, ne le toucherait jamais et le contre Guerrier > Tireur disparaîtrait.
+const KITE = { minRange: 6, keep: 0.6, speed: 0.4, contact: 0.5, minDepth: 6 };
 const REACH_EPS = 0.05;           // tolérance de portée (arrondis des déplacements en 2D)
 const POWER_RADIUS = 16;          // zone d'un pouvoir de Capitaine
 const BREACH_RADIUS = 20;         // pose autour d'une tour adverse détruite
@@ -558,6 +564,34 @@ function waypoint(unit, target) {
   return { x: bx, y: near };
 }
 
+/** 🏹 Le tireur doit-il reculer devant sa cible ? (une unité de plus courte portée, trop proche) */
+function shouldKite(unit, target, dist) {
+  return unit.range >= KITE.minRange && !target.kind && target.range < unit.range
+    && dist < unit.range * KITE.keep && dist > target.range + KITE.contact;   // rattrapé : il fait face
+}
+
+/**
+ * 🏹 Recule de `step` (distance D) à l'opposé de `from`. Jamais dans la rivière (un tireur
+ * sur un pont recule le long du pont), jamais hors du terrain ni derrière sa base.
+ */
+function stepAway(unit, from, step) {
+  const dx = (unit.x - from.x) * XK;
+  const dy = unit.y - from.y;
+  const len = Math.hypot(dx, dy);
+  const ux = len < 1e-6 ? 0 : dx / len;
+  const uy = len < 1e-6 ? -dir(unit.side) : dy / len;   // pile sur la cible : vers sa propre base
+  let x = unit.x + (ux * step) / XK;
+  let y = unit.y + uy * step;
+  if (!unit.flying) {
+    if (bankOf(unit.y) === 0) x = unit.x;            // sur un pont : on reste dans son axe
+    else if (bankOf(y) === 0) y = unit.y;            // au bord de l'eau : on ne recule pas dedans
+  }
+  const depth = Math.max(KITE.minDepth, Math.min(100 - KITE.minDepth, unit.side === 'A' ? y : 100 - y));
+  unit.x = Math.max(ZONE.xMin, Math.min(ZONE.xMax, x));
+  unit.y = pos(unit.side, depth);
+  unit.lane = columnOf(unit.x);
+}
+
 /** Avance l'unité de `step` (distance D) vers `goal`, sans dépasser `stopAt` du but final. */
 function moveToward(unit, goal, step) {
   const dx = (goal.x - unit.x) * XK;
@@ -732,6 +766,7 @@ function step(state, events) {
       hit(target, dmg);
       u.attackY = target.y;
       u.attackX = target.x;
+      if (!charging && shouldKite(u, target, dist)) stepAway(u, target, speed * KITE.speed * dt);   // 🏹 tir en reculant
     } else {
       moveToward(u, goal, Math.min(speed * dt, goal === target ? dist - u.range : D(goal, u)));
     }
@@ -889,6 +924,7 @@ module.exports = {
   XK,
   ZONE,
   BREACH_RADIUS,
+  KITE,
   createMatch,
   applyAction,
   tick,

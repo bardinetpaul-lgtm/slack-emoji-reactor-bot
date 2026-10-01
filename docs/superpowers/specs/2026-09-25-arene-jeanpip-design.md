@@ -254,6 +254,8 @@ ne suffit plus, et le deck est complété). Jamais enregistrées dans les decks 
 
 « Perdre » une pose = retirer 1 exemplaire de la collection. Un Sort compte toujours comme détruit.
 
+> **v2.1 (2026-10-01)** : ces plafonds sont retirés à la demande de Paul. Pack + crédits à chaque victoire.
+
 **Anti-farm** (compteurs persistés dans `data/arena.json`, survivent aux redémarrages) :
 - pack + crédits pour **5 victoires par jour et par joueur maximum**, dont **2 contre le même
   adversaire** ; au-delà on joue et le butin s'applique, sans pack ni crédits.

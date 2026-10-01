@@ -8,8 +8,8 @@
 //    • perdant → TOUTES ses poses perdues (même survivantes) ;
 //    • vainqueur / nul → survivantes et Pompes expirées gardées ;
 //    • butin : 1 pose du perdant tirée au hasard → au vainqueur ;
-//    • vainqueur : booster Commun + 10 crédits, dans les plafonds
-//      du jour (arenaStore.consumeReward) ; le butin n'est pas plafonné ;
+//    • vainqueur : booster Commun + 10 crédits à CHAQUE victoire (plus aucun
+//      plafond depuis la v2.1), en plus du butin ;
 //    • pose rappelée (🏳 Rappel, sortie du terrain) → toujours sauvée,
 //      jamais prise en butin ;
 //    • combat annulé → rien.
@@ -75,15 +75,13 @@ function settleMatch({ matchId, players, result, cancelled }, { random = Math.ra
     l.stolen = brief(loot);
   }
 
-  // 🎁 Pack + crédits (plafonnés)
-  if (arenaStore.consumeReward(w.userId, l.userId, now)) {
-    w.rewarded = true;
-    w.boosterId = boosters.createPending(w.userId, REWARD_BOOSTER);
-    events.record('booster_granted', w.userId, { boosterId: w.boosterId, boosterType: REWARD_BOOSTER, reason: 'arena' },
-      { at: new Date(now).toISOString(), dedup: `booster_created:${w.boosterId}` });
-    credits.addCredit(w.userId, REWARD_CREDITS, { source: 'arena_reward', ref: matchId });
-    w.credits = REWARD_CREDITS;
-  }
+  // 🎁 Pack + crédits, à chaque victoire
+  w.rewarded = true;
+  w.boosterId = boosters.createPending(w.userId, REWARD_BOOSTER);
+  events.record('booster_granted', w.userId, { boosterId: w.boosterId, boosterType: REWARD_BOOSTER, reason: 'arena' },
+    { at: new Date(now).toISOString(), dedup: `booster_created:${w.boosterId}` });
+  credits.addCredit(w.userId, REWARD_CREDITS, { source: 'arena_reward', ref: matchId });
+  w.credits = REWARD_CREDITS;
 
   arenaStore.recordResult({ matchId, at: now, winnerId: w.userId, loserId: l.userId, draw: false, loot: w.loot });
   return summary;

@@ -66,7 +66,7 @@ function createAdminActions({ safeSendDM, isBot, targetEmoji }) {
   async function adjustCredits(client, adminId, targetId, rawAmount, logger) {
     const amount = Math.round(Number(rawAmount) * 2) / 2;
     if (!Number.isFinite(amount) || amount === 0) {
-      return { ok: false, error: 'amount', text: `❓ *Montant invalide.* Il doit être non nul (demi-crédits acceptés, ex. \`2,5\` ou \`-10\`).` };
+      return { ok: false, error: 'amount', text: `❓ *Montant invalide.* Il doit être non nul (demi-JP$ acceptés, ex. \`2,5\` ou \`-10\`).` };
     }
 
     if (await isBot(client, targetId)) {
@@ -78,12 +78,12 @@ function createAdminActions({ safeSendDM, isBot, targetEmoji }) {
       const newBalance = credits.addCredit(targetId, amount, { source: 'admin_gift', ref: adminId });
 
       await safeSendDM(client, targetId, {
-        text: `🎁 Un admin t'a offert ${formatCredits(amount)} crédits JeanPip !`,
-        blocks: [section(`🎁 *Un admin t'a offert ${formatCredits(amount)} crédit(s) JeanPip !* 💰\n\nNouveau solde : *${formatCredits(newBalance)}* crédit(s)\n\nDépense-les avec \`/jeanpip-booster\` ou depuis l'onglet *Accueil* du bot ! 🎁`)],
+        text: `🎁 Un admin t'a offert ${formatCredits(amount)} JP$ !`,
+        blocks: [section(`🎁 *Un admin t'a offert ${formatCredits(amount)} JP$ !* 💰\n\nNouveau solde : *${formatCredits(newBalance)}* JP$\n\nDépense-les avec \`/jeanpip-booster\` ou depuis l'onglet *Accueil* du bot ! 🎁`)],
       }, logger);
 
       logger.info(`💳 <@${adminId}> a crédité +${amount} à <@${targetId}> (solde ${newBalance})`);
-      return { ok: true, text: `✅ *${formatCredits(amount)} crédit(s) offert(s) à <@${targetId}>.*\nNouveau solde de la personne : *${formatCredits(newBalance)}*.` };
+      return { ok: true, text: `✅ *${formatCredits(amount)} JP$ offert(s) à <@${targetId}>.*\nNouveau solde de la personne : *${formatCredits(newBalance)}*.` };
     }
 
     // ➖ Correction : on retire (solde jamais négatif), sans notifier la personne
@@ -126,7 +126,7 @@ function createAdminActions({ safeSendDM, isBot, targetEmoji }) {
       const newBalance = credits.addCredit(authorId, reward, { source: 'media_author', item: rarity, ref: url });
       author = { id: authorId, reward, newBalance };
       logger.info(`🎨 <@${authorId}> a reçu +${reward} pour son média ${rarity} (solde ${newBalance})`);
-      authorLine = `\n🎨 Attribué à <@${authorId}> : *+${formatCredits(reward)} crédit(s)* (nouveau solde : *${formatCredits(newBalance)}*). La personne a été notifiée.`;
+      authorLine = `\n🎨 Attribué à <@${authorId}> : *+${formatCredits(reward)} JP$* (nouveau solde : *${formatCredits(newBalance)}*). La personne a été notifiée.`;
     }
 
     const text = `✅ *Média ajouté à la banque !*\n\n🔢 Numéro attribué : *Surprise #${result.number}*\n${info.emoji} Rareté : *${info.label}* · Type : *${result.media.type}*\n📊 Il y a maintenant *${result.count}* média(s) en ${info.label}.${authorLine}\n⚔️ Son personnage d'Arène est né : ${describeCharacter(result.media)}\n\n👇 Aperçu :`;
@@ -151,9 +151,9 @@ function createAdminActions({ safeSendDM, isBot, targetEmoji }) {
     const info = getRarityInfo(result.media.rarity);
 
     await safeSendDM(client, id, {
-      text: `🎨 Ton image est entrée dans la banque JeanPip : +${formatCredits(reward)} crédits !`,
+      text: `🎨 Ton image est entrée dans la banque JeanPip : +${formatCredits(reward)} JP$ !`,
       blocks: [
-        section(`🎨 *Ton image est entrée dans la banque JeanPip !* :${targetEmoji}:\n\nMerci pour ta contribution 🙏 Elle a été ajoutée en ${info.emoji} *${info.label}* (*Surprise #${result.number}*).\n\n💰 *+${formatCredits(reward)} crédit(s)* — nouveau solde : *${formatCredits(newBalance)}*\n\nDépense-les avec \`/jeanpip-booster\` ou depuis l'onglet *Accueil* du bot ! 🎁`),
+        section(`🎨 *Ton image est entrée dans la banque JeanPip !* :${targetEmoji}:\n\nMerci pour ta contribution 🙏 Elle a été ajoutée en ${info.emoji} *${info.label}* (*Surprise #${result.number}*).\n\n💰 *+${formatCredits(reward)} JP$* — nouveau solde : *${formatCredits(newBalance)}*\n\nDépense-les avec \`/jeanpip-booster\` ou depuis l'onglet *Accueil* du bot ! 🎁`),
         ...buildMediaBlocks({ headerText: `🖼️ *Ta carte ${info.label}*`, media: result.media }),
       ],
     }, logger);
@@ -180,7 +180,7 @@ function createAdminActions({ safeSendDM, isBot, targetEmoji }) {
     logger.info(`🗑️ <@${adminId}> a retiré le média #${number} (${media.rarity}) : ${media.url}`);
 
     const authorLine = media.author
-      ? `\n🎨 Les *${formatCredits(AUTHOR_REWARDS[media.rarity] || 0)} crédit(s)* versés à <@${media.author}> ne sont pas repris (utilise *💳 Crédits ±* si besoin).`
+      ? `\n🎨 Les *${formatCredits(AUTHOR_REWARDS[media.rarity] || 0)} JP$* versés à <@${media.author}> ne sont pas repris (utilise *💳 JP$ ±* si besoin).`
       : '';
     const text = `🗑️ *Média retiré de la banque : ${media.title}*\n\n${info.emoji} Il ne sortira plus au tirage — il reste *${result.count}* média(s) en ${info.label}.\n📒 Ceux qui l'ont déjà le gardent (rangé en « Hors série » du classeur). Son numéro ne sera pas réattribué.${authorLine}`;
 

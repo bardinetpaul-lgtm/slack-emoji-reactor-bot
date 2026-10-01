@@ -43,7 +43,13 @@ function economy(f, { db, boosterPrice = 20 }) {
   const inBucket = bucketSql('<');
   const inLastBucket = bucketSql('<=');
 
-  const massStart = sum([...balances.values()]);
+  // Masse de départ (soldes > 0, comme la masse) : soldes avant la période. Si le suivi
+  // démarre DANS la période, les soldes d'ouverture (migration) font partie du départ :
+  // sinon la base vaut 0 et l'inflation n'est jamais calculée.
+  const startBalances = new Map(balances);
+  db.prepare(`SELECT user_id AS userId, SUM(amount) AS amount FROM credit_moves WHERE kind = 'opening' AND at >= ? AND at <= ?${userClause} GROUP BY user_id`)
+    .all(f.from, f.to, ...userArgs).forEach((m) => startBalances.set(m.userId, (startBalances.get(m.userId) || 0) + m.amount));
+  const massStart = sum([...startBalances.values()].filter((v) => v > 0));
   const pass = (m) => !f.source || m.source === f.source;
 
   let positives = [];

@@ -96,7 +96,7 @@ const at = (iso) => { NOW = RealDate.parse(iso); };
   origLog('\n🧪 Booster 🎀 Octobre Rose');
 
   // ── Catalogue & période ──
-  check(rose && rose.price === 65 && rose.dailyStock === 2 && rose.slots.length === 8, 'catalogue : 65 crédits, 2/jour, 8 cartes');
+  check(rose && rose.price === 65 && rose.dailyStock === 2 && rose.slots.length === 8, 'catalogue : 65 JP$, 2/jour, 8 cartes');
   check(rose.slots.every((s) => Object.values(s).reduce((a, b) => a + b, 0) === 100), 'chaque slot totalise 100 %');
   at('2026-09-30T21:59:00Z'); // 23h59 à Paris le 30/09
   check(!boosters.listBoosters().some((b) => b.type === 'octobre_rose'), 'pas en vente le 30 septembre (23h59 Paris)');

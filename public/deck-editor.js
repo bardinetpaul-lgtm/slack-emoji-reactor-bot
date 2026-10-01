@@ -283,7 +283,7 @@
       if (opts.mode === 'prep' && shop) {
         const box = el('div', 'de-shop');
         const left = shop.credits - shopCost();
-        box.append(el('span', 'de-stat-label', `🛒 Compléter avec une carte mystère · ${left} crédits disponibles`));
+        box.append(el('span', 'de-stat-label', `🛒 Compléter avec une carte mystère · ${left} JP$ disponibles`));
         const row = el('div', 'de-shop-row');
         for (const r of ['epic', 'legendary']) {
           const price = shop.prices[r];
@@ -312,7 +312,7 @@
       const full = d.cards.length === DECK_SIZE;
       if (opts.mode === 'prep') {
         const cost = shopCost();
-        const label = !full ? '8 cartes requises' : state.ready ? 'Prêt · annuler' : cost ? `Prêt · ${cost} crédits au lancement` : 'Prêt';
+        const label = !full ? '8 cartes requises' : state.ready ? 'Prêt · annuler' : cost ? `Prêt · ${cost} JP$ au lancement` : 'Prêt';
         const ready = el('button', `de-btn primary${state.ready ? ' ready' : ''}`, label);
         ready.type = 'button';
         ready.disabled = !full;

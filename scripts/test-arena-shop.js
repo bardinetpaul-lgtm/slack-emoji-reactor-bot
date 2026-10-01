@@ -77,7 +77,7 @@ matches.setReady(m.id, 'UA');
 matches.setReady(m.id, 'UB');
 matches.step(T + 1000);
 const g = matches.getMatch(m.id);
-check('lancement : 65 crédits débités', credits.getBalance('UA') === 35);
+check('lancement : 65 JP$ débités', credits.getBalance('UA') === 35);
 const side = g.players.A.userId === 'UA' ? 'A' : 'B';
 const rented = Object.values(g.engine.players[side].cards).filter((c) => c.rented);
 check('combat : 2 cartes achetées dans le deck, une légendaire et une épique', rented.length === 2 && rented.some((c) => c.rarity === 'legendary') && rented.some((c) => c.rarity === 'epic'));
@@ -103,7 +103,7 @@ const c = matches.createMatchFor('UA', 'UB', T);
 matches.setDeck(c.id, 'UA', [...mine, L, E]);
 matches.connect(c.id, 'UA', T);
 matches.step(T + 61000);
-check('annulé : aucun crédit débité', matches.getMatch(c.id).status === 'cancelled' && credits.getBalance('UA') === 100);
+check('annulé : aucun JP$ débité', matches.getMatch(c.id).status === 'cancelled' && credits.getBalance('UA') === 100);
 
 // 💸 Solde insuffisant au lancement : l'achat saute, le deck est complété
 T += 100000;

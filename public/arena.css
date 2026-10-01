@@ -420,3 +420,55 @@ body.wide .top { display: none; }
 .de-cap-badge { position: absolute; left: 6px; top: 22px; z-index: 4; width: 24px; height: 24px; border-radius: 50%; background: var(--pink); display: flex; align-items: center; justify-content: center; font-size: 13px; }
 /* ✋ Main : pas de glisser d'image natif ni de sélection de texte pendant un glisser-déposer */
 #hand .card, #hand .card img { -webkit-user-drag: none; user-select: none; -webkit-user-select: none; }
+
+/* ═══════════════════════════════════════════════════════════
+   🖥️ Combat sur ordinateur (v2.1) : tout tient dans la fenêtre, sans
+   défilement. Terrain à gauche, calé sur la hauteur de la fenêtre ;
+   chrono, élixir, main et pouvoir dans un panneau à droite.
+   En dessous de 900 px de large : colonne « téléphone » inchangée.
+   ═══════════════════════════════════════════════════════════ */
+.card .key, .kbd-hint { display: none; }
+
+@media (min-width: 900px) {
+  body.fight { align-items: center; }
+  body.fight .frame {
+    width: auto; align-self: center; padding: 14px 20px 14px 14px;
+    /* hauteur fixée : le guide déplié défile dans le panneau au lieu d'allonger la page */
+    height: calc(100vh - 32px); height: calc(100dvh - 32px); min-height: 408px;
+    display: grid; column-gap: 20px; row-gap: 14px;
+    grid-template-columns: auto clamp(340px, min(32vw, 62vh), 560px);   /* borné par la hauteur : la main tient toujours */
+    grid-template-rows: auto auto auto auto minmax(0, 1fr) auto;
+  }
+  body.fight #phase-running { display: contents; }
+  body.fight .board-wrap { grid-column: 1; grid-row: 1 / -1; }
+  /* 32 px de marge de page + 28 px de cadre */
+  body.fight #board { height: calc(100vh - 60px); height: calc(100dvh - 60px); min-height: 380px; width: auto; }
+
+  body.fight .top, body.fight .elixir, body.fight .hand-row, body.fight .power-row,
+  body.fight .de-guide, body.fight #status { grid-column: 2; }
+  body.fight .top { grid-row: 1; padding: 6px 0 0; }
+  body.fight .elixir { grid-row: 2; padding: 0; }
+  body.fight .hand-row { grid-row: 3; padding-top: 6px; }
+  body.fight .power-row { grid-row: 4; padding: 6px 0 0; flex-wrap: wrap; }
+  body.fight .de-guide { grid-row: 5; align-self: end; max-height: 100%; overflow-y: auto; }
+  body.fight #status { grid-row: 6; margin: 0; }
+
+  body.fight .opponent { font-size: 18px; }
+  body.fight .clock { font-size: 34px; padding: 4px 16px; border-radius: 14px; }
+  body.fight .badge { width: 40px; height: 40px; font-size: 22px; }
+  body.fight .seg { height: 18px; border-radius: 8px; }
+  body.fight .hand { gap: 10px; row-gap: 26px; padding-bottom: 14px; }
+  body.fight #hand .card { height: auto; aspect-ratio: 3 / 4; }
+  body.fight .hint { font-size: 13px; }
+  body.fight .kbd-hint { display: inline; }
+  /* ⌨️ Touche du clavier qui choisit la carte (1 à 8) */
+  body.fight .card .key {
+    position: absolute; left: 50%; bottom: -17px; transform: translateX(-50%); z-index: 4;
+    min-width: 20px; height: 18px; padding: 0 5px; border-radius: 6px;
+    background: var(--ink); color: var(--muted); box-shadow: 0 0 0 1px var(--grey);
+    display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600;
+  }
+
+  /* ⏳ Préparation : le décompte et les statuts restent visibles quand on parcourt la collection */
+  body.wide .prep-head { position: sticky; top: 8px; z-index: 5; box-shadow: 0 8px 24px rgba(0, 0, 0, .35); }
+}

@@ -76,15 +76,8 @@ const top = store.weeklyTop(T0 + 10, 5);
 check('top : UA en tête avec 2 victoires', top[0].userId === 'UA' && top[0].wins === 2);
 check('top : victoire de plus de 7 jours ignorée', !top.some((t) => t.userId === 'UC'));
 
-// 💰 Plafonds de récompense
-let n = 0;
-for (let i = 0; i < 3; i += 1) if (store.consumeReward('UW', 'UL1', T0)) n += 1;
-check('max 2 victoires récompensées contre le même adversaire', n === 2);
-for (const l of ['UL2', 'UL3', 'UL4', 'UL5']) if (store.consumeReward('UW', l, T0)) n += 1;
-check('max 5 victoires récompensées par jour', n === 5);
-({ store, collections } = restart());
-check('plafond conservé après redémarrage', store.consumeReward('UW', 'UL6', T0) === false);
-check('le lendemain (heure de Paris), ça repart', store.consumeReward('UW', 'UL1', T0 + DAY) === true);
+// 💰 Plus aucun plafond de récompense (v2.1)
+check('plafonds de récompense retirés', store.consumeReward === undefined && store.MAX_REWARDED_PER_DAY === undefined);
 
 // 🔒 Idempotence du règlement
 check('match non réglé', store.isSettled('mX') === false);

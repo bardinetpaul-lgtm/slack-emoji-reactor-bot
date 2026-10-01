@@ -194,8 +194,7 @@ function buildResultDM(match, summary, userId, links = {}) {
   if (me.kept.length) lines.push(`➕ Cartes revenues : ${cardList(me.kept)}`);
   if (me.loot) lines.push(`🃏 Butin : *${me.loot.title}* rejoint ta collection !`);
   if (me.stolen) lines.push(`🃏 *${me.stolen.title}* part chez <@${opponent}>.`);
-  if (winner === side && !me.boosterId) lines.push('_Plafond du jour atteint : pas de booster ni de crédits, le butin compte quand même._');
-  if (me.boosterId) lines.push(`🎁 Récompense : *1 booster Commun* + *${me.credits} crédits* !`);
+  if (me.boosterId) lines.push(`🎁 Récompense : *1 booster Commun* + *${me.credits} JP$* !`);
   const blocks = [section(lines.join('\n'))];
   if (me.boosterId) {
     const openUrl = links.openBooster ? links.openBooster(me.boosterId, userId) : null;

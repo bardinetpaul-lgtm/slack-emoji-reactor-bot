@@ -88,7 +88,7 @@ process.on('unhandledRejection', (e) => { origLog('❌ unhandledRejection', e); 
 
   // Achat sans crédits
   await find('buy_booster_epic')({ ack, body: { user: { id: 'U1' } }, action: { value: 'epic' }, client: fakeClient, logger });
-  check(posted.at(-1).text.includes('manque'), 'achat refusé sans crédits');
+  check(posted.at(-1).text.includes('manque'), 'achat refusé sans JP$');
 
   // Achat avec crédits
   credits.setBalance('U1', 100);

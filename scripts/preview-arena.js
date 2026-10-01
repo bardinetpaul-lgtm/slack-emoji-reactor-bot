@@ -83,7 +83,7 @@ function newGame(arena, now) {
     collection,
     decks: { active: 0, decks: [{ name: 'Deck 1', cards: auto, captain: null }, { name: 'Deck 2', cards: [] }, { name: 'Deck 3', cards: [] }] },
     captain: null,
-    credits: 100,   // crédits de démo pour les cartes mystère
+    credits: 100,   // JP$ de démo pour les cartes mystère
     rented: [],
     phase: 'preparing',
     startedAt: now,
