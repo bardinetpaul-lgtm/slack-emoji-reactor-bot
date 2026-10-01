@@ -14,7 +14,7 @@ const CAPTAINS = {
   },
   guerrier: {
     style: 'Rush',
-    passive: 'Tes unités avancent 35 % plus vite et frappent 30 % plus fort.',
+    passive: 'Tes unités avancent 20 % plus vite et frappent 15 % plus fort.',
     power: { key: 'charge', label: 'Charge', lane: true, desc: 'Tes unités autour du point touché foncent 6 s (vitesse ×2, dégâts +40 %).' },
   },
   tireur: {
@@ -42,8 +42,10 @@ const CAPTAINS = {
 // Valeurs utilisées par le moteur (réglables, validées par la simulation)
 const TUNING = {
   tankHp: 1.5,
-  rushSpeed: 1.35,
-  rushDps: 1.3,
+  // v2.1.1 : 1,35 / 1,3 → 1,2 / 1,15. Le Rush gagnait 69 % de ses combats entre joueurs simples
+  // et 61 % entre bons joueurs (matrice Capitaine contre Capitaine) ; il retombe à 59 % / 50 %.
+  rushSpeed: 1.2,
+  rushDps: 1.15,
   towerRange: 1.1,
   extraSwarm: 2,
   startElixir: 2,

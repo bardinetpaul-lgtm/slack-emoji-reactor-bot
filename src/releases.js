@@ -16,6 +16,14 @@
 
 const RELEASES = [
   {
+    version: '2.1.1',
+    date: '2026-10-01',
+    title: 'Le Capitaine Guerrier rééquilibré',
+    changes: [
+      '⚖️ Arène : le Capitaine Guerrier (style Rush) dominait trop. Son bonus passe de +35 % de vitesse et +30 % de dégâts à +20 % de vitesse et +15 % de dégâts. Son pouvoir Charge ne change pas.',
+    ],
+  },
+  {
     version: '2.1',
     date: '2026-10-01',
     title: 'L\'Arène sur grand écran',
