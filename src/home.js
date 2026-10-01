@@ -18,6 +18,7 @@ const { ARCHETYPES, getCardStats, getOverride } = require('./game/cards');
 const settings = require('./settings');
 const weeklyGift = require('./weeklyGift');
 const { formatCredits, AUTHOR_REWARDS } = require('./admin');
+const releases = require('./releases');
 
 // Nombre max de cibles auto-react affichées (limite Slack : 100 blocs par vue)
 const MAX_TARGETS_SHOWN = 40;
@@ -174,6 +175,14 @@ ${seasonal.emoji} *Booster ${seasonal.label}* : 1 ou 2 cartes exclusives qu'on n
       ? button('🚪 Sortir de la liste', 'broadcast_leave', { value: 'leave' })
       : button('✅ Rejoindre la liste', 'broadcast_join', { value: 'join', style: 'primary' }),
   ));
+  blocks.push({ type: 'divider' });
+
+  // 📰 Nouveautés : release note du jeu (avant le panneau admin, pour rester visible)
+  const release = releases.current();
+  blocks.push(section(
+    `📰 *Nouveautés — v${release.version}* : ${release.title}\n_Mise à jour du ${releases.formatDate(release.date)}._`,
+    button('📰 Nouveautés', 'release_notes_open'),
+  ));
 
   // 👑 Panneau admin (jamais construit pour un non-admin)
   if (ctx.isAdmin) {
@@ -181,7 +190,7 @@ ${seasonal.emoji} *Booster ${seasonal.label}* : 1 ou 2 cartes exclusives qu'on n
   }
 
   blocks.push({ type: 'divider' });
-  blocks.push({ type: 'context', elements: [{ type: 'mrkdwn', text: `❓ Guide complet : \`/jeanpip-help\` · 🤖 _Jeanpip Bot — Fait avec ❤️_` }] });
+  blocks.push({ type: 'context', elements: [{ type: 'mrkdwn', text: `❓ Guide complet : \`/jeanpip-help\` · 🤖 _Jeanpip Bot v${release.version} — Fait avec ❤️_` }] });
 
   return { type: 'home', blocks };
 }
@@ -296,6 +305,32 @@ function buildAttackModal(userId, { isAdmin, attackPrice }) {
       hint: { type: 'plain_text', text: 'Le bot doit être invité dans ce channel.' },
     },
   ]);
+}
+
+// Limites Slack : 100 blocs par modale, 3000 caractères par section
+const MAX_RELEASES_SHOWN = 15;
+
+/** 📰 Modale « Nouveautés » : la release note, de la version la plus récente à la plus ancienne. */
+function buildReleaseNotesModal(list = releases.RELEASES) {
+  const blocks = [];
+  for (const r of list.slice(0, MAX_RELEASES_SHOWN)) {
+    if (blocks.length) blocks.push({ type: 'divider' });
+    blocks.push(section(cut(
+      `*v${r.version} — ${r.title}*\n_${releases.formatDate(r.date)}_\n${r.changes.map((c) => `• ${c}`).join('\n')}`,
+      3000,
+    )));
+  }
+  if (list.length > MAX_RELEASES_SHOWN) {
+    const hidden = list.length - MAX_RELEASES_SHOWN;
+    blocks.push({ type: 'context', elements: [{ type: 'mrkdwn', text: `_… et ${hidden} version(s) plus ancienne(s)._` }] });
+  }
+  return {
+    type: 'modal',
+    callback_id: 'release_notes',
+    title: { type: 'plain_text', text: 'Nouveautés' },
+    close: { type: 'plain_text', text: 'Fermer' },
+    blocks,
+  };
 }
 
 /** 🎁 Modale « Offrir des crédits » (crédits JeanPip du vendredi). */
@@ -553,6 +588,7 @@ module.exports = {
   buildCreditValueModal,
   buildAttackModal,
   buildWeeklyGiftModal,
+  buildReleaseNotesModal,
   buildGiveAttackModal,
   buildCreditsModal,
   buildAddMediaModal,

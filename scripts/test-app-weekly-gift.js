@@ -100,6 +100,12 @@ process.on('unhandledRejection', (e) => { origLog('❌ unhandledRejection', e); 
   const homeView = home.buildHomeView('U1', { isAdmin: false, attackPrice: 50, creditsPerJeanpipLabel: '0,5', targetEmoji: 'jeanpip', farmRemainingMs: 0, farmQuota: { used: 0, max: 10, nextFreeMs: 0 }, formatRemaining: String });
   check(JSON.stringify(homeView).includes('weekly_gift_open'), 'Accueil : bouton « Offrir des crédits » affiché');
 
+  // 📰 Nouveautés : version au démarrage + bouton → modale
+  const { currentVersion } = require(path.join(TMP, 'src', 'releases.js'));
+  check(logs.some((l) => l.includes(`Version : v${currentVersion()}`)), 'version du jeu dans le log de démarrage');
+  await actions.release_notes_open({ ack, body: { user: { id: 'U1' }, trigger_id: 't' }, client: fakeClient, logger });
+  check(opened.at(-1).view.callback_id === 'release_notes', 'bouton « Nouveautés » → modale de la release note');
+
   // 💸 Soumission
   const submit = async (user, amount) => {
     let acked;

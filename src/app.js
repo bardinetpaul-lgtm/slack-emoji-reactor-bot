@@ -1467,6 +1467,12 @@ app.view('home_attack_submit', async ({ ack, body, view, client, logger }) => {
   }
 });
 
+// 📰 Nouveautés : release note du jeu (src/releases.js)
+app.action('release_notes_open', async ({ ack, body, client, logger }) => {
+  await ack();
+  await openModal(client, body, home.buildReleaseNotesModal(), logger);
+});
+
 // 🎁 Crédits JeanPip du vendredi : modale « Offrir des crédits »
 app.action('weekly_gift_open', async ({ ack, body, client, logger }) => {
   await ack();
@@ -1944,6 +1950,7 @@ function createCardLook(client, media, logger) {
   console.log('');
   console.log('══════════════════════════════════════════');
   console.log('  ⚡️  Slack Emoji Reactor Bot lancé !');
+  console.log(`  🏷️   Version : v${require('./releases').currentVersion()}`);
   console.log(`  🎯  Emoji surveillé : :${TARGET_EMOJI}:`);
   console.log(`  🤖  Bot ID : ${botUserId}`);
   console.log(`  🚨  Anti-spam : ${SPAM_THRESHOLD_SECONDS}s seuil → ${SPAM_TROLL_SEQUENCE.length}x troll`);

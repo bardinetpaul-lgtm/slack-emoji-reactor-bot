@@ -158,6 +158,21 @@ slack-emoji-reactor-bot/
     └── media.js          # Gestion des médias (local + Giphy)
 ```
 
+## 🏷️ Versions et release note
+
+La version du jeu et la release note lue par les joueurs (bouton « 📰 Nouveautés » de l'Accueil) vivent dans `src/releases.js` : la première entrée de `RELEASES` est la version courante. Numérotation : +0.1 par package livré (2.1 → 2.2), 2.1.1 pour un correctif urgent entre deux packages.
+
+À chaque livraison :
+
+```bash
+# 1. ajouter une entrée en tête de RELEASES dans src/releases.js (textes pour les joueurs)
+npm version 2.2.0 --no-git-tag-version   # 2. aligner package.json
+node scripts/test-releases.js            # 3. échoue si les deux divergent
+git tag v2.2 && git push origin v2.2     # 4. une fois mergé sur main
+```
+
+La version qui tourne est affichée en bas de l'Accueil et dans le log de démarrage (`journalctl -u slack-reactor | grep Version`).
+
 ## 📊 Dashboard /stats et base SQLite
 
 Les crédits (soldes + grand livre de chaque mouvement) et le journal des stats vivent dans `data/jeanpip.db` (SQLite, non versionné). Les autres données restent dans les fichiers JSON de `data/`.
