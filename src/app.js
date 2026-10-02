@@ -1034,7 +1034,7 @@ app.command('/jeanpip-booster', async ({ command, ack, client, logger }) => {
           },
         },
         { type: 'actions', elements: buttons },
-        { type: 'context', elements: [{ type: 'mrkdwn', text: boosters.listBoosters().map((b) => `${b.emoji} ${b.label} · ${b.price} JP$${b.dailyStock ? ` · ${b.dailyStock}/jour pour tout le monde${boosters.stockLeft(b) === 0 ? ` (épuisé aujourd'hui, retour demain entre 9h et 10h)` : ''}` : ''}`).join('   ') }] },
+        { type: 'context', elements: [{ type: 'mrkdwn', text: boosters.listBoosters().map((b) => `${b.emoji} ${b.label} · ${b.price} JP$${b.dailyStock ? ` · ${b.dailyStock}/jour pour tout le monde${b.dailyPerUser ? `, ${b.dailyPerUser} par personne` : ''}${boosters.stockLeft(b) === 0 ? ` (épuisé aujourd'hui, retour demain entre 9h et 10h)` : ''}` : ''}`).join('   ') }] },
       ],
     }, logger);
     logger.info(`🎁 /jeanpip-booster : boutique envoyée à <@${userId}> (solde ${balance})`);
@@ -1064,9 +1064,11 @@ app.action(/^buy_booster_/, async ({ ack, body, action, client, logger }) => {
     //    ou épuisé → rien n'est débité.
     //    ⚠️ Aucun await entre ce contrôle et createPending() : deux clics
     //    simultanés ne peuvent pas dépasser le stock.
-    const blocked = boosters.purchaseBlock(booster);
+    const blocked = boosters.purchaseBlock(booster, Date.now(), userId);
     if (blocked) {
-      const why = blocked === 'not_yet'
+      const why = blocked === 'user_limit'
+        ? `🎀 *Tu as déjà eu ton Booster ${booster.emoji} ${booster.label} aujourd'hui !* C'est ${booster.dailyPerUser} par personne et par jour, pour en laisser aux autres. Reviens demain 😉`
+        : blocked === 'not_yet'
         ? `⏳ *Pas encore de Booster ${booster.emoji} ${booster.label} aujourd'hui !* ${boosters.DROP_TEXT} Reviens un peu plus tard 😉`
         : blocked === 'sold_out'
         ? `😢 *Plus de Booster ${booster.emoji} ${booster.label} aujourd'hui !* Les ${booster.dailyStock} du jour sont partis.

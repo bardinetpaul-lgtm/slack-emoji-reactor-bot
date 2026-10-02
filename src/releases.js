@@ -17,9 +17,10 @@
 const RELEASES = [
   {
     version: '2.1.2',
-    date: '2026-10-01',
+    date: '2026-10-02',
     title: 'Le Hors série compte dans le classeur',
     changes: [
+      '🎀 Booster Octobre Rose : 1 seul par personne et par jour, pour que personne ne prenne les 2 du jour à lui seul.',
       '📒 Classeur : les cartes Hors série (Octobre Rose, photos anti-spam, cartes retirées du jeu) comptent maintenant dans ton total et ton pourcentage de complétion.',
     ],
   },
