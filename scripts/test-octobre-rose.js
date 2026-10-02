@@ -164,10 +164,17 @@ const at = (iso) => { NOW = RealDate.parse(iso); };
   await buy('UA');
   check(posted.at(-1).text.includes('acheté') && credits.getBalance('UA') === 135, 'UA achète (200 → 135)');
   check(boosters.stockLeft(rose) === 1, 'stock 1/2');
+  // 🙅 1 par personne et par jour : UA ne peut pas prendre le 2e du jour
+  await buy('UA');
+  check(posted.at(-1).text.includes('déjà eu ton Booster') && credits.getBalance('UA') === 135 && boosters.stockLeft(rose) === 1, 'UA refusé pour le 2e du jour : rien débité, stock intact');
+  check(boosters.purchaseBlock(rose, Date.now(), 'UA') === 'user_limit' && boosters.purchaseBlock(rose, Date.now(), 'UB') === null, 'limite par personne : UA bloqué, UB libre');
+  check(JSON.stringify(published.at(-1)).includes("déjà eu le tien aujourd'hui"), 'Accueil de UA : « tu as déjà eu le tien aujourd\'hui »');
   await buy('UB');
   check(credits.getBalance('UB') === 135 && boosters.stockLeft(rose) === 0, 'UB achète le dernier');
   check(boosters.buttonLabel(rose) === '🎀 Octobre Rose (65) · épuisé, retour demain', `bouton : « ${boosters.buttonLabel(rose)} »`);
-  check(JSON.stringify(published.at(-1)).includes("Épuisé pour aujourd'hui") && JSON.stringify(published.at(-1)).includes('reviennent demain entre 9h et 10h'), 'Accueil : « épuisé, ils reviennent demain entre 9h et 10h »');
+  check(JSON.stringify(published.at(-1)).includes("déjà eu le tien aujourd'hui"), 'Accueil de UB (déjà servi) : « tu as déjà eu le tien »');
+  const homeUC = JSON.stringify(req('home.js').buildHomeView('UC', { isAdmin: false, attackPrice: 50, creditsPerJeanpipLabel: '0,5', targetEmoji: 'jeanpip', farmRemainingMs: 0, farmQuota: { used: 0, max: 10, nextFreeMs: 0 }, formatRemaining: String }));
+  check(homeUC.includes("Épuisé pour aujourd'hui") && homeUC.includes('reviennent demain entre 9h et 10h') && homeUC.includes('1 par personne'), 'Accueil de UC (pas servi) : « épuisé, ils reviennent demain entre 9h et 10h », règle « 1 par personne » affichée');
   await buy('UC');
   check(posted.at(-1).text.includes("Plus de Booster") && posted.at(-1).text.includes('reviennent demain entre 9h et 10h') && credits.getBalance('UC') === 200, 'UC refusé : stock épuisé, rien débité');
   check(boosters.countPending('UC') === 0, 'UC n\'a pas de booster');

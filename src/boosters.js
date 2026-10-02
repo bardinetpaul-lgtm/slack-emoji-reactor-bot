@@ -93,6 +93,7 @@ const BOOSTERS = {
     emoji: '🎀',
     price: 65,
     dailyStock: 2,
+    dailyPerUser: 1,   // v2.1.2 : personne ne peut prendre les 2 du jour à lui seul
     seasonal: true,
     slots: [
       ...commonSlots(3),
@@ -154,14 +155,23 @@ function stockLeft(booster, now = Date.now()) {
   return Math.max(0, booster.dailyStock - sold);
 }
 
+/** Boosters de ce type déjà achetés aujourd'hui (jour de Paris) par ce joueur. */
+function boughtToday(booster, userId, now = Date.now()) {
+  const today = octobreRose.parisDay(now);
+  return Object.values(loadStore().boosters)
+    .filter((b) => b.type === booster.type && b.owner === userId && b.createdAt && octobreRose.parisDay(b.createdAt) === today).length;
+}
+
 /**
  * Raison pour laquelle on ne peut pas acheter ce booster maintenant
- * ('closed' | 'not_yet' | 'sold_out'), ou null. À appeler JUSTE avant spend() +
- * createPending(), sans await entre les deux (Node mono-thread).
+ * ('closed' | 'not_yet' | 'user_limit' | 'sold_out'), ou null. À appeler JUSTE avant
+ * spend() + createPending(), sans await entre les deux (Node mono-thread).
+ * userId : applique aussi la limite par personne (dailyPerUser).
  */
-function purchaseBlock(booster, now = Date.now()) {
+function purchaseBlock(booster, now = Date.now(), userId = null) {
   if (!isOnSale(booster, now)) return 'closed';
   if (booster.dailyStock && !octobreRose.hasDropped(now)) return 'not_yet';
+  if (userId && booster.dailyPerUser && boughtToday(booster, userId, now) >= booster.dailyPerUser) return 'user_limit';
   if (stockLeft(booster, now) === 0) return 'sold_out';
   return null;
 }
@@ -328,6 +338,7 @@ module.exports = {
   stockLeft,
   purchaseBlock,
   buttonLabel,
+  boughtToday,
   RESTOCK_TEXT,
   DROP_TEXT,
   openBooster,
