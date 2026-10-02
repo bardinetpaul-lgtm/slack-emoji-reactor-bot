@@ -7,7 +7,7 @@
 const { App, LogLevel } = require('@slack/bolt');
 require('dotenv').config();
 
-const { getRandomMedia, normalizeRarity, getAllMedia } = require('./media');
+const { getRandomMedia, normalizeRarity, getAllMedia, RARITIES } = require('./media');
 const { buildMediaBlocks } = require('./blocks');
 const scores = require('./scores');
 const targets = require('./targets');
@@ -1555,6 +1555,7 @@ const ADMIN_MODALS = {
   admin_give_attack_open: home.buildGiveAttackModal,
   admin_credits_open: home.buildCreditsModal,
   admin_addmedia_open: home.buildAddMediaModal,
+  admin_give_card_open: home.buildGiveCardModal,
   admin_card_type_open: home.buildCardTypeModal,
   admin_removemedia_open: home.buildRemoveMediaModal,
   admin_target_add_open: home.buildAddTargetModal,
@@ -1669,6 +1670,36 @@ app.view('admin_card_type_submit', async ({ ack, body, view, client, logger }) =
   logger.info(`⚔️ <@${adminId}> : type de « ${card.title} » ${before} → ${result.archetype}${result.auto ? ' (automatique)' : ''}`);
   const text = `⚔️ *Type de carte mis à jour*\n*${card.title}* : ${label(before)} → *${label(result.archetype)}*${result.auto ? ' _(automatique)_' : ''}\n🎭 Son personnage : ${describeCharacter(card)}\n_Les combats en cours ne changent pas._`;
   await sendAdminResult(client, adminId, { text }, logger);
+});
+
+// 🃏 Modale « Donner une carte » : rattrapage à la main (carte gagnée mais absente du classeur)
+app.view('admin_give_card_submit', async ({ ack, body, view, client, logger }) => {
+  const adminId = body.user.id;
+  if (!isAdminUser(adminId, logger, 'admin_give_card_submit')) return ack(fieldError('card', 'Réservé aux admins.'));
+
+  const values = view.state.values;
+  const targetId = values.user.value.selected_user;
+  const card = home.cardFromValue(values.card.value.selected_option && values.card.value.selected_option.value);
+  const count = Number(values.count.value.value);
+  if (!targetId) return ack(fieldError('user', 'Choisis une personne.'));
+  if (!card) return ack(fieldError('card', 'Carte introuvable (la banque a peut-être changé) : rouvre la fenêtre.'));
+  if (!Number.isInteger(count) || count < 1 || count > home.GIVE_CARD_MAX) return ack(fieldError('count', `Entre 1 et ${home.GIVE_CARD_MAX} exemplaires.`));
+  await ack();
+
+  try {
+    const rarity = RARITIES[card.rarity] ? card.rarity : 'common';
+    const given = { url: card.url, title: card.title, rarity, type: card.type };
+    const total = collections.addCards(targetId, Array.from({ length: count }, () => given)).at(-1);
+    const what = `${RARITIES[rarity].emoji} *${card.title}*${count > 1 ? ` ×${count}` : ''}`;
+    logger.info(`🃏 <@${adminId}> a donné « ${card.title} » ×${count} à <@${targetId}> (en possède ${total})`);
+    await safeSendDM(client, targetId, {
+      text: `🃏 Un admin t'a donné une carte : ${card.title}${count > 1 ? ` ×${count}` : ''}`,
+      blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `🃏 *Un admin t'a donné une carte !*\n\n${what} (${RARITIES[rarity].label})\n\n_Elle est dans ton classeur : tu en as maintenant ${total}._` } }],
+    }, logger);
+    await sendAdminResult(client, adminId, { text: `🃏 *Carte donnée à <@${targetId}>*\n${what} (${RARITIES[rarity].label}) — la personne en possède maintenant *${total}* et a été notifiée.` }, logger);
+  } catch (error) {
+    logger.error('❌ Erreur dans admin_give_card_submit:', error);
+  }
 });
 
 // 🗑️ Modale « Retirer un média »

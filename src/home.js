@@ -238,6 +238,7 @@ function buildAdminBlocks(autoTargets, statsUrl = null) {
         button('🎁 Offrir une attaque', 'admin_give_attack_open'),
         button('💳 JP$ ±', 'admin_credits_open'),
         button('🖼️ Ajouter un média', 'admin_addmedia_open'),
+        button('🃏 Donner une carte', 'admin_give_card_open'),
         button('⚔️ Type de carte', 'admin_card_type_open'),
         button('🗑️ Retirer un média', 'admin_removemedia_open'),
         button('🎪 Ajouter une cible', 'admin_target_add_open'),
@@ -493,6 +494,48 @@ function buildCardTypeModal() {
   ]);
 }
 
+// Exemplaires qu'un admin peut donner d'un coup
+const GIVE_CARD_MAX = 5;
+
+/**
+ * 🃏 Modale « Donner une carte » : rend à un joueur une carte du catalogue (rattrapage à la
+ * main : carte gagnée mais absente de son classeur). Légendaires en premier.
+ */
+function buildGiveCardModal() {
+  const all = getAllMedia();
+  const groups = [];
+  for (const [key, r] of Object.entries(RARITIES).reverse()) {
+    const list = all.map((m, i) => [m, i]).filter(([m]) => m && m.url && (m.rarity || 'common') === key);
+    for (let from = 0; from < list.length; from += 100) {
+      const part = list.length > 100 ? ` (${from / 100 + 1}/${Math.ceil(list.length / 100)})` : '';
+      groups.push({
+        label: { type: 'plain_text', text: `${r.emoji} ${r.label}${part}`, emoji: true },
+        options: list.slice(from, from + 100).map(([m, i]) => ({
+          text: { type: 'plain_text', text: cut(m.title || 'Carte', 75), emoji: true },
+          value: cardValue(m, i),
+        })),
+      });
+    }
+  }
+  return modal('admin_give_card_submit', 'Donner une carte', '🃏 Donner', [
+    section('🃏 *Donner une carte à un joueur* — elle s\'ajoute à son classeur, comme s\'il l\'avait tirée d\'un booster.'),
+    userInput('À qui ?'),
+    {
+      type: 'input',
+      block_id: 'card',
+      label: { type: 'plain_text', text: 'Carte' },
+      element: { type: 'static_select', action_id: 'value', placeholder: { type: 'plain_text', text: 'Choisis une carte' }, option_groups: groups.slice(0, 100) },
+    },
+    {
+      type: 'input',
+      block_id: 'count',
+      label: { type: 'plain_text', text: 'Combien d\'exemplaires ?' },
+      element: { type: 'number_input', action_id: 'value', is_decimal_allowed: false, min_value: '1', max_value: String(GIVE_CARD_MAX), initial_value: '1' },
+    },
+    { type: 'context', elements: [{ type: 'mrkdwn', text: '_La personne est notifiée en DM. Seules les cartes du catalogue actuel sont listées (pas le Hors série ni les médias retirés)._' }] },
+  ]);
+}
+
 /** Retrouve la carte choisie dans la modale (URL, ou « #rang »). */
 function cardFromValue(value) {
   const all = getAllMedia();
@@ -598,6 +641,8 @@ module.exports = {
   buildRemoveMediaModal,
   buildAddTargetModal,
   buildCardTypeModal,
+  buildGiveCardModal,
+  GIVE_CARD_MAX,
   cardFromValue,
   attackMode,
 };
