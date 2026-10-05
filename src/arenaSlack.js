@@ -17,6 +17,7 @@
 const matchmaking = require('./game/matchmaking');
 const matches = require('./game/matches');
 const arenaStore = require('./game/arenaStore');
+const dailyStreak = require('./game/dailyStreak');
 const arenas = require('./game/arenas');
 const deckRules = require('./game/deck');
 const collections = require('./collections');
@@ -50,7 +51,7 @@ const context = (text) => ({ type: 'context', elements: [{ type: 'mrkdwn', text 
 // ─────────────────────────────────────────────
 
 /**
- * → { stats, cards, next, match: { status, url } | null, inQueue, outgoing, incoming, deckUrl }
+ * → { userId, stats, streak, ranking, cards, next, match: { status, url } | null, inQueue, outgoing, incoming, deckUrl }
  * `links` = { arena(matchId, userId), deck(userId) } (web.js ; null si page web désactivée).
  */
 function homeState(userId, links, now = Date.now()) {
@@ -58,7 +59,10 @@ function homeState(userId, links, now = Date.now()) {
   const m = matches.getMatchOf(userId);
   const status = matchmaking.statusOf(userId, now);
   return {
+    userId,
     stats,
+    streak: dailyStreak.preview(arenaStore.getStreak(userId), now),
+    ranking: arenaStore.ranking({ userId }),
     cards: deckRules.totalCopies(collections.getCollection(userId)),
     next: arenas.nextUnlock(stats.wins),
     match: m ? { status: m.status, url: links.arena(m.id, userId) } : null,
@@ -73,9 +77,10 @@ function homeState(userId, links, now = Date.now()) {
 /** Blocs « ⚔️ Arène » de l'Accueil. */
 function buildHomeBlocks(a) {
   const s = a.stats;
-  const record = `🏆 *${s.wins}* V · *${s.losses}* D · *${s.draws}* N${s.streak > 1 ? ` · 🔥 série de ${s.streak}` : ''}`;
+  const record = `🏆 *${s.wins}* V · *${s.losses}* D · *${s.draws}* N${s.streak > 1 ? ` · 🔥 ${s.streak} victoires d'affilée` : ''}`;
   const next = a.next ? ` · 🔓 ${a.next.name} dans ${a.next.winsLeft} victoire${a.next.winsLeft > 1 ? 's' : ''}` : '';
-  const blocks = [section(`⚔️ *Arène* — duels de cartes en temps réel, 2 min, avec tes vraies cartes.\n${record}${next}`)];
+  const streak = a.streak ? `\n${streakLine(a.streak)}` : '';
+  const blocks = [section(`⚔️ *Arène* — duels de cartes en temps réel, 2 min, avec tes vraies cartes.\n${record}${next}${streak}`)];
   const deckBtn = a.deckUrl ? { ...button('🃏 Mon deck', 'open_deck_web'), url: a.deckUrl } : null;
 
   if (!a.web) {
@@ -113,6 +118,37 @@ function buildHomeBlocks(a) {
     ],
   });
   blocks.push(context('_Défi : tu choisis ton adversaire et l\'arène. Combat rapide : le premier joueur disponible (60 s). Les cartes posées sont en jeu !_'));
+  return blocks;
+}
+
+/** 📅 « Série : jour 3/6 ✅ · reviens le prochain jour ouvré pour 10 JP$ » */
+function streakLine(s) {
+  const reached = s.step ? `jour *${s.step}/${dailyStreak.LENGTH}*${s.doneToday ? ' ✅' : ''}` : 'pas commencée';
+  const gain = `*${dailyStreak.rewardText(s.next.reward)}*`;
+  return s.doneToday
+    ? `📅 Série : ${reached} · reviens le prochain jour ouvré pour ${gain}`
+    : `📅 Série : ${reached} · ton 1er combat du jour rapporte ${gain}`;
+}
+
+const MEDALS = ['🥇', '🥈', '🥉'];
+const rankLine = (r, me) => {
+  const place = MEDALS[r.rank - 1] || `${r.rank}.`;
+  const line = `${place} <@${r.userId}> · *${r.wins}* V · ${r.winRate} %`;
+  return r.userId === me ? `*→* ${line} ← toi` : line;
+};
+
+/** 🏆 Classement général de l'Arène (Accueil) : top 10 + sa propre place. */
+function buildRankingBlocks(ranking, userId) {
+  if (!ranking || !ranking.top.length) {
+    return [section('🏆 *Classement de l\'Arène*\n_Personne n\'a encore combattu : la première place est libre !_')];
+  }
+  const lines = ranking.top.map((r) => rankLine(r, userId));
+  const inTop = ranking.top.some((r) => r.userId === userId);
+  if (ranking.me && !inTop) lines.push('…', rankLine(ranking.me, userId));
+  const blocks = [section(`🏆 *Classement de l'Arène*\n${lines.join('\n')}`)];
+  blocks.push(context(ranking.me || inTop
+    ? '_Victoires depuis le début, puis % de victoire, puis combats joués. Mis à jour à chaque fin de combat._'
+    : '_Victoires depuis le début, puis % de victoire. Termine un combat pour entrer au classement !_'));
   return blocks;
 }
 
@@ -195,17 +231,25 @@ function buildResultDM(match, summary, userId, links = {}) {
   if (me.loot) lines.push(`🃏 Butin : *${me.loot.title}* rejoint ta collection !`);
   if (me.stolen) lines.push(`🃏 *${me.stolen.title}* part chez <@${opponent}>.`);
   if (me.boosterId) lines.push(`🎁 Récompense : *1 booster Commun* + *${me.credits} JP$* !`);
+  if (me.streak) {
+    const gain = me.streak.boosterId ? '*1 booster Rare*' : `*+${me.streak.credits} JP$*`;
+    const last = me.streak.step >= dailyStreak.LENGTH ? ' Série complète : elle repart au jour 1 au prochain combat.' : '';
+    lines.push(`📅 Série, jour ${me.streak.step}/${dailyStreak.LENGTH} : ${gain} !${last}`);
+  }
   const blocks = [section(lines.join('\n'))];
-  if (me.boosterId) {
-    const openUrl = links.openBooster ? links.openBooster(me.boosterId, userId) : null;
-    blocks.push({
+  // 🎁 Un jeu de boutons par booster gagné (victoire, série)
+  const boosterButtons = (boosterId, label) => {
+    const openUrl = links.openBooster ? links.openBooster(boosterId, userId) : null;
+    return {
       type: 'actions',
       elements: [
-        ...(openUrl ? [{ ...button('🎬 Ouverture animée', 'open_booster_web', { style: 'primary' }), url: openUrl }] : []),
-        button(openUrl ? '💬 Ouvrir dans Slack' : '🎁 Ouvrir le booster', 'open_booster', { value: me.boosterId, ...(openUrl ? {} : { style: 'primary' }) }),
+        ...(openUrl ? [{ ...button(`🎬 Ouvrir le ${label}`, 'open_booster_web', { style: 'primary' }), url: openUrl }] : []),
+        button(openUrl ? '💬 Ouvrir dans Slack' : `🎁 Ouvrir le ${label}`, 'open_booster', { value: boosterId, ...(openUrl ? {} : { style: 'primary' }) }),
       ],
-    });
-  }
+    };
+  };
+  if (me.boosterId) blocks.push(boosterButtons(me.boosterId, 'booster Commun'));
+  if (me.streak && me.streak.boosterId) blocks.push(boosterButtons(me.streak.boosterId, 'booster Rare'));
   const text = `${winner === side ? '🏆 Victoire' : winner ? '💥 Défaite' : '🤝 Match nul'} contre <@${opponent}>`;
   return { text, blocks };
 }
@@ -214,6 +258,7 @@ function buildResultDM(match, summary, userId, links = {}) {
 // 🔌 Branchement Slack
 //    ctx = { sendDM(client, userId, msg) → { channel, ts }, isBot(client, userId),
 //            openModal(client, body, view, logger), refreshHome(client, userId, logger),
+//            homeViewers() → [userId] (Accueils déjà ouverts, optionnel),
 //            links: { arena, deck, openBooster } }
 // ─────────────────────────────────────────────
 
@@ -380,10 +425,15 @@ function register(app, ctx) {
       const userId = match.players[side].userId;
       await dm(userId, buildResultDM(match, summary, userId, ctx.links));
     }
-    await refresh(match.players.A.userId, match.players.B.userId);
+    const fighters = [match.players.A.userId, match.players.B.userId];
+    await refresh(...fighters);
+    // 🏆 Le classement a bougé : les autres Accueils déjà ouverts aussi (un par un, combat allé au bout seulement)
+    if (match.status !== 'cancelled' && ctx.homeViewers) {
+      for (const u of ctx.homeViewers()) if (!fighters.includes(u)) await ctx.refreshHome(client, u, console);
+    }
   }));
 
   return { setClient: (c) => { client = c; } };
 }
 
-module.exports = { homeState, buildHomeBlocks, buildChallengeModal, buildChallengeDM, buildMatchDM, buildResultDM, buildClosedDM, reasonText, register };
+module.exports = { homeState, buildHomeBlocks, buildRankingBlocks, streakLine, buildChallengeModal, buildChallengeDM, buildMatchDM, buildResultDM, buildClosedDM, reasonText, register };

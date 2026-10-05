@@ -71,13 +71,15 @@ check('butin : annoncé au perdant', r.B.stolen && r.B.stolen.url === r.A.loot.u
 check('butin : le perdant ne le garde pas', collections.getCount('UB', r.A.loot.url) === 0);
 check('récap : pertes listées', r.A.lost.length === 1 && r.B.lost.length === 2);
 check('récompense : pack booster Commun en attente', r.A.boosterId && boosters.getPending(r.A.boosterId).type === 'common' && boosters.getPending(r.A.boosterId).owner === 'UA');
-check('récompense : +10 JP$', credits.getBalance('UA') === 10 && r.A.credits === 10);
-check('perdant : aucune récompense', !r.B.boosterId && credits.getBalance('UB') === 0);
+// 📅 + 1 JP$ de série (1er combat du jour) pour chacun, vainqueur comme perdant
+check('récompense : +10 JP$ (+1 JP$ de série)', credits.getBalance('UA') === 11 && r.A.credits === 10);
+check('perdant : aucune récompense de victoire', !r.B.boosterId && r.B.credits === 0);
+check('série : jour 1 pour les deux (+1 JP$)', r.A.streak.step === 1 && r.A.streak.credits === 1 && r.B.streak.step === 1 && credits.getBalance('UB') === 1);
 check('stats enregistrées', arenaStore.getStats('UA').wins === 1 && arenaStore.getStats('UB').losses === 1);
 
 // ─── 🔒 Idempotence ───
 const again = settleMatch({ matchId: 'm1', players: { A: 'UA', B: 'UB' }, result: { winner: 'A', reason: 'towers', poses: [] } }, { now: T0 });
-check('un match déjà réglé ne l\'est jamais deux fois', again.settled === false && credits.getBalance('UA') === 10);
+check('un match déjà réglé ne l\'est jamais deux fois', again.settled === false && credits.getBalance('UA') === 11);
 
 // ─── 🤝 Match nul ───
 give('UC', ['c1', 'c2']);
@@ -89,7 +91,8 @@ const n = settleMatch({
 }, { now: T0 });
 check('nul : cartes détruites perdues', collections.getCount('UC', 'c1') === 0);
 check('nul : survivantes gardées des deux côtés', collections.getCount('UC', 'c2') === 1 && collections.getCount('UD', 'd1') === 1);
-check('nul : pas de butin ni de récompense', !n.A.loot && !n.B.loot && !n.A.boosterId && credits.getBalance('UC') === 0);
+check('nul : pas de butin ni de récompense de victoire', !n.A.loot && !n.B.loot && !n.A.boosterId && !n.B.boosterId);
+check('nul : la série compte quand même (+1 JP$)', n.A.streak.step === 1 && n.B.streak.step === 1 && credits.getBalance('UC') === 1);
 check('nul : stats', arenaStore.getStats('UC').draws === 1 && arenaStore.getStats('UD').draws === 1);
 
 // ─── ❌ Combat annulé ───
@@ -97,6 +100,7 @@ give('UE', ['e1']);
 const c = settleMatch({ matchId: 'm3', players: { A: 'UE', B: 'UF' }, cancelled: true, result: null }, { now: T0 });
 check('annulé : rien de perdu', c.settled && c.cancelled && collections.getCount('UE', 'e1') === 1);
 check('annulé : pas de stats', arenaStore.getStats('UE').wins + arenaStore.getStats('UE').losses + arenaStore.getStats('UE').draws === 0);
+check('annulé : pas de série', !c.A.streak && arenaStore.getStreak('UE') === null && credits.getBalance('UE') === 0);
 
 // ─── 💰 Aucun plafond : 7 victoires le même jour contre le même adversaire, toutes récompensées ───
 for (let i = 0; i < 7; i += 1) {
@@ -111,6 +115,22 @@ const results = [0, 1, 2, 3, 4, 5, 6].map((i) => settleMatch({
 check('7 victoires : pack + JP$ à chaque fois', results.every((r) => r.A.boosterId && r.A.rewarded === true && r.A.credits === REWARD_CREDITS));
 check('7 boosters distincts', new Set(results.map((r) => r.A.boosterId)).size === 7);
 check('le butin s\'applique toujours', results[6].A.loot && collections.getCount('UG', 'h6') === 1);
+check('série : seul le 1er combat du jour compte', results[0].A.streak && results[0].A.streak.step === 1 && results.slice(1).every((x) => x.A.streak === null && x.B.streak === null));
+
+// ─── 📅 Série sur 6 jours ouvrés : JP$ puis booster Rare, puis retour au jour 1 ───
+const DAY = 24 * 3600 * 1000;
+const MON = Date.UTC(2026, 9, 5, 10, 0);   // lundi 5 octobre 2026, midi à Paris
+const days = [0, 1, 2, 3, 4, 7, 8].map((n) => MON + n * DAY);   // lun → ven, lun, mar
+const streakRuns = days.map((now, i) => settleMatch({
+  matchId: `streak${i}`, players: { A: 'US', B: 'UT' }, result: { winner: null, reason: 'draw', poses: [] },
+}, { now }));
+check('série : 1, 2, 4, 10, 20 JP$ du lundi au vendredi', streakRuns.slice(0, 5).map((x) => x.A.streak.credits).join(',') === '1,2,4,10,20');
+const rare = streakRuns[5].A.streak;
+check('série : jour 6 (lundi suivant) → booster Rare en attente', rare.step === 6 && rare.credits === 0 && rare.boosterId
+  && boosters.getPending(rare.boosterId).type === 'rare' && boosters.getPending(rare.boosterId).owner === 'US');
+check('série : le jour 6 vaut aussi pour l’adversaire', streakRuns[5].B.streak.boosterId && streakRuns[5].B.streak.boosterId !== rare.boosterId);
+check('série : retour au jour 1 après le jour 6', streakRuns[6].A.streak.step === 1 && streakRuns[6].A.streak.credits === 1);
+check('série : 38 JP$ au total sur les 7 jours', credits.getBalance('US') === 1 + 2 + 4 + 10 + 20 + 1);
 
 // ─── 🏳 Rappel : carte sauvée même en cas de défaite, hors butin ───
 give('UK', ['k1', 'k2']);

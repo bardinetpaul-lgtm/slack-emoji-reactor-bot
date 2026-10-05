@@ -331,6 +331,25 @@ body.wide .top { display: none; }
 .tuto-btn { border: none; cursor: pointer; border-radius: 999px; padding: 6px 12px; font: 600 13px 'Inter Tight', sans-serif; background: var(--i7); color: var(--cream); white-space: nowrap; }
 .tuto-btn:focus-visible { outline: 3px solid var(--blue); outline-offset: 2px; }
 
+/* 🏆 Classement (v2.2) : même cadre que le tuto */
+.head-btns { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.rk-dialog { width: min(460px, 100%); }
+.rk-body { display: flex; flex-direction: column; gap: 8px; }
+.rk-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.rk-row { display: grid; grid-template-columns: 32px minmax(0, 1fr) auto 48px; align-items: center; gap: 10px; padding: 6px 8px; border-radius: 10px; font-size: 15px; }
+.rk-row:nth-child(odd) { background: var(--c3); }
+.rk-row.you { background: var(--ink); color: var(--cream); }
+.rk-rank { text-align: center; font-weight: 600; font-variant-numeric: tabular-nums; }
+.rk-who { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.rk-avatar { width: 28px; height: 28px; border-radius: 8px; flex: none; object-fit: cover; }
+.rk-avatar.empty { display: flex; align-items: center; justify-content: center; background: var(--muted); color: var(--ink); font-size: 13px; font-weight: 600; }
+.rk-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rk-wins { font-weight: 600; font-variant-numeric: tabular-nums; }
+.rk-rate { text-align: right; color: var(--grey); font-variant-numeric: tabular-nums; }
+.rk-row.you .rk-rate { color: var(--muted); }
+.rk-gap { text-align: center; color: var(--grey); line-height: 1; }
+.rk-note { margin: 0; font-size: 12px; color: var(--grey); }
+
 /* 🎓 Tuto */
 .tu-overlay { position: fixed; inset: 0; z-index: 100; background: rgba(15, 18, 16, .72); display: flex; align-items: center; justify-content: center; padding: 16px; box-sizing: border-box; }
 .tu-dialog {

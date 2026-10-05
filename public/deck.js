@@ -15,6 +15,8 @@
   const markSeen = () => fetch(api, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tutorial: true }) }).catch(() => {});
   const openTutorial = () => ArenaTutorial.open({ onDone: (completed) => { if (completed) markSeen(); } });
   document.getElementById('tuto-btn').addEventListener('click', openTutorial);
+  // 🏆 Classement : relu à chaque ouverture
+  document.getElementById('ranking-btn').addEventListener('click', () => ArenaRanking.open(`api/deck/ranking?t=${encodeURIComponent(token)}`));
 
   fetch(api, { cache: 'no-store' })
     .then((r) => (r.ok ? r.json() : Promise.reject(new Error(r.status === 403 ? 'Lien invalide.' : 'Erreur'))))

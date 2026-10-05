@@ -4,9 +4,11 @@
 //    GET  /arena/<id>?t=               → page de combat (préparation + combat + fin)
 //    GET  /api/arena/<id>/stream?t=    → flux SSE (setup + états)
 //    POST /api/arena/<id>/action?t=    → deploy | decks | ready | forfeit | tutorial
+//    GET  /api/arena/<id>/ranking?t=   → 🏆 classement (préparation du combat)
 //    GET  /deck?t=                     → « Mon deck » (éditeur hors combat)
 //    GET  /api/deck?t=                 → catalogue + mes decks
 //    POST /api/deck?t=                 → enregistre mes decks ({ tutorial: true } : tuto vu)
+//    GET  /api/deck/ranking?t=         → 🏆 classement (« Mon deck »)
 //
 //  Jeton = « <userId>.<hmac> » (lien personnel, signé comme les autres
 //  liens du bot). Arène : hmac(« arena|<match>|<user> ») ; deck :
@@ -43,7 +45,7 @@ const specialties = require('./specialties');
 const PING_MS = 15 * 1000;
 const MAX_BODY = 16 * 1024;
 
-let ctx = null;              // { publicUrl, getSecret, send, sendJson, servePage, displayName, client, logger }
+let ctx = null;              // { publicUrl, getSecret, send, sendJson, servePage, displayName, userProfile, client, logger }
 const streams = new Map();   // `${matchId}|${userId}` → fermeture du flux précédent
 
 function configure(context) {
@@ -327,11 +329,28 @@ async function handleDeckApi(req, res, userId) {
 }
 
 // ─────────────────────────────────────────────
+// 🏆 Classement (préparation du combat, « Mon deck ») : lu à chaque ouverture
+// ─────────────────────────────────────────────
+
+async function handleRanking(res, userId) {
+  const { top, me } = arenaStore.ranking({ userId });
+  const withProfile = async (r) => {
+    const p = ctx.userProfile ? await ctx.userProfile(ctx.client, r.userId, ctx.logger) : { name: await ctx.displayName(ctx.client, r.userId, ctx.logger), avatar: null };
+    return { ...r, name: (p && p.name) || 'Joueur', avatar: (p && p.avatar) || null, you: r.userId === userId };
+  };
+  return ctx.sendJson(res, 200, {
+    status: 'ok',
+    top: await Promise.all(top.map(withProfile)),
+    me: me && !top.some((r) => r.userId === userId) ? await withProfile(me) : null,
+  });
+}
+
+// ─────────────────────────────────────────────
 // 🚦 Routage : true si la requête était pour l'Arène
 // ─────────────────────────────────────────────
 
-const ARENA_ASSETS = ['arena.css', 'arena.js', 'arena-board.js', 'arena-wire.js', 'deck-editor.js', 'arena-tutorial.js'];
-const DECK_ASSETS = ['arena.css', 'deck.js', 'deck-editor.js', 'arena-tutorial.js'];
+const ARENA_ASSETS = ['arena.css', 'arena.js', 'arena-board.js', 'arena-wire.js', 'deck-editor.js', 'arena-tutorial.js', 'arena-ranking.js'];
+const DECK_ASSETS = ['arena.css', 'deck.js', 'deck-editor.js', 'arena-tutorial.js', 'arena-ranking.js'];
 
 async function route(req, res, url) {
   const { pathname } = url;
@@ -342,9 +361,14 @@ async function route(req, res, url) {
     ctx.servePage(res, 'arena', ARENA_ASSETS);
     return true;
   }
-  if ((m = /^\/api\/arena\/([\w-]+)\/(stream|action)$/.exec(pathname))) {
+  if ((m = /^\/api\/arena\/([\w-]+)\/(stream|action|ranking)$/.exec(pathname))) {
     const userId = readToken(token, arenaMsg(m[1]));
     if (!userId) { ctx.sendJson(res, 403, { ok: false, reason: 'invalid' }); return true; }
+    if (m[2] === 'ranking') {
+      if (req.method !== 'GET') { ctx.send(res, 405, 'Method not allowed', { Allow: 'GET' }); return true; }
+      await handleRanking(res, userId);
+      return true;
+    }
     if (m[2] === 'stream') {
       if (req.method !== 'GET') { ctx.send(res, 405, 'Method not allowed', { Allow: 'GET' }); return true; }
       await handleStream(req, res, m[1], userId);
@@ -358,9 +382,14 @@ async function route(req, res, url) {
     ctx.servePage(res, 'deck', DECK_ASSETS);
     return true;
   }
-  if (pathname === '/api/deck') {
+  if (pathname === '/api/deck' || pathname === '/api/deck/ranking') {
     const userId = readToken(token, deckMsg);
     if (!userId) { ctx.sendJson(res, 403, { ok: false, reason: 'invalid' }); return true; }
+    if (pathname === '/api/deck/ranking') {
+      if (req.method !== 'GET') { ctx.send(res, 405, 'Method not allowed', { Allow: 'GET' }); return true; }
+      await handleRanking(res, userId);
+      return true;
+    }
     await handleDeckApi(req, res, userId);
     return true;
   }

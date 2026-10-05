@@ -16,6 +16,16 @@
 
 const RELEASES = [
   {
+    version: '2.2',
+    date: '2026-10-05',
+    title: 'Le classement et la série de combats',
+    changes: [
+      '🏆 Arène : le classement des joueurs est visible en direct dans l\'Accueil, dans « Mon deck » et pendant la préparation d\'un combat (bouton 🏆 Classement). On y est classé par victoires, puis par % de victoire.',
+      '📅 Arène : nouvelle série de combats. Ton premier combat de la journée allé au bout (victoire, défaite ou nul) te rapporte : jour 1 = 1 JP$, jour 2 = 2 JP$, jour 3 = 4 JP$, jour 4 = 10 JP$, jour 5 = 20 JP$, jour 6 = 1 booster Rare. Ensuite la série repart au jour 1.',
+      '📅 Seuls les jours ouvrés comptent : le week-end ne casse pas ta série, mais un jour de semaine sans combat la fait repartir au jour 1.',
+    ],
+  },
+  {
     version: '2.1.2',
     date: '2026-10-02',
     title: 'Le Hors série compte dans le classeur',

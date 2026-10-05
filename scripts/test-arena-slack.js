@@ -62,8 +62,10 @@ const hooks = arenaSlack.register(app, {
   isBot: async (c, userId) => userId === 'BOT',
   openModal: async (c, body, view) => { modals.push(view); },
   refreshHome: async (c, userId) => { refreshed.push(userId); },
+  homeViewers: () => ['P1', 'P2', 'VIEWER'],
   links,
 });
+const arenaStore = require(path.join(TMP, 'src', 'game', 'arenaStore.js'));
 hooks.setClient(client);
 const acked = [];
 const act = (id, userId, value) => handlers.action[id]({ ack: async (r) => { acked.push(r); }, body: { user: { id: userId }, trigger_id: 't' }, action: { value }, client });
@@ -84,6 +86,20 @@ const lastTo = (u) => [...sent].reverse().find((m) => m.userId === u);
   check('Accueil : moins de 8 cartes → pas de bouton de combat', !flat(home('POOR')).includes('arena_challenge_open') && flat(home('POOR')).includes('au moins 8 cartes'));
   check('Accueil : page web désactivée → message clair', flat(arenaSlack.buildHomeBlocks(arenaSlack.homeState('P1', { arena: () => null, deck: () => null })))
     .includes('pas disponible'));
+  check('Accueil : série pas commencée, le 1er combat rapporte 1 JP$', h.includes('Série : pas commencée') && h.includes('1 JP$'));
+  arenaStore.setStreak('P3', { day: '2000-01-03', step: 2 });   // série cassée depuis longtemps
+  check('Accueil : série cassée → repart au jour 1', flat(home('P3')).includes('pas commencée'));
+
+  // 🏆 Classement (Accueil)
+  check('classement vide : place libre', flat(arenaSlack.buildRankingBlocks(arenaStore.ranking({ userId: 'P1' }), 'P1')).includes('première place est libre'));
+  for (let i = 0; i < 12; i += 1) arenaStore.recordResult({ matchId: `r${i}`, at: 0, winnerId: `W${String(i).padStart(2, '0')}`, loserId: 'LOSER', draw: false });
+  arenaStore.recordResult({ matchId: 'r-top', at: 0, winnerId: 'W00', loserId: 'LOSER', draw: false });
+  const rk = flat(arenaSlack.buildRankingBlocks(arenaStore.ranking({ userId: 'LOSER' }), 'LOSER'));
+  check('classement : 🥇 au joueur qui a le plus de victoires', rk.includes('🥇 <@W00> · *2* V'));
+  check('classement : top 10 seulement', rk.includes('10. <@W') && !rk.includes('11. <@W'));
+  check('classement : sa propre place affichée hors du top', rk.includes('…') && rk.includes('13. <@LOSER> · *0* V · 0 % ← toi'));
+  const rkTop = flat(arenaSlack.buildRankingBlocks(arenaStore.ranking({ userId: 'W00' }), 'W00'));
+  check('classement : dans le top, pas de ligne en double', rkTop.includes('← toi') && !rkTop.includes('…'));
 
   // ⚔️ Défier : modale + contrôles
   await act('arena_challenge_open', 'P1');
@@ -120,6 +136,7 @@ const lastTo = (u) => [...sent].reverse().find((m) => m.userId === u);
   check('fin : un récap privé à chacun', recaps.filter((x) => x.userId === 'P1').length === 1 && recaps.filter((x) => x.userId === 'P2').length === 1);
   check('fin : combat annulé → rien n\'est perdu', recaps[0].text.includes('annulé') && recaps[0].text.includes('rien'));
   check('après le combat : les boutons reviennent', flat(home('P1')).includes('arena_queue_join'));
+  check('combat annulé : les autres Accueils ne sont pas republiés', !refreshed.includes('VIEWER'));
 
   // ✖️ Refus
   await submit('arena_challenge_submit', 'P1', defi('P3'));
@@ -153,6 +170,23 @@ const lastTo = (u) => [...sent].reverse().find((m) => m.userId === u);
   check('récap vainqueur : victoire, butin, booster ouvrable', win.text.includes('Victoire') && flat(win.blocks).includes('Butin') && flat(win.blocks).includes('open_booster') && flat(win.blocks).includes('https://x/open/b1'));
   check('récap : raison de la fin (toutes les cartes jouées)', flat(win.blocks).includes('Toutes les cartes jouées'));
   check('récap perdant : défaite, carte volée', lose.text.includes('Défaite') && flat(lose.blocks).includes('part chez'));
+
+  // 📅 Série dans le récap
+  sum.A.streak = { step: 3, credits: 4, boosterId: null };
+  sum.B.streak = { step: 6, credits: 0, boosterId: 'rare1' };
+  const winS = flat(arenaSlack.buildResultDM(fake, sum, 'W', links).blocks);
+  const loseS = flat(arenaSlack.buildResultDM(fake, sum, 'L', links).blocks);
+  check('récap : série jour 3 → +4 JP$', winS.includes('Série, jour 3/6') && winS.includes('+4 JP$'));
+  check('récap : série jour 6 → booster Rare ouvrable, même en cas de défaite', loseS.includes('1 booster Rare') && loseS.includes('https://x/open/rare1') && loseS.includes('repart au jour 1'));
+  check('récap : un bouton par booster (victoire + série)', (() => {
+    sum.A.streak = { step: 6, credits: 0, boosterId: 'rare2' };
+    const both = arenaSlack.buildResultDM(fake, sum, 'W', links).blocks.filter((b) => b.type === 'actions');
+    return both.length === 2 && flat(both).includes('https://x/open/b1') && flat(both).includes('https://x/open/rare2');
+  })());
+
+  // 📅 Ligne de série de l'Accueil
+  check('Accueil : série en cours, déjà jouée aujourd\'hui', arenaSlack.streakLine({ doneToday: true, step: 3, next: { step: 4, reward: { credits: 10 } } }).includes('jour *3/6* ✅') );
+  check('Accueil : série en cours, à jouer → récompense du jour', arenaSlack.streakLine({ doneToday: false, step: 5, next: { step: 6, reward: { booster: 'rare' } } }).includes('1er combat du jour rapporte *1 booster Rare*'));
 
   matches.stop();
   try { require(path.join(TMP, 'src', 'db.js')).close(); } catch { /* base jamais ouverte */ }   // Windows : fichier ouvert = non supprimable
