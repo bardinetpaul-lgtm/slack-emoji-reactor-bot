@@ -16,6 +16,14 @@
 
 const RELEASES = [
   {
+    version: '2.2.1',
+    date: '2026-10-05',
+    title: 'L\'Attaque Jeanpip plus claire',
+    changes: [
+      '⚔️ Accueil : on voit tout de suite si ton Attaque Jeanpip est débloquée (🎉 bouton « Lancer mon attaque gratuite ») ou s\'il faut l\'acheter (💰 bouton « Acheter une attaque », avec son prix).',
+    ],
+  },
+  {
     version: '2.2',
     date: '2026-10-05',
     title: 'Le classement et la série de combats',
