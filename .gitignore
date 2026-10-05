@@ -29,6 +29,7 @@ data/settings.json
 data/weekly-gift.json
 data/farm.json
 data/arena.json
+data/bugs.json
 data/web-secret
 data/card-cache/
 data/card-looks.json

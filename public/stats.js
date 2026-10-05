@@ -17,7 +17,7 @@
   let firstAt = null;
 
   const LABELS = {
-    reaction: 'Réactions', weekly_gift: 'Cadeaux du vendredi', arena_reward: 'Récompenses arène', arena_streak: 'Séries arène', media_author: 'Auteurs de médias',
+    reaction: 'Réactions', weekly_gift: 'Cadeaux du vendredi', arena_reward: 'Récompenses arène', arena_streak: 'Séries arène', bug_bounty: 'Bugs signalés', media_author: 'Auteurs de médias',
     admin_gift: 'Dons admin', unknown: '❓ Inconnu', booster: 'Boosters', arena_shop: 'Boutique arène', attack: 'Attaques',
     common: 'Commun', rare: 'Rare', epic: 'Épique', legendary: 'Légendaire', rose: 'Octobre Rose', octobre_rose: '🎀 Octobre Rose',
   };
@@ -132,7 +132,13 @@
       table('t-items', [['Article'], ['Achats', 1], ['JP$', 1], ['Acheteurs', 1]], d.tables.items.map((x) => [label(x.key), fmt(x.count, 0), fmt(x.credits), fmt(x.buyers, 0)]));
     },
     boosters(d) {
-      kpis('boosters', [{ key: 'bought', text: 'Achetés' }, { key: 'granted', text: 'Gagnés (arène)' }, { key: 'opened', text: 'Ouverts' }, { key: 'stock', text: 'Non ouverts (stock)' }], d);
+      kpis('boosters', [{ key: 'bought', text: 'Achetés' }, { key: 'granted', text: 'Gagnés (arène)' }, { key: 'opened', text: 'Ouverts' }, { key: 'stock', text: 'Non ouverts (stock)' },
+        { key: 'roseCards', text: '🎀 Cartes Octobre Rose reçues' }], d);
+      const types = d.tables.boughtTypes;
+      table('t-buyers', [['#', 1], ['Joueur'], ...types.map((t) => [label(t), 1]), ['Total', 1], ['JP$', 1]],
+        d.tables.topBuyers.map((b, i) => [['🥇', '🥈', '🥉'][i] || String(i + 1), who(b.userId), ...types.map((t) => fmt(b.byType[t] || 0, 0)), fmt(b.total, 0), fmt(b.credits)]));
+      table('t-lastbuys', [['Date'], ['Joueur'], ['Booster'], ['JP$', 1]],
+        d.tables.lastPurchases.map((b) => [new Date(b.at).toLocaleString('fr-FR'), who(b.userId), label(b.boosterType), fmt(b.price)]));
       chart('c-opened', { type: 'bar', data: { labels: d.series.labels, datasets: Object.entries(d.series.openedByType).map(([k, v], i) => bar(label(k), v, i, { stack: 'a' })) }, options: { scales: { x: { stacked: true }, y: { stacked: true } } } });
       table('t-best', [['Joueur'], ['Booster'], ['Score', 1], ['Cartes'], ['Date']],
         d.tables.top.map((b) => [who(b.userId), label(b.boosterType), fmt(b.score, 0), b.cards.map((c) => label(c.rarity)).join(', '), new Date(b.at).toLocaleString('fr-FR')]));
@@ -144,8 +150,8 @@
       const s = d.series;
       chart('c-newcards', { data: { labels: s.labels, datasets: [bar('Ajoutées au catalogue', s.added, 1), line('Découvertes', s.discovered, 0)] } });
       chart('c-cardsavg', { data: { labels: s.labels, datasets: [line('Moyenne', s.mean, 0), line('Médiane', s.median, 1)] } });
-      table('t-perplayer', [['Joueur'], ['Classeur', 1], ['% classeur', 1], ['dont Hors série', 1], ['Obtenues un jour', 1]],
-        d.tables.perPlayer.map((p) => [who(p.userId), `${fmt(p.cards, 0)} / ${fmt(p.total, 0)}`, `${fmt(p.pct)} %`, fmt(p.extra, 0), fmt(p.discovered, 0)]));
+      table('t-perplayer', [['Joueur'], ['Classeur', 1], ['% classeur', 1], ['dont Hors série', 1], ['🎀 Octobre Rose reçues', 1], ['Obtenues un jour', 1]],
+        d.tables.perPlayer.map((p) => [who(p.userId), `${fmt(p.cards, 0)} / ${fmt(p.total, 0)}`, `${fmt(p.pct)} %`, fmt(p.extra, 0), fmt(p.rose, 0), fmt(p.discovered, 0)]));
     },
     arena(d) {
       since('arena', d.since);

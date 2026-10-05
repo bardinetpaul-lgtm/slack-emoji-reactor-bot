@@ -26,6 +26,7 @@ const { SPAM_CARDS } = require('./spamCards');
 const looks = require('./game/looks');
 const cards = require('./game/cards');
 const arenaSlack = require('./arenaSlack');
+const bugsSlack = require('./bugsSlack');
 const events = require('./events');
 
 // 🗄️ Base SQLite (crédits + journal des stats) : sans elle, pas de démarrage
@@ -1549,6 +1550,15 @@ const arenaHooks = arenaSlack.register(app, {
   refreshHome: refreshHomeIfSeen,
   homeViewers: () => [...homeViewers],   // 🏆 classement en direct : Accueils à republier en fin de combat
   links: ARENA_LINKS,
+});
+
+// 🐛 Bugs signalés : modale joueur, DM admin (Valider / Refuser), suivi « Corrigé » dans l'Accueil
+bugsSlack.register(app, {
+  admins: JEANPIP_ADMINS,
+  isAdmin: (userId) => JEANPIP_ADMINS.includes(userId),
+  sendDM,
+  openModal,
+  refreshHome: refreshHomeIfSeen,
 });
 
 // 👑 Boutons du panneau admin → ouverture des modales

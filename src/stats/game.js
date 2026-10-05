@@ -21,6 +21,10 @@ function firstAt(db, type, extra = '') {
 
 const countBy = (list, keyOf) => list.reduce((acc, x) => { const k = keyOf(x); acc[k] = (acc[k] || 0) + 1; return acc; }, {});
 
+const LAST_PURCHASES = 20;
+// 🎀 Cartes Octobre Rose (rareté interne « rose ») sorties d'un booster
+const roseCount = (cards) => (cards || []).filter((c) => c && c.rarity === 'rose').length;
+
 // 🎁 Boosters
 function boosters(f, { db }) {
   const keys = bucketsBetween(f.from, f.to, f.grain);
@@ -39,18 +43,39 @@ function boosters(f, { db }) {
     .map((e) => ({ userId: e.userId, at: e.at, boosterType: e.data.boosterType, score: e.data.score || 0, cards: e.data.cards || [] }))
     .sort((a, b) => b.score - a.score || a.at.localeCompare(b.at))
     .slice(0, 5);
+
+  // 🛒 Achats de la période : journal des derniers + plus gros acheteurs par type (v2.2.1)
+  const bought = ev.filter((e) => e.type === 'booster_bought');
+  const lastPurchases = bought.slice(-LAST_PURCHASES).reverse()
+    .map((e) => ({ at: e.at, userId: e.userId, boosterType: e.data.boosterType || '?', price: e.data.price || 0 }));
+  const buyersMap = new Map();
+  for (const e of bought) {
+    const b = buyersMap.get(e.userId) || { userId: e.userId, byType: {}, total: 0, credits: 0 };
+    const t = e.data.boosterType || '?';
+    b.byType[t] = (b.byType[t] || 0) + 1;
+    b.total += 1;
+    b.credits += e.data.price || 0;
+    buyersMap.set(e.userId, b);
+  }
+  const topBuyers = [...buyersMap.values()]
+    .sort((a, b) => b.total - a.total || b.credits - a.credits || a.userId.localeCompare(b.userId))
+    .slice(0, 15);
+  const boughtTypes = [...new Set(bought.map((e) => e.data.boosterType || '?'))];
+
   return {
     kpis: {
-      bought: ev.filter((e) => e.type === 'booster_bought').length,
+      bought: bought.length,
       granted: ev.filter((e) => e.type === 'booster_granted').length,
       opened: opened.length,
       stock,
+      roseCards: sum(opened.map((e) => roseCount(e.data.cards))),
     },
     series: { labels: keys, openedByType },
-    tables: { top },
+    tables: { top, lastPurchases, topBuyers, boughtTypes },
     since: firstAt(db, 'booster_bought'),
   };
 }
+
 
 // 🃏 Cartes
 function cards(f, { db, catalogSize = 0, ownedCopies = 0, albumStats = null }) {
@@ -86,11 +111,18 @@ function cards(f, { db, catalogSize = 0, ownedCopies = 0, albumStats = null }) {
   // Par joueur : le MÊME chiffre que son classeur (cartes possédées aujourd'hui, Hors série compris).
   // « discovered » = toutes les cartes obtenues un jour : il compte aussi les cartes perdues en Arène,
   // d'où un total qui peut dépasser celui du classeur.
+  // 🎀 Cartes Octobre Rose reçues (doublons compris), depuis le début : sorties de booster
+  const roseOf = new Map();
+  for (const e of loadEvents(db, ['booster_opened'], { to: f.to, user: f.user })) {
+    const n = roseCount(e.data.cards);
+    if (n) roseOf.set(e.userId, (roseOf.get(e.userId) || 0) + n);
+  }
   const perPlayer = [...perUser.entries()]
     .map(([userId, n]) => {
       const a = albumStats ? albumStats(userId) : null;
-      if (!a) return { userId, cards: n, total: catalogSize, pct: catalogSize ? round((n / catalogSize) * 100, 1) : null, extra: null, discovered: n };
-      return { userId, cards: a.owned, total: a.total, pct: a.total ? round((a.owned / a.total) * 100, 1) : null, extra: a.extra, discovered: n };
+      const rose = roseOf.get(userId) || 0;
+      if (!a) return { userId, cards: n, total: catalogSize, pct: catalogSize ? round((n / catalogSize) * 100, 1) : null, extra: null, rose, discovered: n };
+      return { userId, cards: a.owned, total: a.total, pct: a.total ? round((a.owned / a.total) * 100, 1) : null, extra: a.extra, rose, discovered: n };
     })
     .sort((a, b) => b.cards - a.cards || b.discovered - a.discovered);
   const byRarity = Object.entries(countBy(inPeriod, (e) => e.data.rarity || '?')).map(([key, count]) => ({ key, count })).sort((a, b) => b.count - a.count);

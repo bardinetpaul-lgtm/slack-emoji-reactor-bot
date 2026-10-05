@@ -57,6 +57,30 @@ const b = game.boosters(f, { db });
 check('boosters : 2 achetés, 1 gagné, 2 ouverts, stock 1', b.kpis.bought === 2 && b.kpis.granted === 1 && b.kpis.opened === 2 && b.kpis.stock === 1);
 check('meilleur booster = score 20 de UA', b.tables.top[0].userId === 'UA' && b.tables.top[0].score === 20);
 check('ouvertures par type', b.series.openedByType.rare.join() === '1,0' && b.series.openedByType.common.join() === '0,1');
+check('achats : journal du plus récent au plus ancien', b.tables.lastPurchases.map((x) => x.userId).join() === 'UB,UA' && b.tables.lastPurchases[1].boosterType === 'rare' && b.tables.lastPurchases[1].price === 45);
+check('pas de carte Octobre Rose ici', b.kpis.roseCards === 0);
+
+// 🎀 Octobre Rose + plus gros acheteurs par type (base séparée : les chiffres ci-dessus restent intacts)
+const rose = { db: require('better-sqlite3')(':memory:') };
+rose.db.exec("CREATE TABLE events (id INTEGER PRIMARY KEY AUTOINCREMENT, at TEXT, type TEXT, user_id TEXT, data TEXT)");
+const ev = (type, user, data, at) => rose.db.prepare('INSERT INTO events (at, type, user_id, data) VALUES (?, ?, ?, ?)').run(at, type, user, JSON.stringify(data));
+ev('booster_bought', 'UA', { boosterId: 'r1', boosterType: 'octobre_rose', price: 65 }, d(10, 9));
+ev('booster_bought', 'UA', { boosterId: 'r2', boosterType: 'common', price: 20 }, d(10, 10));
+ev('booster_bought', 'UA', { boosterId: 'r3', boosterType: 'common', price: 20 }, d(10, 11));
+ev('booster_bought', 'UB', { boosterId: 'r4', boosterType: 'octobre_rose', price: 65 }, d(11, 9));
+ev('booster_opened', 'UA', { boosterId: 'r1', boosterType: 'octobre_rose', cards: [{ url: 'p1', rarity: 'rose' }, { url: 'p2', rarity: 'rose' }, { url: 'c', rarity: 'common' }] }, d(10, 12));
+ev('booster_opened', 'UB', { boosterId: 'r4', boosterType: 'octobre_rose', cards: [{ url: 'p1', rarity: 'rose' }, { url: 'x', rarity: 'epic' }] }, d(11, 12));
+const rb = game.boosters(f, rose);
+check('🎀 cartes Octobre Rose reçues sur la période : 3', rb.kpis.roseCards === 3);
+check('💰 plus gros acheteur : UA (3 boosters, 105 JP$)', rb.tables.topBuyers[0].userId === 'UA' && rb.tables.topBuyers[0].total === 3 && rb.tables.topBuyers[0].credits === 105);
+check('💰 détail par type : UA = 2 Commun + 1 Octobre Rose', rb.tables.topBuyers[0].byType.common === 2 && rb.tables.topBuyers[0].byType.octobre_rose === 1);
+check('💰 colonnes = types achetés sur la période', rb.tables.boughtTypes.sort().join() === 'common,octobre_rose');
+const rc = game.cards(f, { db: rose.db });
+check('🃏 cartes par joueur : colonne Octobre Rose (UA 2, UB 1)', (() => {
+  rose.db.exec("INSERT INTO events (at, type, user_id, data) VALUES ('2026-09-10T12:00:00.000Z', 'card_discovered', 'UA', '{\"rarity\":\"rose\"}'), ('2026-09-11T12:00:00.000Z', 'card_discovered', 'UB', '{\"rarity\":\"rose\"}')");
+  const by = Object.fromEntries(game.cards(f, { db: rose.db }).tables.perPlayer.map((p) => [p.userId, p.rose]));
+  return rc && by.UA === 2 && by.UB === 1;
+})());
 
 const c = game.cards(f, { db, catalogSize: 4, ownedCopies: 7 });
 check('catalogue / exemplaires injectés', c.kpis.catalog === 4 && c.kpis.owned === 7);

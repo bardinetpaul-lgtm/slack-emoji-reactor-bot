@@ -58,7 +58,8 @@ chat:write           → Envoyer des messages/DM
 im:write             → Ouvrir des conversations DM
 im:history           → Lire l'historique des DM (rattrapage des collections)
 users:read           → Récupérer les infos utilisateurs
-files:read           → Images des cartes sur la page d'ouverture animée
+files:read           → Images des cartes sur la page d'ouverture animée + captures des bugs signalés
+files:write          → Renvoyer aux admins les captures des bugs signalés (v2.2.1)
 ```
 
 **Optionnels (pour auto-join) :**

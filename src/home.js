@@ -89,25 +89,26 @@ function buildHomeView(userId, ctx) {
     blocks.push({ type: 'divider' });
   }
 
-  // 📊 Semaine + ⚔️ Attaque
+  // 📊 Semaine + ⚔️ Attaque : soit débloquée (gratuite), soit à acheter — dit clairement (v2.2.1)
   const scoreLine = `📊 *Ta semaine :* ${score}/${scores.ATTACK_THRESHOLD} :${ctx.targetEmoji}:`;
+  const missing = Math.max(0, scores.ATTACK_THRESHOLD - score);
+  const unlockHint = `_Ou envoie encore ${missing} Jeanpip${missing > 1 ? 's' : ''} cette semaine pour la débloquer gratuitement._`;
   let attackText;
-  let attackButton = button('⚔️ Lancer une attaque', 'home_attack_open', { style: 'danger' });
+  let attackButton = null;
 
   if (ctx.farmRemainingMs > 0) {
     attackText = `🚜 *Pénalité anti-farm* encore *${ctx.formatRemaining(ctx.farmRemainingMs)}* : tu ne peux pas attaquer pour l'instant.`;
-    attackButton = null;
   } else if (mode === 'admin') {
     attackText = `⚔️ *Attaque Jeanpip :* 👑 illimitée (admin)`;
+    attackButton = button('⚔️ Lancer une attaque', 'home_attack_open', { style: 'primary' });
   } else if (mode === 'free') {
-    attackText = `⚔️ *Attaque Jeanpip :* ✅ *débloquée, gratuite !* À lancer avant dimanche 20h.`;
+    attackText = `🎉 *Tu as débloqué une Attaque Jeanpip !* Elle est *gratuite*, à lancer avant dimanche 20h.`;
+    attackButton = button('🎉 Lancer mon attaque gratuite', 'home_attack_open', { style: 'primary' });
   } else if (balance >= ctx.attackPrice) {
-    const missing = Math.max(0, scores.ATTACK_THRESHOLD - score);
-    attackText = `⚔️ *Attaque Jeanpip :* ${ctx.attackPrice} JP$\n_Ou envoie encore ${missing} Jeanpip(s) cette semaine pour la débloquer gratuitement._`;
+    attackText = `⚔️ *Attaque Jeanpip :* pas encore débloquée cette semaine.\n💰 *Achète-la pour ${ctx.attackPrice} JP$* (débités au lancement).\n${unlockHint}`;
+    attackButton = button(`💰 Acheter une attaque (${ctx.attackPrice} JP$)`, 'home_attack_open', { style: 'danger' });
   } else {
-    const missing = Math.max(0, scores.ATTACK_THRESHOLD - score);
-    attackText = `⚔️ *Attaque Jeanpip :* ${ctx.attackPrice} JP$ — ❌ il te manque *${formatCredits(ctx.attackPrice - balance)}* JP$.\n_Ou envoie encore ${missing} Jeanpip(s) cette semaine pour la débloquer gratuitement._`;
-    attackButton = null;
+    attackText = `⚔️ *Attaque Jeanpip :* pas encore débloquée cette semaine.\n💰 Elle s'achète *${ctx.attackPrice} JP$* : ❌ il te manque *${formatCredits(ctx.attackPrice - balance)}* JP$.\n${unlockHint}`;
   }
 
   blocks.push(section(`${scoreLine}\n${attackText}`, attackButton));
@@ -192,10 +193,14 @@ ${seasonal.emoji} *Booster ${seasonal.label}* : 1 ou 2 cartes exclusives qu'on n
     `📰 *Nouveautés — v${release.version}* : ${release.title}\n_Mise à jour du ${releases.formatDate(release.date)}._`,
     button('📰 Nouveautés', 'release_notes_open'),
   ));
+  // 🐛 Signaler un bug (v2.2.1)
+  const bugsSlack = require('./bugsSlack');
+  blocks.push(...bugsSlack.buildReportBlocks());
 
   // 👑 Panneau admin (jamais construit pour un non-admin)
   if (ctx.isAdmin) {
     blocks.push(...buildAdminBlocks(ctx.autoTargets || [], ctx.statsUrl));
+    blocks.push({ type: 'divider' }, ...bugsSlack.buildAdminBugBlocks());
   }
 
   blocks.push({ type: 'divider' });
@@ -296,11 +301,12 @@ function buildAttackModal(userId, { isAdmin, attackPrice }) {
   const mode = attackMode(userId, isAdmin);
   const cost = {
     admin: '👑 *Illimitée* (admin)',
-    free: '✅ *Gratuite* (débloquée cette semaine)',
-    paid: `💰 *${attackPrice} JP$* — ton solde : *${formatCredits(credits.getBalance(userId))}*`,
+    free: '🎉 *Gratuite* : tu l\'as débloquée cette semaine',
+    paid: `💰 *Achat : ${attackPrice} JP$*, débités au lancement — ton solde : *${formatCredits(credits.getBalance(userId))}*`,
   }[mode];
+  const submit = mode === 'paid' ? `💰 Acheter (${attackPrice} JP$)` : '⚔️ Lancer';
 
-  return modal('home_attack_submit', 'Attaque Jeanpip', '⚔️ Lancer', [
+  return modal('home_attack_submit', 'Attaque Jeanpip', submit, [
     section(`${cost}\n\nUn Jeanpip part vers les *7 dernières personnes inscrites* ayant posté dans le channel choisi.\n_Rien n'est débité si personne n'est attaquable._`),
     {
       type: 'input',

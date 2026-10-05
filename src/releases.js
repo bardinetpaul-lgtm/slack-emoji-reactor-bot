@@ -16,6 +16,15 @@
 
 const RELEASES = [
   {
+    version: '2.2.1',
+    date: '2026-10-05',
+    title: 'Signale un bug, gagne des JP$',
+    changes: [
+      '🐛 Nouveau bouton *Signaler un bug* dans l\'Accueil : décris le problème, ajoute une capture d\'écran si tu veux. Si un admin le confirme, tu gagnes 10 JP$, et tu es prévenu quand il est corrigé.',
+      '⚔️ Accueil : on voit tout de suite si ton Attaque Jeanpip est débloquée (🎉 bouton « Lancer mon attaque gratuite ») ou s\'il faut l\'acheter (💰 bouton « Acheter une attaque », avec son prix).',
+    ],
+  },
+  {
     version: '2.2',
     date: '2026-10-05',
     title: 'Le classement et la série de combats',
