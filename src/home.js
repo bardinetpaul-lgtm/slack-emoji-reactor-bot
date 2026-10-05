@@ -193,10 +193,14 @@ ${seasonal.emoji} *Booster ${seasonal.label}* : 1 ou 2 cartes exclusives qu'on n
     `📰 *Nouveautés — v${release.version}* : ${release.title}\n_Mise à jour du ${releases.formatDate(release.date)}._`,
     button('📰 Nouveautés', 'release_notes_open'),
   ));
+  // 🐛 Signaler un bug (v2.2.1)
+  const bugsSlack = require('./bugsSlack');
+  blocks.push(...bugsSlack.buildReportBlocks());
 
   // 👑 Panneau admin (jamais construit pour un non-admin)
   if (ctx.isAdmin) {
     blocks.push(...buildAdminBlocks(ctx.autoTargets || [], ctx.statsUrl));
+    blocks.push({ type: 'divider' }, ...bugsSlack.buildAdminBugBlocks());
   }
 
   blocks.push({ type: 'divider' });
