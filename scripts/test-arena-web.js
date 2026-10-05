@@ -44,7 +44,7 @@ function check(label, cond) {
 }
 
 const quiet = { info: () => {}, warn: () => {}, error: (...a) => console.error(...a) };
-const client = { users: { info: async ({ user }) => ({ user: { profile: { display_name: user === 'UA' ? 'Paul' : 'Julie' } } }) } };
+const client = { users: { info: async ({ user }) => ({ user: { profile: { display_name: user === 'UA' ? 'Paul' : 'Julie', image_72: `https://avatars.test/${user}.png` } } }) } };
 
 // ─── Outils HTTP ───
 function request(method, pathQ, body) {
@@ -193,7 +193,9 @@ const pathOf = (url) => url.replace('http://jeanpip.test/', '');
   await request('POST', `api/arena/${m.id}/action?t=${encodeURIComponent(t)}`, { type: 'forfeit' });
   const ended = await until(() => lastState(sB).data.phase === 'ended');
   check('abandon : fin de combat poussée aux deux joueurs', ended && lastState(sA).data.phase === 'ended');
-  check('fin : récapitulatif et récompense du vainqueur', lastState(sB).data.summary.you.credits === 10 && credits.getBalance('UB') === 10);
+  // 10 JP$ de victoire + 1 JP$ du 1er jour de série
+  check('fin : récapitulatif et récompense du vainqueur', lastState(sB).data.summary.you.credits === 10 && credits.getBalance('UB') === 11);
+  check('fin : série du jour dans le récapitulatif', lastState(sB).data.summary.you.streak.step === 1 && lastState(sA).data.summary.you.streak.credits === 1);
 
   // 🔁 Un seul flux par joueur
   const sA2 = openStream(`api/arena/${m.id}/stream?t=${encodeURIComponent(t)}`);
@@ -212,6 +214,16 @@ const pathOf = (url) => url.replace('http://jeanpip.test/', '');
   const dpost = await request('POST', `api/deck?t=${encodeURIComponent(dt)}`, { active: 0, decks: [{ name: 'Nouveau', cards: deckA }, {}, {}] });
   check('API deck : enregistrement', dpost.json && dpost.json.ok);
   check('API deck : jeton refusé', (await request('GET', 'api/deck?t=UA.00')).status === 403);
+
+  // 🏆 Classement (« Mon deck » et préparation) : UB a gagné le combat ci-dessus
+  const rkDeck = await request('GET', `api/deck/ranking?t=${encodeURIComponent(dt)}`);
+  const [first, second] = (rkDeck.json && rkDeck.json.top) || [];
+  check('classement « Mon deck » : UB 1er (1 V), UA 2e', first && first.userId === 'UB' && first.rank === 1 && first.wins === 1 && second && second.userId === 'UA');
+  check('classement : noms et photos Slack, « toi » repéré', first.name === 'Julie' && first.avatar === 'https://avatars.test/UB.png' && second.you === true && first.you === false);
+  check('classement « Mon deck » : jeton refusé', (await request('GET', 'api/deck/ranking?t=UA.00')).status === 403);
+  const rkArena = await request('GET', pathOf(arenaWeb.buildArenaUrl('m-any', 'UB')).replace(/^arena\/([\w-]+)\?/, 'api/arena/$1/ranking?'));
+  check('classement de la préparation : même classement, « toi » = UB', rkArena.json && rkArena.json.top.length === 2 && rkArena.json.top[0].you === true);
+  check('pages : le script du classement est servi', (await request('GET', 'arena-ranking.js')).status === 200);
 
   sA.close(); sB.close(); sA2.close();
   matches.stop();

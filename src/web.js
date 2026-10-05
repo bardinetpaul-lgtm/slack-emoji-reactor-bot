@@ -304,23 +304,30 @@ function handleOpen(res, id, token, { client, logger, onOpened }) {
 // 📒 Classeur Panini
 // ─────────────────────────────────────────────
 
-// Prénom affiché sur la couverture (users.info, gardé 1 h en mémoire)
+// Prénom (couverture du classeur, Arène) et photo Slack (classement) : users.info, gardé 1 h en mémoire
 const NAME_TTL_MS = 60 * 60 * 1000;
 const names = new Map();
 
-async function displayName(client, userId, logger) {
+/** → { name, avatar } (null si Slack ne répond pas) */
+async function userProfile(client, userId, logger) {
   const cached = names.get(userId);
-  if (cached && Date.now() - cached.at < NAME_TTL_MS) return cached.name;
-  let name = null;
+  if (cached && Date.now() - cached.at < NAME_TTL_MS) return cached.profile;
+  const profile = { name: null, avatar: null };
   try {
     const info = await client.users.info({ user: userId });
     const u = info.user || {};
-    name = (u.profile && (u.profile.display_name || u.profile.real_name)) || u.real_name || u.name || null;
+    const p = u.profile || {};
+    profile.name = p.display_name || p.real_name || u.real_name || u.name || null;
+    profile.avatar = p.image_72 || p.image_48 || null;
   } catch (e) {
     logger.warn(`[web] nom de ${userId} : ${e.message}`);
   }
-  names.set(userId, { name, at: Date.now() });
-  return name;
+  names.set(userId, { profile, at: Date.now() });
+  return profile;
+}
+
+async function displayName(client, userId, logger) {
+  return (await userProfile(client, userId, logger)).name;
 }
 
 async function handleCollection(res, userId, token, { client, logger }) {
@@ -412,7 +419,7 @@ function startWebServer({ client, logger = console, port = WEB_PORT, host = '127
 
 // ⚔️ Arène : mêmes secret, réponses et pages que le reste du site
 function configureArena({ client = null, logger = console } = {}) {
-  arenaWeb.configure({ publicUrl: WEB_PUBLIC_URL, getSecret, send, sendJson, servePage, displayName, client, logger });
+  arenaWeb.configure({ publicUrl: WEB_PUBLIC_URL, getSecret, send, sendJson, servePage, displayName, userProfile, client, logger });
 }
 configureArena();   // les liens (Slack) sont constructibles avant le démarrage du serveur
 

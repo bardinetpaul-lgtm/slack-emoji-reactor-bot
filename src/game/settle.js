@@ -12,6 +12,9 @@
 //      plafond depuis la v2.1), en plus du butin ;
 //    • pose rappelée (🏳 Rappel, sortie du terrain) → toujours sauvée,
 //      jamais prise en butin ;
+//    • 📅 série (v2.2) : chaque joueur d'un combat allé au bout (victoire,
+//      défaite ou nul) avance d'un jour de série, une fois par jour
+//      (règles et récompenses : dailyStreak.js) ;
 //    • combat annulé → rien.
 // ═══════════════════════════════════════════════════════════
 
@@ -19,13 +22,32 @@ const collections = require('../collections');
 const credits = require('../credits');
 const boosters = require('../boosters');
 const arenaStore = require('./arenaStore');
+const dailyStreak = require('./dailyStreak');
 const events = require('../events');
 
 const REWARD_BOOSTER = 'common';
 const REWARD_CREDITS = 10;
 
 const brief = (p) => ({ url: p.url, title: p.title, rarity: p.rarity, archetype: p.archetype });
-const emptySide = (userId) => ({ userId, lost: [], kept: [], loot: null, stolen: null, rewarded: false, boosterId: null, credits: 0 });
+const emptySide = (userId) => ({ userId, lost: [], kept: [], loot: null, stolen: null, rewarded: false, boosterId: null, credits: 0, streak: null });
+
+/** 📅 Fait avancer la série de `userId` → { step, credits, boosterId } | null (journée déjà comptée). */
+function rewardStreak(userId, matchId, now) {
+  const { state, step, reward } = dailyStreak.advance(arenaStore.getStreak(userId), now);
+  if (!reward) return null;
+  arenaStore.setStreak(userId, state);
+  const out = { step, credits: 0, boosterId: null };
+  if (reward.credits) {
+    credits.addCredit(userId, reward.credits, { source: 'arena_streak', ref: matchId });
+    out.credits = reward.credits;
+  }
+  if (reward.booster) {
+    out.boosterId = boosters.createPending(userId, reward.booster);
+    events.record('booster_granted', userId, { boosterId: out.boosterId, boosterType: reward.booster, reason: 'arena_streak' },
+      { at: new Date(now).toISOString(), dedup: `booster_created:${out.boosterId}` });
+  }
+  return out;
+}
 
 /**
  * @param {{ matchId, players: { A: userId, B: userId }, result, cancelled }} match
@@ -60,6 +82,9 @@ function settleMatch({ matchId, players, result, cancelled }, { random = Math.ra
     }
     if (s.lost.length) collections.removeCards(s.userId, s.lost.map((p) => p.url));
   }
+
+  // 📅 Série : les deux joueurs, quel que soit le résultat
+  for (const side of ['A', 'B']) summary[side].streak = rewardStreak(summary[side].userId, matchId, now);
 
   if (!loser) {
     arenaStore.recordResult({ matchId, at: now, draw: true, players: [players.A, players.B] });

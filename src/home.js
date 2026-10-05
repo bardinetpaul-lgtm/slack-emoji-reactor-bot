@@ -159,8 +159,14 @@ ${seasonal.emoji} *Booster ${seasonal.label}* : 1 ou 2 cartes exclusives qu'on n
 
   // ⚔️ Arène : combattre (défi, combat rapide), son combat en cours, ses decks
   if (ctx.arena) {
-    blocks.push(...require('./arenaSlack').buildHomeBlocks(ctx.arena));
+    const arenaSlack = require('./arenaSlack');
+    blocks.push(...arenaSlack.buildHomeBlocks(ctx.arena));
     blocks.push({ type: 'divider' });
+    // 🏆 Classement de l'Arène (v2.2)
+    if (ctx.arena.ranking) {
+      blocks.push(...arenaSlack.buildRankingBlocks(ctx.arena.ranking, userId));
+      blocks.push({ type: 'divider' });
+    }
   } else if (ctx.deckUrl) {
     blocks.push(section(
       `⚔️ *Arène — Mon deck* — prépare tes 3 decks de combat et ton Capitaine, quand tu veux. Le deck actif est celui que tu emmènes au combat.`,

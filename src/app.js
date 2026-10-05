@@ -1547,6 +1547,7 @@ const arenaHooks = arenaSlack.register(app, {
   isBot,
   openModal,
   refreshHome: refreshHomeIfSeen,
+  homeViewers: () => [...homeViewers],   // 🏆 classement en direct : Accueils à republier en fin de combat
   links: ARENA_LINKS,
 });
 

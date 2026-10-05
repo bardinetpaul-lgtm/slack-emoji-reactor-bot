@@ -551,6 +551,7 @@ ${DeckEditor.roleText(e.archetype)}`;
     if (s.loot) line('Butin', `${s.loot.title} rejoint ta collection`);
     if (s.stolen) line('Volée', `${s.stolen.title} part chez ton adversaire`);
     if (s.boosterId) line('Récompense', `1 booster Commun + ${s.credits} JP$`);
+    if (s.streak) line(`📅 Série, jour ${s.streak.step}/6`, s.streak.boosterId ? '1 booster Rare (à ouvrir depuis Slack)' : `+${s.streak.credits} JP$`);
   }
 
   // ─────────────────────────────────────────────
@@ -564,8 +565,16 @@ ${DeckEditor.roleText(e.archetype)}`;
   }
   $('tuto-btn').addEventListener('click', openTutorial);
 
+  // 🏆 Classement : relu à chaque ouverture, fermé quand le combat démarre
+  let ranking = null;
+  $('ranking-btn').addEventListener('click', () => {
+    if (ranking) ranking.close();
+    ranking = ArenaRanking.open(api('ranking'));
+  });
+
   function showPhase(phase) {
     const p = phase === 'cancelled' ? 'ended' : phase;
+    if (p !== 'preparing' && ranking) { ranking.close(); ranking = null; }
     // le combat démarre : le tuto s'efface (il reviendra à la prochaine ouverture s'il n'était pas fini)
     if (p !== 'preparing' && ArenaTutorial.isOpen()) {
       ArenaTutorial.close();

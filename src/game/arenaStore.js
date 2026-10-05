@@ -11,7 +11,8 @@
 //      rewards: { … },   // ancien compteur des plafonds de récompense (retirés en v2.1), plus lu
 //      settled: { <matchId>: ISO },
 //      history: [{ matchId, at, winnerId, loserId, draw }],
-//      tutorial: { U123: ISO } }   // 🎓 tuto vu (affiché à la 1re ouverture)
+//      tutorial: { U123: ISO },    // 🎓 tuto vu (affiché à la 1re ouverture)
+//      streaks: { U123: { day: 'AAAA-MM-JJ', step: 1…6 } } }   // 📅 série de combats (dailyStreak.js)
 // ═══════════════════════════════════════════════════════════
 
 const fs = require('fs');
@@ -28,7 +29,7 @@ const RARITY_RANK = { common: 0, rare: 1, epic: 2, rose: 2, legendary: 3 };
 // ─────────────────────────────────────────────
 
 function load() {
-  const empty = { decks: {}, stats: {}, rewards: {}, settled: {}, history: [], tutorial: {} };
+  const empty = { decks: {}, stats: {}, rewards: {}, settled: {}, history: [], tutorial: {}, streaks: {} };
   try {
     if (!fs.existsSync(ARENA_PATH)) return empty;
     const data = JSON.parse(fs.readFileSync(ARENA_PATH, 'utf-8')) || {};
@@ -186,6 +187,39 @@ function weeklyTop(now = Date.now(), limit = 5) {
     .slice(0, limit);
 }
 
+/**
+ * 🏆 Classement général (depuis toujours) : victoires, puis % de victoire,
+ * puis combats joués (même ordre que le dashboard /stats).
+ * → { top: [{ rank, userId, wins, losses, draws, played, winRate }] (≤ limit), me: ligne de `userId` | null }
+ *   `me` est rempli même hors du top (null s'il n'a jamais combattu).
+ */
+function ranking({ limit = 10, userId = null } = {}) {
+  const rows = Object.entries(load().stats)
+    .map(([u, s]) => {
+      const st = { ...emptyStats(), ...s };
+      const played = st.wins + st.losses + st.draws;
+      return { userId: u, wins: st.wins, losses: st.losses, draws: st.draws, played, winRate: played ? Math.round((st.wins / played) * 100) : 0 };
+    })
+    .filter((r) => r.played > 0)
+    .sort((a, b) => b.wins - a.wins || b.winRate - a.winRate || b.played - a.played || a.userId.localeCompare(b.userId))
+    .map((r, i) => ({ rank: i + 1, ...r }));
+  return { top: rows.slice(0, limit), me: (userId && rows.find((r) => r.userId === userId)) || null };
+}
+
+// ─────────────────────────────────────────────
+// 📅 Série de combats (règles : dailyStreak.js)
+// ─────────────────────────────────────────────
+
+function getStreak(userId) {
+  return load().streaks[userId] || null;
+}
+
+function setStreak(userId, state) {
+  const data = load();
+  data.streaks[userId] = { day: state.day, step: state.step };
+  save(data);
+}
+
 // ─────────────────────────────────────────────
 // 🔒 Idempotence du règlement de fin de combat
 // ─────────────────────────────────────────────
@@ -210,6 +244,9 @@ module.exports = {
   getStats,
   recordResult,
   weeklyTop,
+  ranking,
+  getStreak,
+  setStreak,
   isSettled,
   markSettled,
   hasSeenTutorial,
