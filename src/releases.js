@@ -27,6 +27,8 @@ const RELEASES = [
       '🔢 « Mon deck » et préparation d\'un combat : une carte de ton deck affiche ses exemplaires encore disponibles (ex. 1/3 = il t\'en reste 1 sur les 3 que tu possèdes).',
       '🛡 Capitaine Tank : le Rempart se voit enfin. La tour protégée s\'entoure d\'un halo à ta couleur avec un 🛡 pendant 10 s, et un message confirme chaque pouvoir de Capitaine lancé.',
       '🂠 Arène : à côté du nom de ton adversaire, ses cartes restantes s\'affichent face cachée, avec leur nombre. Tu sais ce qu\'il lui reste à poser, sans savoir quoi.',
+      '🗼 Nouvelle carte : la Vigie remplace la Pompe (tes Pompes deviennent des Vigies). Elle coûte 4 élixir et grimpe sur ta tour libre la plus proche pendant 40 s. La tour gagne +150 PV de garde (absorbés en premier), tire 30 % plus fort, portée +2. Une Vigie par tour : si la tour tombe, tu perds la Vigie. Après 40 s elle redescend et tu la gardes. Rare : ↑ durée et garde.',
+      '🎖️ Nouveau Capitaine Garnison (remplace Économie) : tes Vigies restent deux fois plus longtemps. Pouvoir Alarme : tes tours vivantes tirent deux fois plus fort pendant 6 s.',
     ],
   },
   {
