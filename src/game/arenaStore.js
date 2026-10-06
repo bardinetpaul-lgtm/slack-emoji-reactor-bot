@@ -10,7 +10,7 @@
 //      stats: { U123: { wins, losses, draws, streak, bestStreak, bestLoot } },
 //      rewards: { … },   // ancien compteur des plafonds de récompense (retirés en v2.1), plus lu
 //      settled: { <matchId>: ISO },
-//      history: [{ matchId, at, winnerId, loserId, draw }],
+//      history: [{ matchId, at, winnerId, loserId, draw, players?, towers?, reason?, durationMs?, arena? }],   // détail depuis v2.3
 //      tutorial: { U123: ISO },    // 🎓 tuto vu (affiché à la 1re ouverture)
 //      streaks: { U123: { day: 'AAAA-MM-JJ', step: 1…6 } } }   // 📅 série de combats (dailyStreak.js)
 // ═══════════════════════════════════════════════════════════
@@ -140,7 +140,7 @@ function getStats(userId) {
  * Enregistre l'issue d'un combat.
  * Nul : `draw: true` + `players: [U1, U2]`.
  */
-function recordResult({ matchId, at, winnerId, loserId, draw, loot, players }) {
+function recordResult({ matchId, at, winnerId, loserId, draw, loot, players, towers, reason, durationMs, arena }) {
   const data = load();
   const stats = (u) => {
     data.stats[u] = { ...emptyStats(), ...(data.stats[u] || {}) };
@@ -169,7 +169,12 @@ function recordResult({ matchId, at, winnerId, loserId, draw, loot, players }) {
     l.streak = 0;
   }
 
-  data.history.push({ matchId, at, winnerId: draw ? null : winnerId, loserId: draw ? null : loserId, draw: Boolean(draw) });
+  data.history.push({
+    matchId, at, winnerId: draw ? null : winnerId, loserId: draw ? null : loserId, draw: Boolean(draw),
+    players: Array.isArray(players) && players.length === 2 ? players.slice() : null,
+    towers: towers || null, reason: reason || null,
+    durationMs: typeof durationMs === 'number' ? durationMs : null, arena: arena || null,
+  });
   if (data.history.length > HISTORY_MAX) data.history = data.history.slice(-HISTORY_MAX);
   save(data);
 }
@@ -185,6 +190,27 @@ function weeklyTop(now = Date.now(), limit = 5) {
     .map(([userId, n]) => ({ userId, wins: n }))
     .sort((a, b) => b.wins - a.wins || a.userId.localeCompare(b.userId))
     .slice(0, limit);
+}
+
+/**
+ * 📺 Derniers combats (JP TV), du plus récent au plus ancien.
+ * Ancien format (avant v2.3) : une victoire est reprise avec [gagnant, perdant]
+ * et sans tours ; un nul sans joueurs est ignoré.
+ */
+function recentResults(limit = 5) {
+  const out = [];
+  const history = load().history;
+  for (let i = history.length - 1; i >= 0 && out.length < limit; i -= 1) {
+    const h = history[i];
+    const players = Array.isArray(h.players) && h.players.length === 2 ? h.players
+      : (!h.draw && h.winnerId && h.loserId ? [h.winnerId, h.loserId] : null);
+    if (!players) continue;
+    out.push({
+      matchId: h.matchId, at: h.at, players, winnerId: h.draw ? null : h.winnerId || null, draw: Boolean(h.draw),
+      towers: h.towers || null, reason: h.reason || null,
+    });
+  }
+  return out;
 }
 
 /**
@@ -244,6 +270,7 @@ module.exports = {
   getStats,
   recordResult,
   weeklyTop,
+  recentResults,
   ranking,
   getStreak,
   setStreak,

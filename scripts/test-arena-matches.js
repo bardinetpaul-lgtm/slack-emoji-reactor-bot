@@ -176,6 +176,25 @@ check('combats terminés purgés après 10 min', matches.getMatch(m5.id) === nul
   check('match_finished : issue cohérente', rows.every((d) => d.players.length === 2 && d.players.every((p) => ['win', 'loss', 'draw', 'cancelled'].includes(p.outcome))));
 }
 
+// ─── 📺 v2.3 : historique enrichi à la fin d'un vrai combat ───
+{
+  giveCards('UE', 'e');
+  giveCards('UF', 'f');
+  const t = T + 2_000_000;
+  const h = matches.createMatchFor('UE', 'UF', t, { arena: 'port' });
+  matches.connect(h.id, 'UE', t);
+  matches.connect(h.id, 'UF', t);
+  matches.setReady(h.id, 'UE');
+  matches.setReady(h.id, 'UF');
+  matches.step(t + S);
+  matches.action(h.id, 'UE', { type: 'forfeit' });
+  matches.step(t + 2 * S);
+  const last = arenaStore.recentResults(1)[0];
+  check('historique : combat enregistré avec ses deux joueurs', last && last.matchId === h.id && last.players.slice().sort().join() === 'UE,UF');
+  check('historique : vainqueur = celui qui n\'a pas abandonné', last.winnerId === 'UF' && last.draw === false);
+  check('historique : raison + tours détruites par joueur', last.reason === 'forfeit' && last.towers && last.towers.UE === 0 && last.towers.UF === 0);
+}
+
 try { require(path.join(TMP, 'src', 'db.js')).close(); } catch { /* base jamais ouverte */ }   // Windows : fichier ouvert = non supprimable
 fs.rmSync(TMP, { recursive: true, force: true });
 console.log(failures ? `\n❌ ${failures} échec(s)` : '\n✅ Tout est bon');

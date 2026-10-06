@@ -50,10 +50,10 @@ function rewardStreak(userId, matchId, now) {
 }
 
 /**
- * @param {{ matchId, players: { A: userId, B: userId }, result, cancelled }} match
+ * @param {{ matchId, players: { A: userId, B: userId }, result, cancelled, arena? }} match
  * @param {{ random?: () => number, now?: number }} opts
  */
-function settleMatch({ matchId, players, result, cancelled }, { random = Math.random, now = Date.now() } = {}) {
+function settleMatch({ matchId, players, result, cancelled, arena }, { random = Math.random, now = Date.now() } = {}) {
   if (arenaStore.isSettled(matchId)) return { settled: false, reason: 'already' };
   arenaStore.markSettled(matchId);   // d'abord : jamais appliqué deux fois
 
@@ -62,6 +62,15 @@ function settleMatch({ matchId, players, result, cancelled }, { random = Math.ra
 
   const winner = result.winner;
   const loser = winner === 'A' ? 'B' : winner === 'B' ? 'A' : null;
+
+  // 📺 Détail du combat pour l'historique (derniers combats sur JP TV)
+  const detail = {
+    players: [players.A, players.B],
+    towers: result.towers ? { [players.A]: result.towers.A, [players.B]: result.towers.B } : null,
+    reason: result.reason || null,
+    durationMs: typeof result.durationMs === 'number' ? result.durationMs : null,
+    arena: arena || null,
+  };
 
   // 🃏 Butin (choisi avant les retraits, pour connaître la carte)
   let loot = null;
@@ -87,7 +96,7 @@ function settleMatch({ matchId, players, result, cancelled }, { random = Math.ra
   for (const side of ['A', 'B']) summary[side].streak = rewardStreak(summary[side].userId, matchId, now);
 
   if (!loser) {
-    arenaStore.recordResult({ matchId, at: now, draw: true, players: [players.A, players.B] });
+    arenaStore.recordResult({ matchId, at: now, draw: true, ...detail });
     return summary;
   }
 
@@ -108,7 +117,7 @@ function settleMatch({ matchId, players, result, cancelled }, { random = Math.ra
   credits.addCredit(w.userId, REWARD_CREDITS, { source: 'arena_reward', ref: matchId });
   w.credits = REWARD_CREDITS;
 
-  arenaStore.recordResult({ matchId, at: now, winnerId: w.userId, loserId: l.userId, draw: false, loot: w.loot });
+  arenaStore.recordResult({ matchId, at: now, winnerId: w.userId, loserId: l.userId, draw: false, loot: w.loot, ...detail });
   return summary;
 }
 

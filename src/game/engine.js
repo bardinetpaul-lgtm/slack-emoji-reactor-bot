@@ -838,6 +838,9 @@ function endMatch(state, winner, reason, events = []) {
     winner,
     reason,
     outOfCards: Boolean(state.outOfCards),   // fini avant 2:00 : toutes les cartes jouées
+    // 📺 JP TV : tours détruites PAR chaque camp, durée réelle du combat
+    towers: { A: towersDestroyed(state, 'B'), B: towersDestroyed(state, 'A') },
+    durationMs: state.timeMs,
     // les poses « free » (Écho) n'engagent aucune carte : exclues du bilan
     poses: state.poses.filter((p) => !p.free).map(({ side, url, title, rarity, archetype, status }) => ({ side, url, title, rarity, archetype, status })),
   };

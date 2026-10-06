@@ -262,6 +262,7 @@ function finish(match, now) {
     matchId: match.id,
     players: { A: match.players.A.userId, B: match.players.B.userId },
     result: match.engine.result,
+    arena: match.arena,
   }, { now });
   recordMatchEvent(match, false, now);
   broadcast(match);
