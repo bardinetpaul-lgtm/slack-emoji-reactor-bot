@@ -9,6 +9,9 @@
 //    Déconnexion > 20 s → défaite ; les deux déconnectés → annulé.
 //  • Fin : settle.js applique pertes / butin / récompenses UNE fois,
 //    puis les écouteurs onEnd sont prévenus (DM récap côté Slack).
+//  • 📺 JP TV (v2.3) : un combat démarré est « diffusable » sauf si l'un
+//    des joueurs a coché « Ne pas me diffuser » ; les spectateurs
+//    (subscribeSpectator) reçoivent une vue sans main ni élixir.
 //
 //  En mémoire : un redémarrage du bot fait disparaître les combats
 //  en cours SANS aucune perte (la collection n'est touchée qu'au règlement).
@@ -36,6 +39,7 @@ const LOOP_MS = engine.STEP_MS;
 const matches = new Map();      // id → match
 const subscribers = new Map();  // id → Set<{ userId, fn }>
 const endListeners = [];
+const spectators = new Set();   // 📺 JP TV : fn(match, events)
 let seq = 0;
 let timer = null;
 
@@ -89,6 +93,8 @@ function createMatchFor(userA, userB, now = Date.now(), { arena } = {}) {
     createdAt: now,
     prepDeadline: now + PREP_MS,
     endedAt: null,
+    startedAt: null,
+    broadcast: false,
     players: { A: player(userA, deckA), B: player(userB, deckB) },
     engine: null,
     lastStepAt: null,
@@ -232,6 +238,9 @@ function startMatch(match, now) {
   match.engine = engine.createMatch({ id: match.id, seed: crypto.randomInt(0, 2 ** 31), players });
   match.status = 'running';
   match.lastStepAt = now;
+  match.startedAt = now;
+  // 📺 JP TV : diffusé sauf refus d'un des deux joueurs (figé au lancement)
+  match.broadcast = !arenaStore.isTvOptOut(match.players.A.userId) && !arenaStore.isTvOptOut(match.players.B.userId);
   broadcast(match);
   return undefined;
 }
@@ -395,6 +404,15 @@ function view(match, userId) {
 }
 
 function broadcast(match, events = []) {
+  if (match.broadcast) {
+    for (const fn of spectators) {
+      try {
+        fn(match, events);
+      } catch (e) {
+        console.error('[arena] diffusion JP TV:', e.message);
+      }
+    }
+  }
   const subs = subscribers.get(match.id);
   if (!subs) return;
   for (const sub of subs) {
@@ -421,6 +439,44 @@ function subscribe(id, userId, fn) {
 }
 
 // ─────────────────────────────────────────────
+// 📺 JP TV : vue spectateur (ni main ni élixir) + abonnés
+// ─────────────────────────────────────────────
+
+function spectatorView(match) {
+  const base = { matchId: match.id, arena: match.arena };
+  if (match.status === 'running') {
+    const state = engine.publicState(match.engine, null);
+    const players = {};
+    for (const side of ['A', 'B']) {
+      const { elixir, elixirMax, hand, next, ...rest } = state.players[side];
+      players[side] = rest;
+    }
+    return { ...base, phase: 'running', ...state, you: 'A', players };
+  }
+  const r = match.engine && match.engine.result;
+  return {
+    ...base,
+    phase: match.status,
+    cancelReason: match.cancelReason || null,
+    result: r ? { winner: r.winner, reason: r.reason, towers: r.towers || null } : null,
+  };
+}
+
+/** S'abonner à tous les combats diffusables. → désabonnement */
+function subscribeSpectator(fn) {
+  spectators.add(fn);
+  return () => spectators.delete(fn);
+}
+
+/** Combats démarrés encore en mémoire (en cours, ou finis depuis < 10 min). */
+function listForTv() {
+  return [...matches.values()].filter((m) => m.startedAt !== null && m.startedAt !== undefined).map((m) => ({
+    id: m.id, status: m.status, startedAt: m.startedAt, endedAt: m.endedAt, broadcast: Boolean(m.broadcast), arena: m.arena,
+    players: { A: m.players.A.userId, B: m.players.B.userId },
+  }));
+}
+
+// ─────────────────────────────────────────────
 // 🔁 Boucle réelle (10 Hz)
 // ─────────────────────────────────────────────
 
@@ -443,6 +499,9 @@ function stop() {
 }
 
 module.exports = {
+  spectatorView,
+  subscribeSpectator,
+  listForTv,
   PREP_MS,
   DISCONNECT_MS,
   createMatchFor,
