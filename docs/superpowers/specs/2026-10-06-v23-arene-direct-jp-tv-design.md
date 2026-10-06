@@ -77,12 +77,13 @@ alerte **« 🔴 PRIORITÉ AU DIRECT »**. Le dashboard affiche aussi en permane
 3. PR MagicDIMSI : `arene.js` + `arene.test.js` + calque + carte, spec dans
    `docs/superpowers/specs/`.
 
-## Risque n°1 — à prototyper en premier
+## Fluidité : limitation acceptée en V1
 
-Performance du rendu de l'arène dans le navigateur de la TV Android (jamais testé,
-cf. `check-arena-perf` toujours ouvert). Premier jalon : `/tv/arena` sur un combat
-simulé, ouvert sur la TV, mesuré à 5 Hz. Si ça rame : rendu simplifié (sans
-animations de sprites) pour la vue TV.
+Le navigateur de la TV Android ne rendra sûrement pas le combat de façon fluide.
+C'est accepté pour la V1 (décision de Paul, 2026-10-06) : c'est une limite du
+logiciel de la TV, pas du jeu. Pas de prototype bloquant ni de rendu dégradé
+spécifique ; on garde le flux à 5 Hz + interpolation. Une vraie fluidité passera
+plus tard par un changement du logiciel qui tourne sur la TV.
 
 ## Hors périmètre
 
