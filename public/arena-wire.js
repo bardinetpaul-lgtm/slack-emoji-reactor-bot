@@ -6,7 +6,8 @@
 //      archétype, PV max, place dans le groupe…), puis
 //      [id, x, y, pv, états] (états = gelée / ralentie / bouclier / retraite),
 //      + [.., cibleY, cibleX] quand elle frappe (flèches, coups) ;
-//    • bâtiment : décrit une fois, puis [id, pv, debout, protégé] ;
+//    • bâtiment : décrit une fois, puis [id, pv, debout, protégé]
+//      (+ [.., vigie] quand une Vigie 🗼 est en poste sur la tour) ;
 //    • main + carte suivante, Capitaine : seulement quand ils changent ;
 //    • le reste (chrono, élixir, poses, événements) tel quel.
 //  Un encodeur par flux (serveur), un décodeur par page (navigateur) :
@@ -21,7 +22,7 @@
   else root.ArenaWire = api;
 }(typeof self !== 'undefined' ? self : this, function () {
   const UNIT_LIVE = ['x', 'y', 'lane', 'hp', 'frozen', 'slowed', 'shield', 'recalling', 'atk', 'atkX'];
-  const BUILDING_LIVE = ['hp', 'alive', 'shielded'];
+  const BUILDING_LIVE = ['hp', 'alive', 'shielded', 'vigie'];
   // états d'une unité ⇄ masque de bits
   const FLAGS = ['frozen', 'slowed', 'shield', 'recalling'];
   const toMask = (u) => FLAGS.reduce((m, f, i) => (u[f] ? m | (1 << i) : m), 0);
@@ -83,7 +84,9 @@
           buildings.add(b.id);
           (out.bn = out.bn || []).push(without(b, BUILDING_LIVE));
         }
-        out.b.push([b.id, b.hp, b.alive ? 1 : 0, b.shielded ? 1 : 0]);
+        const row = [b.id, b.hp, b.alive ? 1 : 0, b.shielded ? 1 : 0];
+        if (b.vigie) row.push(b.vigie);   // 🗼 Vigie en poste
+        out.b.push(row);
       }
       return out;
     }
@@ -133,7 +136,7 @@
       const alive = new Set(u.map(([id]) => id));
       for (const id of unitInfo.keys()) if (!alive.has(id)) unitInfo.delete(id);
 
-      const buildings = b.map(([id, hp, up, sh]) => ({ ...buildingInfo.get(id), hp, alive: up === 1, shielded: sh === 1 }));
+      const buildings = b.map(([id, hp, up, sh, vigie]) => ({ ...buildingInfo.get(id), hp, alive: up === 1, shielded: sh === 1, vigie: vigie || null }));
       return { ...rest, players, units, buildings };
     }
 

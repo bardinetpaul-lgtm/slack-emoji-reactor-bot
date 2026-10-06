@@ -14,7 +14,7 @@ const shop = require('./shop');
 const DECK_SIZE = 8;
 
 // Composition visée pour le deck auto (dans l'ordre de priorité)
-const AUTO_PLAN = ['guerrier', 'tireur', 'tank', 'essaim', 'sort', 'guerrier', 'tireur', 'pompe'];
+const AUTO_PLAN = ['guerrier', 'tireur', 'tank', 'essaim', 'sort', 'guerrier', 'tireur', 'vigie'];
 const RARITY_RANK = { common: 0, rare: 1, epic: 2, rose: 2, legendary: 3 };
 
 const owned = (collection) => collection.filter((c) => c.count > 0);

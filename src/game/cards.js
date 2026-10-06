@@ -7,8 +7,8 @@
 //       { "<url>": { "archetype": "tank", "specialty": "..." } }
 //    2. sinon tirage STABLE : sha256(url) → [0, 100) → répartition `share`.
 //
-//  Rareté : renforce les PV (et les dégâts d'un Sort, les PV / la durée
-//  d'une Pompe), jamais les dégâts des unités ; à moitié pour l'Essaim.
+//  Rareté : renforce les PV (et les dégâts d'un Sort, la garde / la durée
+//  d'une Vigie), jamais les dégâts des unités ; à moitié pour l'Essaim.
 //  Les épiques / légendaires reçoivent en plus une spécialité.
 //  Réglé par la simulation : à stratégie égale un deck riche gagne ~64 %,
 //  mais un bon joueur 100 % commun bat un mauvais joueur au deck riche ~63 %.
@@ -40,8 +40,13 @@ const ARCHETYPES = {
   tireur:   { key: 'tireur',   label: 'Tireur',   emoji: '🏹', share: 23, cost: 3, hp: 115, dps: 29,   range: 10, speed: 9,  count: 3, targets: 'all' },
   essaim:   { key: 'essaim',   label: 'Essaim',   emoji: '🐝', share: 15, cost: 3, hp: 105, dps: 20,   range: 2,  speed: 11, count: 6, targets: 'all', rarityWeight: 0.5 },
   sort:     { key: 'sort',     label: 'Sort',     emoji: '💥', share: 10, cost: 4, damage: 350, radius: 6, buildingRatio: 0.4 },
-  pompe:    { key: 'pompe',    label: 'Pompe',    emoji: '⚗️', share: 5,  cost: 4, hp: 500, productionMs: 7000, lifetimeMs: 45000 },
+  // 🗼 Vigie (v2.3, à la place exacte de l'ancienne Pompe dans le tirage) : monte sur une tour de
+  //    son camp. Garde = PV qui encaissent avant la tour ; tir +60 % ; portée +4.
+  vigie:    { key: 'vigie',    label: 'Vigie',    emoji: '🗼', share: 5,  cost: 4, durationMs: 40000, guard: 250, dpsBonus: 0.6, rangeBonus: 4 },
 };
+
+// Anciens noms d'archétypes (surcharges écrites avant la v2.3) → nom actuel
+const RENAMED = { pompe: 'vigie' };
 
 const RARITY_MODS = {
   common:    { mult: 1,    cost: 0 },
@@ -101,6 +106,13 @@ function getOverride(url) {
   return overrides[url] || null;
 }
 
+/** Archétype imposé par une surcharge (ancien nom traduit : « pompe » → « vigie »), ou null. */
+function overrideArchetype(override) {
+  if (!override || !override.archetype) return null;
+  const key = RENAMED[override.archetype] || override.archetype;
+  return ARCHETYPES[key] ? key : null;
+}
+
 /**
  * ⚔️ Impose le type (archétype) d'une carte — panneau Admin de l'Accueil,
  * ou à l'ajout d'un média. `archetype` = null → retour au tirage automatique.
@@ -150,7 +162,7 @@ function archetypeFromUrl(url) {
 
 function getCardStats(card) {
   const override = getOverride(card.url);
-  const archetype = override && ARCHETYPES[override.archetype] ? override.archetype : archetypeFromUrl(card.url);
+  const archetype = overrideArchetype(override) || archetypeFromUrl(card.url);
   const rarity = RARITY_MODS[card.rarity] ? card.rarity : 'common';
   const base = ARCHETYPES[archetype];
   const rarityMod = RARITY_MODS[rarity];
@@ -172,8 +184,9 @@ function getCardStats(card) {
 
   if (archetype === 'sort') {
     Object.assign(stats, { damage: base.damage * mod.mult, radius: base.radius, buildingRatio: base.buildingRatio });
-  } else if (archetype === 'pompe') {
-    Object.assign(stats, { hp: base.hp * mod.mult, productionMs: base.productionMs, lifetimeMs: base.lifetimeMs * mod.mult });
+  } else if (archetype === 'vigie') {
+    // la rareté allonge la durée et renforce la garde ; le tir et la portée restent ceux de la carte
+    Object.assign(stats, { durationMs: base.durationMs * mod.mult, guard: base.guard * mod.mult, dpsBonus: base.dpsBonus, rangeBonus: base.rangeBonus });
   } else {
     Object.assign(stats, {
       hp: base.hp * mod.mult,
@@ -207,5 +220,6 @@ module.exports = {
   damageMultiplier,
   reloadOverrides,
   getOverride,
+  overrideArchetype,
   setArchetype,
 };

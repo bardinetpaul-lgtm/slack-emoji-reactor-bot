@@ -6,7 +6,8 @@
 //  Règles :
 //    • pose détruite → perdue, quel que soit le vainqueur ;
 //    • perdant → TOUTES ses poses perdues (même survivantes) ;
-//    • vainqueur / nul → survivantes et Pompes expirées gardées ;
+//    • vainqueur / nul → survivantes et Vigies redescendues (« expired »)
+//      gardées (une Vigie en poste à la fin = survivante) ;
 //    • butin : 1 pose du perdant tirée au hasard → au vainqueur ;
 //    • vainqueur : booster Commun + 10 crédits à CHAQUE victoire (plus aucun
 //      plafond depuis la v2.1), en plus du butin ;

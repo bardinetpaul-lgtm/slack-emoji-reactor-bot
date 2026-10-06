@@ -40,7 +40,7 @@ function check(label, cond) {
 // ⚔️ Imposer / retirer
 const url = media.getAllMedia()[0].url;
 const auto = cards.archetypeFromUrl(url);
-const other = ['tank', 'guerrier', 'tireur', 'essaim', 'sort', 'pompe'].find((a) => a !== auto);
+const other = ['tank', 'guerrier', 'tireur', 'essaim', 'sort', 'vigie'].find((a) => a !== auto);
 const r = cards.setArchetype(url, other);
 check('type imposé : enregistré et pris en compte tout de suite', r.ok && cards.getCardStats({ url, rarity: 'common' }).archetype === other);
 check('type imposé : écrit dans data/card-overrides.json', JSON.parse(fs.readFileSync(OVR, 'utf-8'))[url].archetype === other);

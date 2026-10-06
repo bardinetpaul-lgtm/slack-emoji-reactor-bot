@@ -43,7 +43,8 @@ const GOLD = '#FFC83D';
 const WING = 'rgba(255,255,255,0.85)';
 const GRADIENT_DEF = '<linearGradient id="dg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FF6229"/><stop offset="1" stop-color="#FF74CC"/></linearGradient>';
 
-const SILHOUETTE = { tank: 'tank', guerrier: 'melee', tireur: 'distance', essaim: 'essaim', pompe: 'pompe', sort: 'sort' };
+// 🗼 Vigie (v2.3) : silhouette d'archer (dessinée sur sa tour par le plateau)
+const SILHOUETTE = { tank: 'tank', guerrier: 'melee', tireur: 'distance', essaim: 'essaim', vigie: 'distance', pompe: 'pompe', sort: 'sort' };
 const WALK = { tank: 'roll', melee: 'step', distance: 'step', essaim: 'fly', pompe: 'none', sort: 'none' };
 
 function hexToHsl(hex) {

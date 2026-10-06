@@ -19,7 +19,7 @@ fs.symlinkSync(path.join(ROOT, 'node_modules'), path.join(TMP, 'node_modules'), 
 fs.mkdirSync(path.join(TMP, 'data'));
 
 // Cartes de test : l'URL dit l'archétype (imposé par surcharge)
-const ARCHS = ['tank', 'guerrier', 'tireur', 'essaim', 'sort', 'pompe'];
+const ARCHS = ['tank', 'guerrier', 'tireur', 'essaim', 'sort', 'vigie'];
 const overrides = {};
 for (const a of ARCHS) for (let i = 1; i <= 8; i += 1) overrides[`${a}${i}`] = { archetype: a };
 fs.writeFileSync(path.join(TMP, 'data', 'card-overrides.json'), JSON.stringify(overrides));
@@ -42,8 +42,8 @@ function player(userId, urls, copies = {}) {
   return { userId, deck, copies: c };
 }
 
-const DECK_A = ['guerrier1', 'guerrier2', 'tireur1', 'tireur2', 'tank1', 'essaim1', 'sort1', 'pompe1'];
-const DECK_B = ['guerrier3', 'guerrier4', 'tireur3', 'tireur4', 'tank2', 'essaim2', 'sort2', 'pompe2'];
+const DECK_A = ['guerrier1', 'guerrier2', 'tireur1', 'tireur2', 'tank1', 'essaim1', 'sort1', 'vigie1'];
+const DECK_B = ['guerrier3', 'guerrier4', 'tireur3', 'tireur4', 'tank2', 'essaim2', 'sort2', 'vigie2'];
 
 function newMatch(opts = {}) {
   return engine.createMatch({
@@ -121,7 +121,7 @@ const qg = (state, side) => state.buildings.find((b) => b.side === side && b.kin
   }
   check('×3 sur 3 emplacements : posée exactement 3 fois', uses === 3 && s.players.A.copies.guerrier1 === 0);
   check('plus d\'exemplaire : la carte a quitté la main', !s.players.A.hand.includes('guerrier1'));
-  const deck2 = ['guerrier1', 'guerrier1', 'tireur1', 'tireur2', 'tank1', 'essaim1', 'sort1', 'pompe1'];
+  const deck2 = ['guerrier1', 'guerrier1', 'tireur1', 'tireur2', 'tank1', 'essaim1', 'sort1', 'vigie1'];
   const s2 = engine.createMatch({ id: 'd2', seed: 5, players: { A: player('UA', deck2.map((u) => ({ url: u, title: u, rarity: 'common' })), { guerrier1: 1 }), B: player('UB', DECK_B) } });
   check('2 emplacements mais 1 seul exemplaire : 1 seul emplacement jouable', s2.players.A.hand.filter((u) => u === 'guerrier1').length === 1);
 }
@@ -129,7 +129,7 @@ const qg = (state, side) => state.buildings.find((b) => b.side === side && b.kin
 // ─── 🚫 Refus ───
 {
   const s = newMatch();
-  forceHand(s, 'A', ['tank1', 'guerrier1', 'pompe1', 'sort1']);
+  forceHand(s, 'A', ['tank1', 'guerrier1', 'vigie1', 'sort1']);
   s.players.A.elixir = 4;
   check('refus : élixir insuffisant', engine.applyAction(s, 'A', { type: 'deploy', url: 'tank1', lane: 0 }).reason === 'elixir');
   check('refus : carte pas en main', engine.applyAction(s, 'A', { type: 'deploy', url: 'tireur1', lane: 0 }).reason === 'not_in_hand');
@@ -137,10 +137,10 @@ const qg = (state, side) => state.buildings.find((b) => b.side === side && b.kin
   check('refus : au bord du terrain', engine.applyAction(s, 'A', { type: 'deploy', url: 'guerrier1', x: 1, depth: 20 }).reason === 'zone');
   check('refus : pose avancée sans brèche', engine.applyAction(s, 'A', { type: 'deploy', url: 'guerrier1', lane: 0, forward: true }).reason === 'no_breach');
   s.players.A.elixir = 10;
-  s.players.A.copies.pompe1 = 2;
-  check('Pompe acceptée', engine.applyAction(s, 'A', { type: 'deploy', url: 'pompe1', lane: 0 }).ok);
-  forceHand(s, 'A', ['pompe1', 'guerrier1', 'sort1', 'tank1']);
-  check('refus : une seule Pompe à la fois', engine.applyAction(s, 'A', { type: 'deploy', url: 'pompe1', lane: 2 }).reason === 'pump_active');
+  s.players.A.copies.vigie1 = 2;
+  check('Vigie acceptée', engine.applyAction(s, 'A', { type: 'deploy', url: 'vigie1', lane: 0 }).ok);
+  forceHand(s, 'A', ['vigie1', 'guerrier1', 'sort1', 'tank1']);
+  check('Vigie : une seule par tour (la suivante va sur une autre tour)', engine.applyAction(s, 'A', { type: 'deploy', url: 'vigie1', lane: 0 }).ok && s.pending.every((p, i, all) => all.findIndex((q) => q.towerId === p.towerId) === i));
 }
 
 // ─── ⏱ Délai d'apparition de 1 s ───
@@ -222,20 +222,15 @@ const qg = (state, side) => state.buildings.find((b) => b.side === side && b.kin
   check('Sort sur couloir vide : 40 % des dégâts sur la tour', Math.abs(tower(b, 'B', 2).hp - (600 - 350 * 0.4)) < 0.01);
 }
 
-// ─── ⚗️ Pompe ───
+// ─── 🗼 Vigie (détails : test-arena-mechanics.js) ───
 {
   const s = newMatch();
-  forceHand(s, 'A', ['pompe1', 'guerrier1', 'tireur1', 'tireur2']);
-  engine.applyAction(s, 'A', { type: 'deploy', url: 'pompe1', lane: 0 });
-  s.players.A.elixir = 0;
-  s.players.B.elixir = 0;
-  run(s, 1000 + 7000);
-  const withPump = s.players.A.elixir;
-  const without = s.players.B.elixir;
-  check('Pompe : +1 élixir après 7 s', Math.abs(withPump - without - 1) < 0.01);
-  run(s, 45000);
-  check('Pompe expirée après 45 s', !s.buildings.some((b) => b.kind === 'pompe' && b.alive));
-  check('Pompe expirée = survivante (expired)', s.poses.find((p) => p.url === 'pompe1').status === 'expired');
+  forceHand(s, 'A', ['vigie1', 'guerrier1', 'tireur1', 'tireur2']);
+  engine.applyAction(s, 'A', { type: 'deploy', url: 'vigie1', lane: 0 });
+  run(s, 1000);
+  check('Vigie : en poste sur la tour, aucun bâtiment en plus', tower(s, 'A', 0).vigie && s.buildings.length === 8);
+  run(s, 40000);
+  check('Vigie redescendue après 40 s = survivante (expired)', !tower(s, 'A', 0).vigie && s.poses.find((p) => p.url === 'vigie1').status === 'expired');
 }
 
 // ─── ⚔️ Contres ───
