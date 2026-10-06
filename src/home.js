@@ -444,7 +444,7 @@ function buildAddMediaModal() {
 const ARCH_ORDER = ['tank', 'guerrier', 'tireur', 'essaim', 'sort', 'vigie'];
 const ARCH_HINTS = {
   tank: 'char : ne vise que les bâtiments', guerrier: 'corps à corps', tireur: 'archer, tire de loin',
-  essaim: 'petits volants', sort: 'explosion visée', vigie: 'monte sur une tour : garde, tir, portée',
+  essaim: 'petits volants', sort: 'explosion visée', vigie: 'guetteur sur une tour',
 };
 
 function archetypeOptions({ withAuto = false } = {}) {

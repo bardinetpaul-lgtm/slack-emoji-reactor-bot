@@ -10,7 +10,7 @@
 //    🐝 Essaim   : mini-personnages AILÉS qui volent (ombre au sol)
 //    🛡 Tank     : un vrai CHAR à chenilles, le personnage sort de la
 //                  tourelle ; les chenilles roulent
-//    ⚗️ Pompe    : bâtiment · 💥 Sort : disque
+//    🗼 Vigie    : archer posté sur une tour · 💥 Sort : disque
 //  Ce que la carte apporte (look) : couvre-chef, coupe de cheveux,
 //  lunettes, moustache / barbe, accessoires (pipe, chaîne, cravate…),
 //  couleurs (peau, cheveux, couvre-chef, tenue ×2, accent), arme.
@@ -44,8 +44,8 @@ const WING = 'rgba(255,255,255,0.85)';
 const GRADIENT_DEF = '<linearGradient id="dg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FF6229"/><stop offset="1" stop-color="#FF74CC"/></linearGradient>';
 
 // 🗼 Vigie (v2.3) : silhouette d'archer (dessinée sur sa tour par le plateau)
-const SILHOUETTE = { tank: 'tank', guerrier: 'melee', tireur: 'distance', essaim: 'essaim', vigie: 'distance', pompe: 'pompe', sort: 'sort' };
-const WALK = { tank: 'roll', melee: 'step', distance: 'step', essaim: 'fly', pompe: 'none', sort: 'none' };
+const SILHOUETTE = { tank: 'tank', guerrier: 'melee', tireur: 'distance', essaim: 'essaim', vigie: 'distance', sort: 'sort' };
+const WALK = { tank: 'roll', melee: 'step', distance: 'step', essaim: 'fly', sort: 'none' };
 
 function hexToHsl(hex) {
   const n = parseInt(String(hex).slice(1), 16);
@@ -323,18 +323,6 @@ function buildTank(look, pal, x) {
   return parts;
 }
 
-function buildPompe(pal, x) {
-  return [
-    P('M-22 2A22 7 0 1 0 22 2A22 7 0 1 0 -22 2Z', 'currentColor', 0),
-    P(R(9, -54, 7, 22, 2), INK),
-    P(R(-17, -28, 34, 28, 6), pal.outfit),
-    P(['M-20 -27L0 -45L20 -27Z', 'M-19 -27A19 19 0 0 1 19 -27Z', R(-20, -34, 40, 8, 4)][x.roof], pal.accent),
-    P([C(0, -14, 6), R(-6, -20, 12, 12, 3), 'M-7 -8L-7 -16A7 7 0 0 1 7 -16L7 -8Z'][x.window], WHITE),
-    P('M12.5 -68Q17 -61 12.5 -57Q8 -61 12.5 -68Z', PINK, 1.2),
-    P(R(-17, -6, 34, 4, 2), pal.outfit2, 1.2),
-  ];
-}
-
 function buildSort(pal, x) {
   const glyph = [
     'M2 -46L-9 -26L0 -26L-5 -8L10 -32L1 -32Z',
@@ -387,9 +375,9 @@ function describeCharacter(card) {
   const look = applyOverrides(looks.getLook(card), override && override.character);
   const pal = paletteOf(look);
   const x = extrasOf(card.url);
-  const build = { melee: () => buildMelee(look, pal, x), distance: () => buildArcher(look, pal), essaim: () => buildFlyer(look, pal), tank: () => buildTank(look, pal, x), pompe: () => buildPompe(pal, x), sort: () => buildSort(pal, x) };
+  const build = { melee: () => buildMelee(look, pal, x), distance: () => buildArcher(look, pal), essaim: () => buildFlyer(look, pal), tank: () => buildTank(look, pal, x), sort: () => buildSort(pal, x) };
   const parts = build[silhouette]();
-  const kind = silhouette === 'pompe' || silhouette === 'sort' ? silhouette : 'fighter';
+  const kind = silhouette === 'sort' ? 'sort' : 'fighter';
   return { archetype, silhouette, kind, swarm: silhouette === 'essaim', walk: WALK[silhouette], layers: { ...look, ...x, palette: pal }, parts };
 }
 
@@ -454,7 +442,6 @@ function describeText(card) {
   const c = describeCharacter(card);
   const arch = ARCHETYPES[c.archetype];
   const head = `${arch.emoji} *${arch.label}*`;
-  if (c.kind === 'pompe') return `${head} · bâtiment`;
   if (c.kind === 'sort') return `${head} · disque de sort`;
   const L = c.layers;
   const bits = [LABELS.head[L.head], LABELS.hairStyle[L.hairStyle], LABELS.glasses[L.glasses], LABELS.facial[L.facial], ...L.accessories.map((a) => LABELS.accessories[a])].filter(Boolean);

@@ -170,10 +170,10 @@ const pathOf = (url) => url.replace('http://jeanpip.test/', '');
   const run = lastState(sA).data;
   check('combat : mon deck est celui choisi', run.players[run.you].hand.every((c) => deckA.includes(c.url)));
   check('allègement : main réduite à l\'utile', run.players[run.you].hand.every((c) => c.hp === undefined && typeof c.cost === 'number' && c.url));
-  check('allègement : pas d\'URL longue pour les bâtiments', run.buildings.every((b) => !b.url || b.url.length <= 5));
+  check('allègement : pas d\'URL longue pour les bâtiments', run.buildings.every((b) => b.url === undefined && (!b.vigie || b.vigie.url.length <= 5)));
 
   const hand = run.players[run.you].hand;
-  const card = hand.find((c) => c.cost <= run.players[run.you].elixir && !['sort', 'pompe'].includes(c.archetype)) || hand[0];
+  const card = hand.find((c) => c.cost <= run.players[run.you].elixir && !['sort', 'vigie'].includes(c.archetype)) || hand[0];
   const before = sB.events.length;
   const dep = await request('POST', `api/arena/${m.id}/action?t=${encodeURIComponent(t)}`, { type: 'deploy', url: card.url, lane: 1 });
   check('pose acceptée', dep.json && dep.json.ok);

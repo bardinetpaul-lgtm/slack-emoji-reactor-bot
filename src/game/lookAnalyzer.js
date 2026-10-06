@@ -28,7 +28,7 @@ const VOCAB = {
   weapon: ['epee', 'hache', 'lance', 'dagues', 'masse', 'marteau', 'poings'],
 };
 const COLOR_KEYS = ['skin', 'hair', 'hatColor', 'outfit', 'outfit2', 'accent'];
-const ROLE_LABELS = { tank: 'Tank (un char d’assaut conduit par le personnage)', guerrier: 'Guerrier (combat au corps à corps)', tireur: 'Archer (arc et flèches)', essaim: 'Essaim (petites créatures volantes à son image)', sort: 'Sort (un disque magique)', pompe: 'Pompe (un petit bâtiment)' };
+const ROLE_LABELS = { tank: 'Tank (un char d’assaut conduit par le personnage)', guerrier: 'Guerrier (combat au corps à corps)', tireur: 'Archer (arc et flèches)', essaim: 'Essaim (petites créatures volantes à son image)', sort: 'Sort (un disque magique)', vigie: 'Vigie (un guetteur posté en haut d’une tour)' };
 
 const SCHEMA = {
   type: 'object',

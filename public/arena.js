@@ -30,7 +30,7 @@
     zone: 'Hors de votre zone de pose',
     no_breach: 'Chez l’adversaire, seulement autour d’une tour détruite',
     lane: 'Hors de votre zone de pose',
-    pump_active: 'Une seule Pompe à la fois',
+    no_tower: 'Aucune tour libre pour ta Vigie',
     not_in_hand: 'Cette carte n’est plus en main',
     not_running: 'Le combat est terminé',
     network: 'Connexion perdue, réessaie',
@@ -46,7 +46,7 @@
     charge: '⚔️ Charge ! Tes unités foncent 6 s',
     salve: '🏹 Salve ! 200 dégâts autour du point',
     renforts: '🐝 Renforts ! 4 abeilles arrivent',
-    surchauffe: '🔥 Surchauffe ! Élixir deux fois plus rapide 6 s',
+    alarme: '🔔 Alarme ! Tes tours tirent deux fois plus fort 6 s',
     gel: '❄️ Gel ! Les ennemis sont figés 3 s',
   };
   const powerRefusal = (cap, reason) => (cap && cap.power === 'rempart' && reason === 'lane' ? 'Plus aucune tour à protéger' : reason);
@@ -148,16 +148,16 @@
 
   // ⏳ Pourquoi une carte n'est pas jouable (et dans combien de temps elle le sera)
   const ELIXIR_REGEN_MS = 2800;
-  function pumpActive(v) {
-    return (v.buildings || []).some((b) => b.side === v.you && b.kind === 'pompe' && b.alive)
-      || (v.pending || []).some((p) => p.side === v.you && p.archetype === 'pompe');
+  // 🗼 une de mes tours vivantes sans Vigie (ni Vigie en cours de pose) ?
+  function freeTower(v) {
+    const taken = (t) => (v.pending || []).some((p) => p.side === v.you && p.archetype === 'vigie' && Math.abs(p.x - t.x) < 0.01 && Math.abs(p.y - t.y) < 0.01);
+    return (v.buildings || []).some((b) => b.side === v.you && b.kind === 'tower' && b.alive && !b.vigie && !taken(b));
   }
   function blockOf(c, v) {
     const me = v.players[v.you];
-    if (c.archetype === 'pompe' && pumpActive(v)) return { reason: 'pump_active' };
+    if (c.archetype === 'vigie' && !freeTower(v)) return { reason: 'no_tower' };
     if (c.cost <= me.elixir) return null;
-    let regen = ELIXIR_REGEN_MS / (v.doubleElixir ? 2 : 1) / (me.overheat ? 2 : 1);
-    if (me.captain && me.captain.archetype === 'pompe') regen /= 1.1;   // 🎖 Économie
+    const regen = ELIXIR_REGEN_MS / (v.doubleElixir ? 2 : 1);
     const secs = Math.max(1, Math.ceil(((c.cost - me.elixir) * regen) / 1000));
     return { reason: 'elixir', have: Math.floor(me.elixir), secs, fill: Math.max(0, Math.min(1, me.elixir / c.cost)) };
   }
@@ -202,7 +202,7 @@
         b.append(el('span', 'charge'), need);
       } else if (blk) {
         b.classList.add('blocked');
-        b.append(el('span', 'tag', '1 Pompe max'));
+        b.append(el('span', 'tag', 'Aucune tour libre'));
       }
       if (on) b.classList.add('selected');
       b.setAttribute('aria-pressed', String(on));
@@ -238,7 +238,7 @@
     if (!c) return;
     const why = blockOf(c, view);
     if (why) flash(blockText(why, c), 88);   // on dit pourquoi, tout de suite
-    if (why && why.reason === 'pump_active') return;
+    if (why && why.reason === 'no_tower') return;
     const on = Boolean(selected) && selected.index === index;
     selectCard(on ? null : { index, url: c.url });
   }
@@ -249,7 +249,9 @@
     if (!slot && renderer) renderer.setGhost(null);
     handKey = '';
     $('board-wrap').classList.toggle('selecting', Boolean(slot));
-    if (renderer) renderer.setZones(Boolean(slot));
+    // 🗼 une Vigie n'a pas de zone de pose (elle va sur une tour) : pas de pointillés
+    const card = slot && view && view.players && (view.players[view.you].hand || [])[slot.index];
+    if (renderer) renderer.setZones(Boolean(slot) && !(card && card.archetype === 'vigie'));
     if (view && view.phase === 'running') renderHand(view);
   }
 
@@ -307,7 +309,7 @@ ${DeckEditor.roleText(e.archetype)}`;
 
   function renderElixir(v) {
     const elixir = v.players[v.you].elixir;
-    const max = v.players[v.you].elixirMax || 10;   // 🎖 Économie : jusqu'à 12
+    const max = v.players[v.you].elixirMax || 10;
     $('elixir-count').textContent = String(Math.floor(elixir));
     const segs = $('elixir-segs');
     segs.style.gridTemplateColumns = `repeat(${max}, 1fr)`;
@@ -417,7 +419,8 @@ ${DeckEditor.roleText(e.archetype)}`;
     const card = selected && (me.hand || [])[selected.index];
     if (!card || card.url !== selected.url) return selectCard(null);
     const spot = ArenaBoard.pointToDeploy(x, y, live, { spell: card.archetype === 'sort' });
-    if (!spot.ok) return flash(spot.reason, yPct);
+    // 🗼 Vigie : pas de zone de pose, le moteur choisit ma tour libre la plus proche du point
+    if (!spot.ok && card.archetype !== 'vigie') return flash(spot.reason, yPct);
     const why = blockOf(card, view);
     if (why) return flash(blockText(why, card), yPct);
 
@@ -444,13 +447,21 @@ ${DeckEditor.roleText(e.archetype)}`;
     const card = selected && me && (me.hand || [])[selected.index];
     if (!pt || !card) { renderer.setGhost(null); return; }
     const live = renderer.current() || view;
+    const sprite = setup && setup.sprites && setup.sprites[card.url];
+    const spriteId = sprite && (typeof sprite === 'string' ? sprite : sprite.id);
+    if (card.archetype === 'vigie') {
+      // 🗼 la Vigie monte sur ma tour libre la plus proche du point
+      const tower = ArenaBoard.vigieTower(pt.x, pt.y, live);
+      if (!tower) { renderer.setGhost(null); return; }
+      const top = ArenaBoard.toBoard(tower.x, tower.y, view.you);
+      renderer.setGhost({ x: top.x, y: top.y - 18, ok: card.cost <= me.elixir, archetype: 'vigie', sprite: spriteId });
+      return;
+    }
     const spot = ArenaBoard.pointToDeploy(pt.x, pt.y, live, { spell: card.archetype === 'sort' });
     // le groupe apparaît au point exact (un Sort « colle » au groupe ennemi visé)
     const at = ArenaBoard.toBoard(spot.x, view.you === 'B' ? 100 - spot.depth : spot.depth, view.you);
-    const sprite = setup && setup.sprites && setup.sprites[card.url];
     renderer.setGhost({
-      x: at.x, y: at.y, ok: spot.ok && card.cost <= me.elixir, archetype: card.archetype,
-      sprite: sprite && (typeof sprite === 'string' ? sprite : sprite.id),
+      x: at.x, y: at.y, ok: spot.ok && card.cost <= me.elixir, archetype: card.archetype, sprite: spriteId,
     });
   }
 

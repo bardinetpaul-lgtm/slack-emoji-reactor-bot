@@ -70,6 +70,8 @@ const swarm = all('essaim');
 check('Essaim : ailé, il vole', swarm.every((c) => c.walk === 'fly' && layerOf(c, 'wings').length >= 2 && c.swarm));
 check('Sort immobile', all('sort').every((c) => c.walk === 'none'));
 check('Vigie : silhouette d\'archer', all('vigie').every((c) => c.silhouette === 'distance' && c.kind === 'fighter'));
+check('Vigie : un vrai personnage (marche, arc à part) pour le plateau', all('vigie').every((c) => c.walk === 'step' && layerOf(c, 'weapon').length > 0));
+check('Vigie : description « 🗼 Vigie · arc… » (plus de bâtiment)', /🗼 \*Vigie\* · arc/.test(characters.describeText(card('vigie-0'))) && !/bâtiment/.test(characters.describeText(card('vigie-0'))));
 check('Sort : jamais un symbole rose sur le disque rose', all('sort').every((c) => c.parts[2].fill !== '#FF73C0'));
 
 // 🔎 Le look de la carte habille le perso

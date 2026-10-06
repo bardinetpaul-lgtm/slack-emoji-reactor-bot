@@ -188,7 +188,7 @@
       art: () => mapArt({ zone: true, arrows: true }),
       body: () => [
         para(['👆 ', ['Touche une carte'], ' puis ', ['l’endroit du terrain'], ' (ou glisse-la directement). Un fantôme montre où ton groupe apparaîtra, en rouge si c’est interdit.']),
-        para(['Tu poses ', ['où tu veux dans ta moitié'], ' (zone bleue). Quand une tour adverse tombe, tu peux aussi poser ', ['autour d’elle'], '. Un 💥 Sort se vise ', ['n’importe où'], ' et frappe tout de suite : touche le groupe ennemi, il le suit.']),
+        para(['Tu poses ', ['où tu veux dans ta moitié'], ' (zone bleue). Quand une tour adverse tombe, tu peux aussi poser ', ['autour d’elle'], '. Un 💥 Sort se vise ', ['n’importe où'], ' et frappe tout de suite : touche le groupe ennemi, il le suit. Une 🗼 Vigie monte sur ', ['ta tour libre la plus proche'], ' du point touché.']),
         para(['Le groupe apparaît ', ['0,5 s'], ' après. Raccourcis : touches ', ['1 à 4'], ', Échap pour annuler.']),
       ],
     },

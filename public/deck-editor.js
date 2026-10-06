@@ -26,7 +26,7 @@
 (function (root) {
   'use strict';
 
-  const ARCH_LABELS = { tank: 'Tank', guerrier: 'Guerrier', tireur: 'Tireur', essaim: 'Essaim', sort: 'Sort', pompe: 'Pompe' };
+  const ARCH_LABELS = { tank: 'Tank', guerrier: 'Guerrier', tireur: 'Tireur', essaim: 'Essaim', sort: 'Sort', vigie: 'Vigie' };
   const RARITY_LABELS = { epic: 'Épique', legendary: 'Légendaire' };
   const RARITIES = { common: 'Commune', rare: 'Rare', epic: 'Épique', legendary: 'Légendaire', rose: 'Octobre Rose' };
   const RARITY_ORDER = { legendary: 0, rose: 1, epic: 1, rare: 2, common: 3 };
@@ -41,7 +41,7 @@
     tireur:   { emoji: '🏹', label: 'Tireur',   role: '3 archers légers et vifs qui tirent de loin, fragiles : à protéger derrière un Tank.', vs: 'Nettoie l’🐝 Essaim (×1,5). Tape mal sur les ⚔️ Guerriers (×0,67), qui l’écrasent en retour.' },
     essaim:   { emoji: '🐝', label: 'Essaim',   role: '6 petits volants très rapides.', vs: 'Fait fondre les 🛡 Tanks (×1,5). Tape mal sur les 🏹 Tireurs (×0,67), qui le nettoient. Craint les 💥 Sorts.' },
     sort:     { emoji: '💥', label: 'Sort',     role: 'Explose au point visé (zone). Seulement 40 % des dégâts sur les bâtiments.', vs: 'Écrase l’🐝 Essaim (×1,5).' },
-    pompe:    { emoji: '⚗️', label: 'Pompe',    role: 'Bâtiment : +1 élixir toutes les 7 s pendant 45 s. Une seule à la fois.', vs: '' },
+    vigie:    { emoji: '🗼', label: 'Vigie',    role: 'Monte sur une de tes tours : garde, tir et portée en plus pendant 40 s. Une par tour.', vs: 'Rend une tour très dure à prendre, mais la carte est perdue si la tour tombe.' },
   };
   const roleText = (k) => (ROLES[k] ? `${ROLES[k].role} ${ROLES[k].vs}`.trim() : '');
 

@@ -162,7 +162,7 @@ function compact(view, { keyOf = {}, images = {} } = {}) {
     const p = view.players[side];
     const out = {
       userId: p.userId, elixir: r2(p.elixir), handCount: p.handCount, towersDestroyed: p.towersDestroyed,
-      elixirMax: p.elixirMax, captain: p.captain, rage: p.rage, overheat: p.overheat,
+      elixirMax: p.elixirMax, captain: p.captain, rage: p.rage, alarm: p.alarm,
     };
     if (p.hand) {
       const slim = (c) => ({
@@ -177,7 +177,11 @@ function compact(view, { keyOf = {}, images = {} } = {}) {
   return {
     ...view,
     players,
-    buildings: view.buildings.map((b) => ({ ...b, hp: Math.round(b.hp), url: b.url ? key(b.url) : undefined })),
+    // 🗼 Vigie en poste : clé courte du personnage, garde arrondie
+    buildings: view.buildings.map((b) => ({
+      ...b, hp: Math.round(b.hp),
+      vigie: b.vigie ? { url: key(b.vigie.url), guard: Math.round(b.vigie.guard), guardMax: Math.round(b.vigie.guardMax), remainingMs: Math.round(b.vigie.remainingMs) } : null,
+    })),
     // lane = colonne de tour la plus proche, recalculée sur le x ARRONDI (comme le fait la page)
     units: view.units.map((u) => ({
       ...u, x: r2(u.x), y: r2(u.y), lane: r2(u.x) < 33.5 ? 0 : r2(u.x) > 66.5 ? 2 : 1, hp: Math.round(u.hp), maxHp: Math.round(u.maxHp), url: key(u.url),
