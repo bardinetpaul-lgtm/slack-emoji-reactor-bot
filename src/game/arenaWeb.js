@@ -400,4 +400,4 @@ async function route(req, res, url) {
   return false;
 }
 
-module.exports = { configure, route, buildArenaUrl, buildDeckUrl, compact };
+module.exports = { configure, route, buildArenaUrl, buildDeckUrl, compact, combatAssets };
