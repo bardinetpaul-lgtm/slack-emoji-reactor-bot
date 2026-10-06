@@ -7,7 +7,7 @@
 //    GET  /api/arena/<id>/ranking?t=   → 🏆 classement (préparation du combat)
 //    GET  /deck?t=                     → « Mon deck » (éditeur hors combat)
 //    GET  /api/deck?t=                 → catalogue + mes decks
-//    POST /api/deck?t=                 → enregistre mes decks ({ tutorial: true } : tuto vu)
+//    POST /api/deck?t=                 → enregistre mes decks ({ tutorial: true } : tuto vu ; { tvOptOut } : JP TV)
 //    GET  /api/deck/ranking?t=         → 🏆 classement (« Mon deck »)
 //
 //  Jeton = « <userId>.<hmac> » (lien personnel, signé comme les autres
@@ -313,6 +313,7 @@ async function handleDeckApi(req, res, userId) {
     return ctx.sendJson(res, 200, {
       status: 'ok', name, catalogue: catalogueFor(userId, ''), decks, active, captains: CAPTAINS, specialties: specialties.INFO,
       tutorialSeen: arenaStore.hasSeenTutorial(userId),
+      tvOptOut: arenaStore.isTvOptOut(userId),
     });
   }
   if (req.method === 'POST') {
@@ -321,6 +322,9 @@ async function handleDeckApi(req, res, userId) {
     if (body.tutorial === true) {
       arenaStore.markTutorialSeen(userId);
       return ctx.sendJson(res, 200, { ok: true });
+    }
+    if (typeof body.tvOptOut === 'boolean') {
+      return ctx.sendJson(res, 200, { ok: true, tvOptOut: arenaStore.setTvOptOut(userId, body.tvOptOut) });
     }
     arenaStore.setDecks(userId, body);
     return ctx.sendJson(res, 200, { ok: true });

@@ -225,6 +225,15 @@ const pathOf = (url) => url.replace('http://jeanpip.test/', '');
   check('classement de la préparation : même classement, « toi » = UB', rkArena.json && rkArena.json.top.length === 2 && rkArena.json.top[0].you === true);
   check('pages : le script du classement est servi', (await request('GET', 'arena-ranking.js')).status === 200);
 
+  // 📺 Option « Ne pas me diffuser sur JP TV » (Mon deck)
+  const tvGet = await request('GET', `api/deck?t=${encodeURIComponent(dt)}`);
+  check('Mon deck : diffusion JP TV active par défaut', tvGet.json && tvGet.json.tvOptOut === false);
+  const tvPost = await request('POST', `api/deck?t=${encodeURIComponent(dt)}`, { tvOptOut: true });
+  check('Mon deck : refus de diffusion enregistré', tvPost.json && tvPost.json.ok === true && tvPost.json.tvOptOut === true);
+  check('Mon deck : refus relu', (await request('GET', `api/deck?t=${encodeURIComponent(dt)}`)).json.tvOptOut === true);
+  check('Mon deck : le refus ne touche pas aux decks', (await request('GET', `api/deck?t=${encodeURIComponent(dt)}`)).json.decks[0].name === 'Nouveau');
+  await request('POST', `api/deck?t=${encodeURIComponent(dt)}`, { tvOptOut: false });
+
   sA.close(); sB.close(); sA2.close();
   matches.stop();
   server.close();

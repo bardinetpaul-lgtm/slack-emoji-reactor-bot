@@ -333,6 +333,8 @@ body.wide .top { display: none; }
 
 /* 🏆 Classement (v2.2) : même cadre que le tuto */
 .head-btns { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.tv-opt { display: inline-flex; align-items: center; gap: 6px; font: 600 13px 'Inter Tight', sans-serif; color: var(--i7); cursor: pointer; white-space: nowrap; }
+.tv-opt input { width: 16px; height: 16px; accent-color: var(--blue); }
 .rk-dialog { width: min(460px, 100%); }
 .rk-body { display: flex; flex-direction: column; gap: 8px; }
 .rk-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }

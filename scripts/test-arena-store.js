@@ -105,6 +105,14 @@ const legacy = store.recentResults(50).filter((h) => !['h1', 'h2'].includes(h.ma
 check('ancien format : victoires reprises avec gagnant + perdant, sans tours', legacy.length > 0 && legacy.every((h) => h.players.length === 2 && h.players.every(Boolean) && h.towers === null));
 check('ancien format : nuls sans joueurs ignorés', legacy.every((h) => !h.draw || h.players.length === 2));
 
+// 📺 Refus de diffusion sur JP TV
+check('JP TV : diffusé par défaut', store.isTvOptOut('UA') === false);
+store.setTvOptOut('UA', true);
+({ store, collections } = restart());
+check('JP TV : refus gardé après redémarrage', store.isTvOptOut('UA') === true);
+store.setTvOptOut('UA', false);
+check('JP TV : refus retiré', store.isTvOptOut('UA') === false);
+
 try { require(path.join(TMP, 'src', 'db.js')).close(); } catch { /* base jamais ouverte */ }   // Windows : fichier ouvert = non supprimable
 fs.rmSync(TMP, { recursive: true, force: true });
 console.log(failures ? `\n❌ ${failures} échec(s)` : '\n✅ Tout est bon');

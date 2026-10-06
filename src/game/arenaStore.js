@@ -13,6 +13,7 @@
 //      history: [{ matchId, at, winnerId, loserId, draw, players?, towers?, reason?, durationMs?, arena? }],   // détail depuis v2.3
 //      tutorial: { U123: ISO },    // 🎓 tuto vu (affiché à la 1re ouverture)
 //      streaks: { U123: { day: 'AAAA-MM-JJ', step: 1…6 } } }   // 📅 série de combats (dailyStreak.js)
+//      tvOptOut: { U123: true },   // 📺 « Ne pas me diffuser sur JP TV » (v2.3)
 // ═══════════════════════════════════════════════════════════
 
 const fs = require('fs');
@@ -29,7 +30,7 @@ const RARITY_RANK = { common: 0, rare: 1, epic: 2, rose: 2, legendary: 3 };
 // ─────────────────────────────────────────────
 
 function load() {
-  const empty = { decks: {}, stats: {}, rewards: {}, settled: {}, history: [], tutorial: {}, streaks: {} };
+  const empty = { decks: {}, stats: {}, rewards: {}, settled: {}, history: [], tutorial: {}, streaks: {}, tvOptOut: {} };
   try {
     if (!fs.existsSync(ARENA_PATH)) return empty;
     const data = JSON.parse(fs.readFileSync(ARENA_PATH, 'utf-8')) || {};
@@ -124,6 +125,22 @@ function markTutorialSeen(userId, now = Date.now()) {
     data.tutorial[userId] = new Date(now).toISOString();
     save(data);
   }
+}
+
+// ─────────────────────────────────────────────
+// 📺 JP TV : refus de diffusion en direct
+// ─────────────────────────────────────────────
+
+function isTvOptOut(userId) {
+  return Boolean(load().tvOptOut[userId]);
+}
+
+function setTvOptOut(userId, optOut) {
+  const data = load();
+  if (optOut) data.tvOptOut[userId] = true;
+  else delete data.tvOptOut[userId];
+  save(data);
+  return Boolean(optOut);
 }
 
 // ─────────────────────────────────────────────
@@ -278,4 +295,6 @@ module.exports = {
   markSettled,
   hasSeenTutorial,
   markTutorialSeen,
+  isTvOptOut,
+  setTvOptOut,
 };
