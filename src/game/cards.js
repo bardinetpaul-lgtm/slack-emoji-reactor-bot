@@ -42,9 +42,9 @@ const ARCHETYPES = {
   essaim:   { key: 'essaim',   label: 'Essaim',   emoji: '🐝', share: 15, cost: 3, hp: 105, dps: 20,   range: 2,  speed: 11, count: 6, targets: 'all', rarityWeight: 0.5 },
   sort:     { key: 'sort',     label: 'Sort',     emoji: '💥', share: 10, cost: 4, damage: 350, radius: 6, buildingRatio: 0.4 },
   // 🗼 Vigie (v2.3, à la place exacte de l'ancienne Pompe dans le tirage) : monte sur une tour de
-  //    son camp. Garde = PV qui encaissent avant la tour ; tir +30 % ; portée +2
-  //    (v2.3, simulation : garde 250 → 150, tir +60 % → +30 %, portée +4 → +2).
-  vigie:    { key: 'vigie',    label: 'Vigie',    emoji: '🗼', share: 5,  cost: 4, durationMs: 40000, guard: 150, dpsBonus: 0.3, rangeBonus: 2 },
+  //    son camp. Garde = PV qui encaissent avant la tour ; tir +40 % ; portée +2
+  //    (v2.3, simulation avec départage des nuls : garde 250 → 200, tir +60 % → +40 %, portée +4 → +2).
+  vigie:    { key: 'vigie',    label: 'Vigie',    emoji: '🗼', share: 5,  cost: 4, durationMs: 40000, guard: 200, dpsBonus: 0.4, rangeBonus: 2 },
 };
 
 // Anciens noms d'archétypes (surcharges écrites avant la v2.3) → nom actuel

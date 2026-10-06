@@ -36,6 +36,14 @@
 //      AU MOINS 60 % du temps.
 //    (le deck « tout rare » 3 légendaires + 3 épiques + 2 rares est indiqué)
 //
+//  Départage (simulation seulement, les vraies règles de fin ne changent pas) :
+//  entre bons joueurs, la plupart des combats finissent sans tour tombée (nul
+//  pour le moteur). Pour chaque taux de combats complets (1 bis, 2, 4, 5), un nul
+//  du moteur est départagé : tours détruites, puis PV restants des tours + QG
+//  (chacun ramené à 1 : 3 tours + 1 QG = 4 au plus). Nul seulement si égalité
+//  exacte. Chaque taux affiche « décisifs / départagés / nuls » : un 50 % fait de
+//  nuls n'est pas un équilibre.
+//
 //  Usage : node scripts/simulate-balance.js [--matches 200]
 // ═══════════════════════════════════════════════════════════
 const fs = require('fs');
@@ -154,6 +162,23 @@ function duelRate(arch, rarity, url) {
 // 2. Combats complets entre bots
 // ─────────────────────────────────────────────
 
+/** 🏁 Points de `side` (1 / 0,5 / 0) avec départage des nuls du moteur ; compte le décompte dans `tally`. */
+function outcome(s, side, tally) {
+  const w = s.result.winner;
+  if (w) { tally.decisive += 1; return w === side ? 1 : 0; }
+  const foe = side === 'A' ? 'B' : 'A';
+  const broken = (x) => s.buildings.filter((b) => b.side !== x && b.kind === 'tower' && !b.alive).length;
+  const standing = (x) => s.buildings.filter((b) => b.side === x).reduce((sum, b) => sum + Math.max(0, b.hp) / b.maxHp, 0);
+  const d = (broken(side) - broken(foe)) || (standing(side) - standing(foe));
+  if (Math.abs(d) < 1e-9) { tally.draws += 1; return 0.5; }
+  tally.tiebreak += 1;
+  return d > 0 ? 1 : 0;
+}
+const newTally = () => ({ decisive: 0, tiebreak: 0, draws: 0 });
+let lastTally = newTally();
+/** « (décisifs 12 / départagés 180 / nuls 8) » du dernier taux calculé */
+const split = (tally = lastTally) => `(décisifs ${tally.decisive} / départagés ${tally.tiebreak} / nuls ${tally.draws})`;
+
 function lcg(seed) {
   let x = seed >>> 0;
   return () => { x = (Math.imul(x, 1664525) + 1013904223) >>> 0; return x / 4294967296; };
@@ -182,6 +207,7 @@ function botAct(s, side, rand) {
 
 function fullMatchRate(rarity) {
   let score = 0;
+  const tally = newTally();
   for (let m = 0; m < MATCHES; m += 1) {
     const rand = lcg(1000 + m);
     const archs = ALL.slice();
@@ -203,9 +229,9 @@ function fullMatchRate(rarity) {
       botAct(s, 'B', rand);
       engine.tick(s, 500);
     }
-    const w = s.result.winner;
-    score += w === sideOfStar ? 1 : w === null ? 0.5 : 0;
+    score += outcome(s, sideOfStar, tally);
   }
+  lastTally = tally;
   return (100 * score) / MATCHES;
 }
 
@@ -213,6 +239,7 @@ function fullMatchRate(rarity) {
  *  est remplacée par une autre carte commune (à tour de rôle). → % de victoires du deck avec Vigie */
 function vigieRate(rarity = 'common') {
   let score = 0;
+  const tally = newTally();
   const swaps = [...FIGHTERS, 'sort'];
   for (let m = 0; m < MATCHES; m += 1) {
     const rand = lcg(40000 + m);
@@ -233,15 +260,16 @@ function vigieRate(rarity = 'common') {
       goodAct(s, 'B', rand);
       engine.tick(s, 500);
     }
-    const w = s.result.winner;
-    score += w === vSide ? 1 : w === null ? 0.5 : 0;
+    score += outcome(s, vSide, tally);
   }
+  lastTally = tally;
   return (100 * score) / MATCHES;
 }
 
 /** Combats complets : Capitaine `arch` contre chacun des autres Capitaines (9e carte, hors deck). */
 function captainRate(arch) {
   let score = 0;
+  const tally = newTally();
   const others = ALL.filter((a) => a !== arch);
   for (let m = 0; m < MATCHES; m += 1) {
     const rand = lcg(7000 + m);
@@ -260,9 +288,9 @@ function captainRate(arch) {
       goodAct(s, 'B', rand);
       engine.tick(s, 500);
     }
-    const w = s.result.winner;
-    score += w === capSide ? 1 : w === null ? 0.5 : 0;
+    score += outcome(s, capSide, tally);
   }
+  lastTally = tally;
   return (100 * score) / MATCHES;
 }
 
@@ -404,6 +432,7 @@ function skillRate(level1, deck1, level2, deck2) {
   const make = (kind, off) => base.map((a, i) => ({ url: `st-${a}-${off + i}`, title: a, rarity: DECKS[kind] ? DECKS[kind][i] : 'common' }));
   const act = { good: goodAct, bad: badAct };
   let score = 0;
+  const tally = newTally();
   for (let m = 0; m < MATCHES; m += 1) {
     const rand = lcg(20000 + m);
     const d1 = make(deck1, 0);
@@ -420,9 +449,9 @@ function skillRate(level1, deck1, level2, deck2) {
       act[level2](s, s2, rand);
       engine.tick(s, 500);
     }
-    const w = s.result.winner;
-    score += w === s1 ? 1 : w === null ? 0.5 : 0;
+    score += outcome(s, s1, tally);
   }
+  lastTally = tally;
   return (100 * score) / MATCHES;
 }
 
@@ -452,15 +481,16 @@ for (const rarity of RARITIES) {
 
 {
   const rate = vigieRate('common');
+  const vt = lastTally;
   const bad = rate < 35 || rate > 65;
   if (bad) failures += 1;
   console.log(`\n🗼 Vigie commune en combat complet (bons joueurs, contre le même deck avec une autre commune à sa place, ${MATCHES} combats)`);
-  console.log(`vigie      ${pct(rate)}${bad ? '  ❌ hors [35 %, 65 %]' : ''}   (indicatif : légendaire ${pct(vigieRate('legendary'))})`);
+  console.log(`vigie      ${pct(rate)}${bad ? '  ❌ hors [35 %, 65 %]' : ''}  ${split(vt)}   (indicatif : légendaire ${pct(vigieRate('legendary'))} ${split()})`);
 }
 
 console.log(`\n🤖 Combats complets de 2 min entre bots (${MATCHES} par rareté, indicatif)\n`);
 for (const rarity of RARITIES.slice(1)) {
-  console.log(`deck avec 1 ${rarity.padEnd(10)} contre deck commun : ${pct(fullMatchRate(rarity))} de victoires`);
+  console.log(`deck avec 1 ${rarity.padEnd(10)} contre deck commun : ${pct(fullMatchRate(rarity))} de victoires  ${split()}`);
 }
 
 }
@@ -483,23 +513,25 @@ for (const arch of ALL) {
   const rate = captainRate(arch);
   const bad = rate < 40 || rate > 65;
   if (bad) failures += 1;
-  console.log(`${arch.padEnd(10)} ${pct(rate)}${bad ? '  ❌ hors [40 %, 65 %]' : ''}`);
+  console.log(`${arch.padEnd(10)} ${pct(rate)}${bad ? '  ❌ hors [40 %, 65 %]' : ''}  ${split()}`);
 }
 
 }
 
 if (section('skill')) {
 console.log(`\n🧠 Stratégie contre raretés (${MATCHES} combats par ligne)\n`);
-console.log(`écart de niveau pur : bon joueur commun contre mauvais joueur commun : ${pct(skillRate('good', 'common', 'bad', 'common'))} pour le bon joueur (indicatif)`);
+console.log(`écart de niveau pur : bon joueur commun contre mauvais joueur commun : ${pct(skillRate('good', 'common', 'bad', 'common'))} pour le bon joueur (indicatif)  ${split()}`);
 const equal = skillRate('good', 'common', 'good', 'rich');
+const eqTally = lastTally;
 const skill = skillRate('good', 'common', 'bad', 'rich');
+const skTally = lastTally;
 const eqBad = 100 - equal <= 50;   // les raretés doivent l'emporter à stratégie égale
 const skBad = skill < 60;
 if (eqBad) failures += 1;
 if (skBad) failures += 1;
-console.log(`à stratégie égale : bon commun contre bon deck riche       → ${pct(100 - equal)} pour le deck riche${eqBad ? '  ❌ doit être > 50 %' : ''}`);
-console.log(`la stratégie paie : bon commun contre mauvais deck riche    → ${pct(skill)} pour le bon joueur${skBad ? '  ❌ < 60 %' : ''}`);
-console.log(`(indicatif) bon commun contre mauvais deck « tout rare »    → ${pct(skillRate('good', 'common', 'bad', 'star'))} pour le bon joueur`);
+console.log(`à stratégie égale : bon commun contre bon deck riche       → ${pct(100 - equal)} pour le deck riche${eqBad ? '  ❌ doit être > 50 %' : ''}  ${split(eqTally)}`);
+console.log(`la stratégie paie : bon commun contre mauvais deck riche    → ${pct(skill)} pour le bon joueur${skBad ? '  ❌ < 60 %' : ''}  ${split(skTally)}`);
+console.log(`(indicatif) bon commun contre mauvais deck « tout rare »    → ${pct(skillRate('good', 'common', 'bad', 'star'))} pour le bon joueur  ${split()}`);
 
 }
 

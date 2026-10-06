@@ -68,8 +68,8 @@ check('rareté inconnue → commune', cards.getCardStats({ url: 'u-guerrier', ra
 
 const vC = cards.getCardStats({ url: 'u-vigie', rarity: 'common' });
 const vL = cards.getCardStats({ url: 'u-vigie', rarity: 'legendary' });
-check('Vigie commune : 4 élixir, 40 s, garde 150, tir +30 %, portée +2', vC.cost === 4 && vC.durationMs === 40000 && vC.guard === 150 && vC.dpsBonus === 0.3 && vC.rangeBonus === 2);
-check('Vigie légendaire : garde et durée multipliées', Math.abs(vL.guard - 150 * L.mult) < 1e-9 && Math.abs(vL.durationMs - 40000 * L.mult) < 1e-9);
+check('Vigie commune : 4 élixir, 40 s, garde 200, tir +40 %, portée +2', vC.cost === 4 && vC.durationMs === 40000 && vC.guard === 200 && vC.dpsBonus === 0.4 && vC.rangeBonus === 2);
+check('Vigie légendaire : garde et durée multipliées', Math.abs(vL.guard - 200 * L.mult) < 1e-9 && Math.abs(vL.durationMs - 40000 * L.mult) < 1e-9);
 check('Vigie légendaire : tir et portée inchangés', vL.dpsBonus === vC.dpsBonus && vL.rangeBonus === vC.rangeBonus);
 check('ancienne surcharge « pompe » lue « vigie »', cards.getCardStats({ url: 'u-pompe', rarity: 'common' }).archetype === 'vigie');
 

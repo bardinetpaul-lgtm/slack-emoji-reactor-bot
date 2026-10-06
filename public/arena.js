@@ -46,8 +46,8 @@
     charge: '⚔️ Charge ! Tes unités foncent 6 s',
     salve: '🏹 Salve ! 200 dégâts autour du point',
     renforts: '🐝 Renforts ! 4 abeilles arrivent',
-    alarme: '🔔 Alarme ! Tes tours tirent deux fois plus fort 6 s',
-    gel: '❄️ Gel ! Les ennemis sont figés 3 s',
+    alarme: '🔔 Alarme ! Tes tours tirent trois fois plus fort 15 s',
+    gel: '❄️ Gel ! Les ennemis sont figés 5 s',
   };
   const powerRefusal = (cap, reason) => (cap && cap.power === 'rempart' && reason === 'lane' ? 'Plus aucune tour à protéger' : reason);
 
