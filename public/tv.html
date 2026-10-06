@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=1920, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>JP TV · Arène en direct</title>
+  <!-- Chemins relatifs : la page est servie sur …/tv/arena (derrière un préfixe de proxy) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;600;800&display=swap">
+  <link rel="stylesheet" href="../tv.css?v=__ASSET_VERSION__">
+</head>
+<body>
+  <main class="tv">
+    <header class="tv-top">
+      <span class="on-air">🔴 EN DIRECT · JP TV</span>
+      <span class="tv-title">⚔️ Arène Jeanpip</span>
+      <span class="tv-clock" id="clock">2:00</span>
+    </header>
+
+    <section class="tv-live" id="live" hidden>
+      <aside class="side side-b">
+        <span class="who"><i class="dot orange"></i><b id="name-b">Joueur B</b></span>
+        <span class="towers" id="towers-b">0 tour détruite</span>
+      </aside>
+      <div class="board-wrap"><svg id="board" role="img" aria-label="Arène en direct"></svg>
+        <span class="x2" id="x2" hidden>×2 élixir</span>
+      </div>
+      <aside class="side side-a">
+        <span class="who"><i class="dot blue"></i><b id="name-a">Joueur A</b></span>
+        <span class="towers" id="towers-a">0 tour détruite</span>
+      </aside>
+    </section>
+
+    <section class="tv-ended" id="ended" hidden>
+      <p class="kicker">Fin du combat</p>
+      <h1 id="ended-title">Victoire</h1>
+      <p class="sub" id="ended-sub"></p>
+    </section>
+
+    <section class="tv-idle" id="idle">
+      <h1>⚔️ Arène Jeanpip</h1>
+      <p class="sub">Aucun combat en direct pour l'instant.</p>
+    </section>
+
+    <footer class="also" id="also" hidden></footer>
+
+    <div class="alert" id="alert" hidden>
+      <p class="alert-kicker">⚠️ PRIORITÉ AU DIRECT</p>
+      <p class="alert-names" id="alert-names"></p>
+      <p class="alert-sub">Combat de l'Arène en direct</p>
+    </div>
+  </main>
+
+  <script src="../arena-wire.js?v=__ASSET_VERSION__"></script>
+  <script src="../arena-board.js?v=__ASSET_VERSION__"></script>
+  <script src="../tv.js?v=__ASSET_VERSION__"></script>
+</body>
+</html>

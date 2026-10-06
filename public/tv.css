@@ -1,0 +1,32 @@
+/* 📺 JP TV : Arène en direct, plein écran 1920×1080 (TV du hall) */
+:root { --ink: #1A201D; --i7: #2F3733; --cream: #F3EFED; --blue: #1C72F1; --orange: #FF6229; --red: #E5332A; --pink: #FF73C0; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { width: 100%; height: 100%; overflow: hidden; background: var(--ink); color: var(--cream); font-family: 'Inter Tight', sans-serif; }
+.tv { position: relative; width: 100vw; height: 100vh; display: flex; flex-direction: column; }
+.tv-top { display: flex; align-items: center; gap: 24px; padding: 18px 40px; font-weight: 800; font-size: 28px; }
+.on-air { background: var(--red); color: #fff; border-radius: 999px; padding: 6px 18px; letter-spacing: 1px; }
+.tv-title { flex: 1; }
+.tv-clock { font-size: 44px; font-variant-numeric: tabular-nums; }
+.tv-live { flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr auto 1fr; align-items: stretch; gap: 32px; padding: 0 40px 24px; }
+.board-wrap { position: relative; height: 100%; aspect-ratio: 360 / 640; }
+.board-wrap svg { width: 100%; height: 100%; display: block; }
+.side { display: flex; flex-direction: column; gap: 12px; font-size: 34px; }
+.side-b { justify-content: flex-start; align-items: flex-end; text-align: right; }
+.side-a { justify-content: flex-end; align-items: flex-start; }
+.who { display: flex; align-items: center; gap: 12px; font-weight: 800; }
+.dot { width: 22px; height: 22px; border-radius: 50%; display: inline-block; }
+.dot.blue { background: var(--blue); } .dot.orange { background: var(--orange); }
+.towers { font-size: 26px; opacity: .8; }
+.x2 { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); background: var(--pink); color: var(--ink); font-weight: 800; border-radius: 999px; padding: 4px 14px; font-size: 22px; }
+.tv-ended, .tv-idle { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; text-align: center; }
+.tv-ended h1, .tv-idle h1 { font-size: 96px; font-weight: 800; }
+.kicker { font-size: 32px; letter-spacing: 3px; text-transform: uppercase; opacity: .7; }
+.sub { font-size: 40px; opacity: .85; }
+.also { padding: 14px 40px; background: var(--i7); font-size: 28px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.alert { position: absolute; inset: 0; z-index: 10; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 28px; background: var(--red); color: #fff; text-align: center; animation: flash 1s ease-in-out infinite alternate; }
+.alert-kicker { font-size: 110px; font-weight: 800; letter-spacing: 2px; }
+.alert-names { font-size: 72px; font-weight: 800; }
+.alert-sub { font-size: 40px; opacity: .9; }
+@keyframes flash { from { background: var(--red); } to { background: #B8231C; } }
+@media (prefers-reduced-motion: reduce) { .alert { animation: none; } }
+[hidden] { display: none !important; }

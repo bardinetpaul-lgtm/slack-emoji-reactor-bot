@@ -515,9 +515,9 @@
 
   // ─────────────────────────────────────────────
   // 🎞️ Rendu animé (navigateur) : reçoit les états 10 Hz du serveur,
-  //    interpole les positions à 60 images/s, gère Sorts et chips.
+  //    interpole les positions à 60 images/s (option step : 5 Hz sur JP TV), gère Sorts et chips.
   // ─────────────────────────────────────────────
-  function createRenderer(svgEl, { arena = 'jardin', symbols = '', sprites = {} } = {}) {
+  function createRenderer(svgEl, { arena = 'jardin', symbols = '', sprites = {}, step = 100 } = {}) {
     let prev = null;
     let curr = null;
     let currAt = 0;
@@ -529,7 +529,7 @@
     const lastHp = new Map();
     const lastShot = new Map();   // unité → dernier tir montré
     const SHOT_EVERY = { tireur: 750, tank: 1100, guerrier: 650, essaim: 520 };
-    const STEP = 100;
+    const STEP = step;   // ms entre deux états (100 en jeu, 200 sur JP TV)
 
     svgEl.setAttribute('viewBox', `0 0 ${W} ${H}`);
     svgEl.innerHTML = `<defs>${GRADIENT_DEF}${TOWER_SYMBOLS}${symbols}</defs><g data-ground>${renderGround(arena)}</g><g data-live></g>`;

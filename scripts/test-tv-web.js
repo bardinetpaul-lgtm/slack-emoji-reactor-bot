@@ -113,6 +113,9 @@ const launch = (a, b) => {
   const urls = web.buildTvUrls();
   check('liens JP TV construits avec la clé', urls && /^http:\/\/jeanpip\.test\/tv\/arena\?k=[a-f0-9]{32}$/.test(urls.page) && urls.api.startsWith('http://jeanpip.test/api/tv/arena?k='));
   const k = new URL(urls.page).searchParams.get('k');
+  const page = await request(`tv/arena?k=${k}`);
+  check('page JP TV servie, assets versionnés', page.status === 200 && /tv\.js\?v=[a-f0-9]{10}/.test(page.body) && page.body.includes('PRIORITÉ AU DIRECT'));
+  check('page JP TV : scripts servis', (await request('tv.js')).status === 200 && (await request('tv.css')).status === 200);
 
   check('JSON : clé absente refusée', (await request('api/tv/arena')).status === 403);
   check('JSON : mauvaise clé refusée', (await request('api/tv/arena?k=0123456789abcdef0123456789abcdef')).status === 403);

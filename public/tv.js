@@ -1,0 +1,97 @@
+// ═══════════════════════════════════════════════════════════
+//  📺 JP TV — page de diffusion de l'Arène (TV du hall, v2.3)
+//    GET ../api/tv/stream?k=  (SSE)
+//      idle  → écran d'attente
+//      setup → alerte « PRIORITÉ AU DIRECT » (4 s) puis le combat
+//      state → terrain (5 Hz, interpolé), chrono, tours détruites
+//      ended → écran de fin (le serveur le garde 10 s, puis idle)
+//      also  → bandeau « Aussi en direct »
+//  Lecture seule : aucune action possible, ni main ni élixir affichés.
+// ═══════════════════════════════════════════════════════════
+(function () {
+  'use strict';
+
+  const $ = (id) => document.getElementById(id);
+  const k = new URLSearchParams(location.search).get('k') || '';
+  const decoder = ArenaWire.createDecoder();
+  const ALERT_MS = 4000;
+  const REASONS = { qg: 'QG détruit', towers: 'aux tours détruites', draw: 'égalité parfaite', forfeit: 'par abandon', disconnect: 'par déconnexion' };
+  let renderer = null;
+  let names = { A: 'Joueur A', B: 'Joueur B' };
+  let alertTimer = null;
+
+  function show(id) {
+    for (const s of ['idle', 'live', 'ended']) $(s).hidden = s !== id;
+  }
+  function clock(ms) {
+    const s = Math.max(0, Math.ceil(ms / 1000));
+    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  }
+  const towersText = (n) => `${n} tour${n > 1 ? 's' : ''} détruite${n > 1 ? 's' : ''}`;
+  function stopRenderer() {
+    if (renderer) renderer.stop();
+    renderer = null;
+  }
+
+  const es = new EventSource(`../api/tv/stream?k=${encodeURIComponent(k)}`);
+
+  es.addEventListener('idle', () => {
+    stopRenderer();
+    $('alert').hidden = true;
+    $('clock').textContent = '';
+    show('idle');
+  });
+
+  es.addEventListener('setup', (e) => {
+    const s = JSON.parse(e.data);
+    decoder.reset();
+    names = s.names || names;
+    $('name-a').textContent = names.A;
+    $('name-b').textContent = names.B;
+    $('towers-a').textContent = towersText(0);
+    $('towers-b').textContent = towersText(0);
+    stopRenderer();
+    renderer = ArenaBoard.createRenderer($('board'), { arena: s.arena, symbols: s.symbols, sprites: s.sprites, step: 200 });
+    show('live');
+    // ⚠️ Priorité au direct : alerte plein écran avant le combat
+    $('alert-names').textContent = `${names.A} 🆚 ${names.B}`;
+    $('alert').hidden = false;
+    clearTimeout(alertTimer);
+    alertTimer = setTimeout(() => { $('alert').hidden = true; }, ALERT_MS);
+  });
+
+  es.addEventListener('state', (e) => {
+    const v = decoder.decode(JSON.parse(e.data));
+    if (renderer) renderer.push(v);
+    $('clock').textContent = clock(v.remainingMs);
+    $('towers-a').textContent = towersText(v.players.A.towersDestroyed);
+    $('towers-b').textContent = towersText(v.players.B.towersDestroyed);
+    $('x2').hidden = !v.doubleElixir;
+  });
+
+  es.addEventListener('ended', (e) => {
+    const v = JSON.parse(e.data);
+    const n = v.names || names;
+    stopRenderer();
+    $('alert').hidden = true;
+    if (v.phase === 'cancelled' || !v.result) {
+      $('ended-title').textContent = 'Combat annulé';
+      $('ended-sub').textContent = `${n.A} 🆚 ${n.B}`;
+    } else if (!v.result.winner) {
+      $('ended-title').textContent = '🤝 Match nul';
+      $('ended-sub').textContent = `${n.A} 🆚 ${n.B}`;
+    } else {
+      const t = v.result.towers;
+      const score = t ? ` · ${t.A}–${t.B} tours` : '';
+      $('ended-title').textContent = `🏆 ${n[v.result.winner]}`;
+      $('ended-sub').textContent = `gagne ${REASONS[v.result.reason] || ''} contre ${n[v.result.winner === 'A' ? 'B' : 'A']}${score}`;
+    }
+    show('ended');
+  });
+
+  es.addEventListener('also', (e) => {
+    const list = JSON.parse(e.data);
+    $('also').hidden = !list.length;
+    $('also').textContent = list.length ? `Aussi en direct : ${list.map((m) => `${m.a} 🆚 ${m.b}`).join(' · ')}` : '';
+  });
+}());
