@@ -117,6 +117,7 @@ function handleStream(req, res) {
   let names = null;
   let alsoKey = '';
   let pending = [];
+  let lastRunning = null;
   let busy = false;
 
   const unsubscribe = matches.subscribeSpectator((match, events) => {
@@ -144,6 +145,7 @@ function handleStream(req, res) {
         featuredId = pick.featuredId;
         phase = null;
         pending = [];
+        lastRunning = null;
         if (!featuredId) write('idle', {});
       }
       const match = featuredId ? matches.getMatch(featuredId) : null;
@@ -161,6 +163,13 @@ function handleStream(req, res) {
             symbols: a.symbols, sprites: a.sprites, images: a.images,
           });
         } else {
+          // Événements en attente (dernier coup, explosion du QG) : un dernier « state » avant la fin
+          // (la vue de fin n'a plus ni joueurs ni unités : on rejoue le dernier état connu)
+          if (phase === 'running' && pending.length && lastRunning) {
+            write('state', encoder.encode(arenaWeb.compact({ ...lastRunning, events: pending }, arenaWeb.combatAssets(match))));
+          }
+          pending = [];
+          lastRunning = null;
           write('ended', { matchId: match.id, phase: view.phase, names, result: view.result, cancelReason: view.cancelReason });
         }
         phase = view.phase;
@@ -168,6 +177,7 @@ function handleStream(req, res) {
       if (view.phase === 'running') {
         const events = pending;
         pending = [];
+        lastRunning = view;
         write('state', encoder.encode(arenaWeb.compact({ ...view, events }, arenaWeb.combatAssets(match))));
       }
     } catch (e) {

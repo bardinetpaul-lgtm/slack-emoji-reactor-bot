@@ -23,7 +23,7 @@ const RELEASES = [
       '📺 Tes combats de l\'Arène passent en direct sur JP TV, la TV du hall : une alerte « Priorité au direct », puis tout le combat, et le résultat à la fin. Ni ta main ni ton élixir ne sont montrés.',
       '🏆 JP TV affiche aussi le classement de l\'Arène en direct et le résultat des derniers combats.',
       '🙈 Tu préfères rester discret ? Coche « Ne pas me diffuser sur JP TV » dans « Mon deck » : tes combats ne passeront pas en direct (ils comptent toujours au classement).',
-      '🌙 Le direct ne coupe jamais le mode soir de la TV.',
+      '🌙 Pas de direct pendant le mode soir de la TV (17h45–19h).',
     ],
   },
   {

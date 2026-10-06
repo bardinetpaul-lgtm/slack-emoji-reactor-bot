@@ -150,6 +150,9 @@ const launch = (a, b) => {
   matches.action(id1, m1.players.A.userId, { type: 'forfeit' });
   matches.step(Date.now());
   check('flux : écran de fin du 1er combat', await until(() => tv.events.some((e) => e.event === 'ended' && e.data.matchId === id1 && e.data.result && e.data.result.reason === 'forfeit')));
+  const iEnd = tv.events.findIndex((e) => e.event === 'ended' && e.data.matchId === id1);
+  const before = tv.events[iEnd - 1];
+  check('flux : dernier état (événement de fin) envoyé avant la fin', before && before.event === 'state' && Array.isArray(before.data.events) && before.data.events.some((e) => e.type === 'end'));
   const after = (await request(`api/tv/arena?k=${k}`)).json;
   check('JSON : dernier combat avec noms, vainqueur et tours', after.recent.length === 1 && after.recent[0].winner === NAMES[m1.players.B.userId] && Array.isArray(after.recent[0].towers) && after.recent[0].draw === false);
   check('JSON : classement avec vrais noms', after.ranking.length === 2 && after.ranking[0].name === NAMES[m1.players.B.userId] && after.ranking[0].wins === 1);

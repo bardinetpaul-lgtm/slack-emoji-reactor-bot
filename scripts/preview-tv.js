@@ -33,7 +33,17 @@ const bank = media.getAllMedia();
 
 web.startWebServer({ client, logger: console, port: PORT, force: true });
 
+// Les perdants perdent leurs cartes : on les redonne avant chaque lancement
+const SEATS = ['UA', 'UB', 'UC', 'UD'];
+function topUp(u) {
+  if (collections.getCollection(u).length < 12) {
+    const i = SEATS.indexOf(u);
+    collections.addCards(u, bank.slice(i * 10, i * 10 + 10));
+  }
+}
 function launch(a, b) {
+  topUp(a);
+  topUp(b);
   const m = matches.createMatchFor(a, b, Date.now(), { arena: ['jardin', 'port', 'serveurs'][Math.floor(Math.random() * 3)] });
   if (!m.ok) return;
   for (const u of [a, b]) {
@@ -64,4 +74,4 @@ launch('UA', 'UB');
 
 const urls = web.buildTvUrls();
 console.log(`\n📺 JP TV (aperçu) : ${urls.page}\n📊 Synthèse       : ${urls.api}\n`);
-process.on('SIGINT', () => { fs.rmSync(TMP, { recursive: true, force: true }); process.exit(0); });
+process.on('SIGINT', () => { try { fs.rmSync(TMP, { recursive: true, force: true }); } catch (e) { /* Windows : dossier encore verrouillé */ } process.exit(0); });

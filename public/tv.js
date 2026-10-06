@@ -15,7 +15,8 @@
   const k = new URLSearchParams(location.search).get('k') || '';
   const decoder = ArenaWire.createDecoder();
   const ALERT_MS = 4000;
-  const REASONS = { qg: 'QG détruit', towers: 'aux tours détruites', draw: 'égalité parfaite', forfeit: 'par abandon', disconnect: 'par déconnexion' };
+  const REASONS = { qg: 'QG détruit', towers: 'plus de tours détruites', qg_hp: 'QG le plus solide', forfeit: 'par abandon', disconnect: 'par déconnexion' };
+  const RECONNECT_MS = 3000;
   let renderer = null;
   let names = { A: 'Joueur A', B: 'Joueur B' };
   let alertTimer = null;
@@ -33,8 +34,18 @@
     renderer = null;
   }
 
-  const es = new EventSource(`../api/tv/stream?k=${encodeURIComponent(k)}`);
+  let current = null;
+  function connect() {
+    const es = new EventSource(`../api/tv/stream?k=${encodeURIComponent(k)}`);
+    current = es;
+    bind(es);
+    // Un statut HTTP non-200 (403, 502…) ferme le flux pour de bon : on le recrée
+    es.onerror = () => {
+      if (es.readyState === EventSource.CLOSED && current === es) setTimeout(connect, RECONNECT_MS);
+    };
+  }
 
+  function bind(es) {
   es.addEventListener('idle', () => {
     stopRenderer();
     $('alert').hidden = true;
@@ -50,6 +61,7 @@
     $('name-b').textContent = names.B;
     $('towers-a').textContent = towersText(0);
     $('towers-b').textContent = towersText(0);
+    $('x2').hidden = true;
     stopRenderer();
     renderer = ArenaBoard.createRenderer($('board'), { arena: s.arena, symbols: s.symbols, sprites: s.sprites, step: 200 });
     show('live');
@@ -81,10 +93,13 @@
       $('ended-title').textContent = '🤝 Match nul';
       $('ended-sub').textContent = `${n.A} 🆚 ${n.B}`;
     } else {
+      const w = v.result.winner;
+      const l = w === 'A' ? 'B' : 'A';
       const t = v.result.towers;
-      const score = t ? ` · ${t.A}–${t.B} tours` : '';
-      $('ended-title').textContent = `🏆 ${n[v.result.winner]}`;
-      $('ended-sub').textContent = `gagne ${REASONS[v.result.reason] || ''} contre ${n[v.result.winner === 'A' ? 'B' : 'A']}${score}`;
+      const score = t ? ` · ${t[w]}–${t[l]} tours` : '';
+      const reason = REASONS[v.result.reason];
+      $('ended-title').textContent = `🏆 ${n[w]}`;
+      $('ended-sub').textContent = `bat ${n[l]}${reason ? ` · ${reason}` : ''}${score}`;
     }
     show('ended');
   });
@@ -94,4 +109,7 @@
     $('also').hidden = !list.length;
     $('also').textContent = list.length ? `Aussi en direct : ${list.map((m) => `${m.a} 🆚 ${m.b}`).join(' · ')}` : '';
   });
+  }
+
+  connect();
 }());
