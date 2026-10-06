@@ -175,6 +175,12 @@ check('gel : anneau bleu', fs2.includes('data-fx="frozen"'));
 check('bouclier : anneau blanc', fs2.includes('data-fx="shield"'));
 check('retraite : groupe estompé', fs2.includes('opacity="0.55"'));
 check('Rempart : tour protégée', fs2.includes('data-fx="rempart"'));
+// 🐛 v2.3 : le cercle blanc était invisible sur le sol crème → couleur de l'équipe + 🛡
+const rempart = /<g data-fx="rempart">([\s\S]*?)<\/g>/.exec(fs2)[1];
+check('Rempart : cercle à la couleur de mon équipe (bleu), pas blanc', rempart.includes(`stroke="${board.COLORS.BLUE}"`) && !rempart.includes('stroke="#FFFFFF"'));
+check('Rempart : bouclier 🛡 au-dessus de la tour', rempart.includes('🛡'));
+const foeShield = board.renderDynamic({ ...fv, buildings: [{ ...fv.buildings[0], side: 'B', y: 85 }] }, { sprites: { g: 's1' } });
+check('Rempart adverse : cercle orange', /<g data-fx="rempart">[\s\S]*?stroke="#FF6229"/.test(foeShield));
 const fx2 = board.renderDynamic({ you: 'A', units: [], buildings: [] }, { fx: [{ type: 'lane', lane: 1, color: '#FF73C0', age: 100 }, { type: 'ring', x: 10, y: 10, age: 0, color: '#FF6229' }] });
 check('pouvoir : le couloir visé s\'illumine', fx2.includes('data-fx="lane"'));
 

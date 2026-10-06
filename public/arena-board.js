@@ -356,7 +356,12 @@
       const pos = king ? { x: W / 2, y: at.y } : { x: at.x, y: at.y + (b.lane === 1 ? -4 : 4) * (b.side === viewer ? 1 : -1) };
       const href = b.alive ? (king ? '#t-king' : '#t-lane') : '#t-ruine';
       let svg = `<use href="${href}" x="-34" y="-46" width="68" height="80" transform="translate(${pos.x} ${pos.y})" style="color:${color}"/>`;
-      if (b.alive && b.shielded) svg += `<g data-fx="rempart">${pathTag(F(C(pos.x, pos.y - 8, 34), 'none', WHITE, 3, '4 4'))}</g>`;
+      // 🎖 Rempart : halo + cercle à la couleur de l'équipe et 🛡 (un cercle blanc disparaissait sur le sol crème)
+      if (b.alive && b.shielded) {
+        svg += `<g data-fx="rempart"><circle cx="${pos.x}" cy="${pos.y - 8}" r="36" fill="${color}" fill-opacity="0.18"/>`
+          + pathTag(F(C(pos.x, pos.y - 8, 36), 'none', color, 4, '7 5'))
+          + `<text x="${pos.x}" y="${pos.y - 50}" text-anchor="middle" font-size="22">🛡</text></g>`;
+      }
       if (b.alive) {
         const ratio = b.hp / b.maxHp;
         if (ratio < 0.5) svg += pathTag(F(`M${pos.x - 9} ${pos.y - 2}l4 5l-3 5M${pos.x + 10} ${pos.y + 4}l-3 4l3 4`, 'none', INK, 1.4));

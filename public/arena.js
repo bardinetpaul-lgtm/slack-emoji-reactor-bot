@@ -40,6 +40,16 @@
     power_used: 'Pouvoir déjà utilisé',
     no_captain: 'Pas de Capitaine dans ce deck',
   };
+  // 🎖 Pouvoir réussi : confirmation visible (v2.3, le Rempart passait inaperçu)
+  const POWER_DONE = {
+    rempart: '🛡 Rempart ! Ta tour la plus proche est invulnérable 10 s',
+    charge: '⚔️ Charge ! Tes unités foncent 6 s',
+    salve: '🏹 Salve ! 200 dégâts autour du point',
+    renforts: '🐝 Renforts ! 4 abeilles arrivent',
+    surchauffe: '🔥 Surchauffe ! Élixir deux fois plus rapide 6 s',
+    gel: '❄️ Gel ! Les ennemis sont figés 3 s',
+  };
+  const powerRefusal = (cap, reason) => (cap && cap.power === 'rempart' && reason === 'lane' ? 'Plus aucune tour à protéger' : reason);
 
   let setup = null;
   let renderer = null;
@@ -332,7 +342,7 @@ ${DeckEditor.roleText(e.archetype)}`;
     if (!cap || cap.used || !texts[cap.archetype]) return;
     if (!texts[cap.archetype].power.lane) {
       const res = await send({ type: 'power' });
-      if (!res.ok) flash(res.reason);
+      flash(res.ok ? (POWER_DONE[cap.power] || '🎖 Pouvoir lancé') : powerRefusal(cap, res.reason));
       return;
     }
     selectCard(null);
@@ -359,9 +369,10 @@ ${DeckEditor.roleText(e.archetype)}`;
     // 🎖 Pouvoir armé : au point touché
     if (powerArmed) {
       const at = ArenaBoard.pointToPower(x, y, live);
+      const cap = view.players[view.you].captain;
       armPower(false);
       const res = await send({ type: 'power', x: at.x, depth: at.depth });
-      if (!res.ok) flash(res.reason, yPct);
+      flash(res.ok ? (POWER_DONE[cap && cap.power] || '🎖 Pouvoir lancé') : powerRefusal(cap, res.reason), yPct);
       return undefined;
     }
 
