@@ -180,6 +180,12 @@ const pathOf = (url) => url.replace('http://jeanpip.test/', '');
   await until(() => sB.events.slice(before).some((e) => e.event === 'state' && (e.data.events || []).some((x) => x.type === 'deploy')), 1500);
   const seen = sB.events.slice(before).find((e) => e.event === 'state' && (e.data.events || []).some((x) => x.type === 'deploy'));
   check('l\'adversaire voit la pose tout de suite', Boolean(seen));
+  // 🂠 v2.3 : cartes restantes de l'adversaire (dos de cartes), jamais ses cartes
+  await until(() => { const v = lastState(sB).data; return v.players && v.players[v.you === 'A' ? 'B' : 'A'].handCount === 7; }, 1500);
+  const vB = lastState(sB).data;
+  const foeB = vB.players[vB.you === 'A' ? 'B' : 'A'];
+  check('cartes restantes de l\'adversaire : 8 − 1 pose = 7', foeB.handCount === 7);
+  check('cartes restantes de l\'adversaire : ses cartes restent cachées', foeB.hand === undefined && foeB.next === undefined);
   check('allègement : l\'événement de pose porte une clé courte', seen && seen.data.events.find((x) => x.type === 'deploy').url.length <= 5);
   await until(() => (lastState(sA).data.units || []).length > 0, 2500);
   const u = lastState(sA).data.units[0];

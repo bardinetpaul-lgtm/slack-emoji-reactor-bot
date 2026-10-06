@@ -259,6 +259,24 @@
 
   const FEED_MAX = 4;
 
+  // 🂠 Cartes restantes de l'adversaire : autant de dos de cartes que d'emplacements pas encore posés
+  let oppHandKey = null;
+  function renderOppHand(v) {
+    const foe = v.players[v.you === 'A' ? 'B' : 'A'];
+    const n = typeof foe.handCount === 'number' ? foe.handCount : null;
+    if (n === oppHandKey) return;
+    oppHandKey = n;
+    const box = $('opp-hand');
+    box.hidden = n === null;
+    if (n === null) return;
+    const label = n ? `${n} carte${n > 1 ? 's' : ''} restante${n > 1 ? 's' : ''}` : 'plus aucune carte';
+    const backs = el('span', 'backs');
+    for (let i = 0; i < n; i += 1) backs.append(el('i', 'card-back'));
+    box.replaceChildren(backs, el('span', 'opp-hand-count', label));
+    box.title = `L'adversaire peut encore poser ${n} carte${n > 1 ? 's' : ''}`;
+    box.setAttribute('aria-label', `Adversaire : ${label}`);
+  }
+
   function renderOppFeed(v) {
     const box = $('opp-feed');
     for (const e of v.events || []) {
@@ -612,9 +630,12 @@ ${DeckEditor.roleText(e.archetype)}`;
       renderHand(v);
       renderPower(v);
       renderOppFeed(v);
+      renderOppHand(v);
       $('x2').hidden = !v.doubleElixir;
       return undefined;
     }
+    $('opp-hand').hidden = true;
+    oppHandKey = null;
     if (renderer) renderer.stop();
     return renderEnded(v);
   }
