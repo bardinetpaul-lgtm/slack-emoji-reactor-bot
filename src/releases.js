@@ -16,6 +16,17 @@
 
 const RELEASES = [
   {
+    version: '2.3',
+    date: '2026-10-06',
+    title: 'L\'Arène en direct sur JP TV',
+    changes: [
+      '📺 Tes combats de l\'Arène passent en direct sur JP TV, la TV du hall : une alerte « Priorité au direct », puis tout le combat, et le résultat à la fin. Ni ta main ni ton élixir ne sont montrés.',
+      '🏆 JP TV affiche aussi le classement de l\'Arène en direct et le résultat des derniers combats.',
+      '🙈 Tu préfères rester discret ? Coche « Ne pas me diffuser sur JP TV » dans « Mon deck » : tes combats ne passeront pas en direct (ils comptent toujours au classement).',
+      '🌙 Le direct ne coupe jamais le mode soir de la TV.',
+    ],
+  },
+  {
     version: '2.2.1',
     date: '2026-10-05',
     title: 'Signale un bug, gagne des JP$',

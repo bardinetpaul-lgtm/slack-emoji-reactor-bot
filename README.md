@@ -202,6 +202,17 @@ Au premier démarrage, `data/credits.json` est importé (log « credits.json imp
 
 **Aperçu local** : `node scripts/preview-stats.js` (données simulées).
 
+## 📺 JP TV : l'Arène en direct (v2.3)
+
+La TV du hall (dashboard MagicDIMSI) affiche chaque combat de l'Arène en direct, le classement et les derniers combats.
+
+- `GET /tv/arena?k=` : page de diffusion plein écran (alerte « Priorité au direct », combat, écran de fin 10 s).
+- `GET /api/tv/stream?k=` : flux SSE 5 Hz du combat à l'antenne (vue sans main ni élixir).
+- `GET /api/tv/arena?k=` : `{ onAir, live, ranking, recent }`, lu toutes les 5 s par `dashboard/arene.js` de MagicDIMSI.
+- Clé TV dérivée du secret web : `node scripts/tv-urls.js` (sur la VM) affiche `botApi` et `liveUrl` à recopier dans `dashboard/arene.config.json` de MagicDIMSI.
+- Option joueur « Ne pas me diffuser sur JP TV » dans « Mon deck » (`tvOptOut` dans `data/arena.json`).
+- Aperçu local avec combats simulés : `node scripts/preview-tv.js`.
+
 ## 🐛 Dépannage
 
 | Problème | Solution |
