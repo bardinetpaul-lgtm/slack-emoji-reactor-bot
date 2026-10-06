@@ -10,8 +10,9 @@
 //  Rareté : renforce les PV (et les dégâts d'un Sort, la garde / la durée
 //  d'une Vigie), jamais les dégâts des unités ; à moitié pour l'Essaim.
 //  Les épiques / légendaires reçoivent en plus une spécialité.
-//  Réglé par la simulation : à stratégie égale un deck riche gagne ~64 %,
-//  mais un bon joueur 100 % commun bat un mauvais joueur au deck riche ~63 %.
+//  Réglé par la simulation (v2.3, avec la Vigie) : à stratégie égale un deck riche gagne ~51 %
+//  (entre bons joueurs, presque tous les combats finissent sans tour tombée),
+//  mais un bon joueur 100 % commun bat un mauvais joueur au deck riche ~71 %.
 //
 //  Contres : l'attaquant fait ×1,5 à ce qu'il contre, ×0,67 à ce
 //  qui le contre. Tank → Guerrier → Tireur → Essaim → Tank ; Sort → Essaim.
@@ -41,8 +42,9 @@ const ARCHETYPES = {
   essaim:   { key: 'essaim',   label: 'Essaim',   emoji: '🐝', share: 15, cost: 3, hp: 105, dps: 20,   range: 2,  speed: 11, count: 6, targets: 'all', rarityWeight: 0.5 },
   sort:     { key: 'sort',     label: 'Sort',     emoji: '💥', share: 10, cost: 4, damage: 350, radius: 6, buildingRatio: 0.4 },
   // 🗼 Vigie (v2.3, à la place exacte de l'ancienne Pompe dans le tirage) : monte sur une tour de
-  //    son camp. Garde = PV qui encaissent avant la tour ; tir +60 % ; portée +4.
-  vigie:    { key: 'vigie',    label: 'Vigie',    emoji: '🗼', share: 5,  cost: 4, durationMs: 40000, guard: 250, dpsBonus: 0.6, rangeBonus: 4 },
+  //    son camp. Garde = PV qui encaissent avant la tour ; tir +30 % ; portée +2
+  //    (v2.3, simulation : garde 250 → 150, tir +60 % → +30 %, portée +4 → +2).
+  vigie:    { key: 'vigie',    label: 'Vigie',    emoji: '🗼', share: 5,  cost: 4, durationMs: 40000, guard: 150, dpsBonus: 0.3, rangeBonus: 2 },
 };
 
 // Anciens noms d'archétypes (surcharges écrites avant la v2.3) → nom actuel

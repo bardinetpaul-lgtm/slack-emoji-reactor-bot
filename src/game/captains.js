@@ -29,7 +29,7 @@ const CAPTAINS = {
   },
   vigie: {
     style: 'Garnison',
-    passive: 'Tes Vigies restent 50 % plus longtemps.',
+    passive: 'Tes Vigies restent deux fois plus longtemps.',
     power: { key: 'alarme', label: 'Alarme', lane: false, desc: 'Toutes tes tours en vie tirent deux fois plus fort pendant 6 s.' },
   },
   sort: {
@@ -58,7 +58,7 @@ const TUNING = {
   renforts: 4,
   gelMs: 3000,
   // v2.3 : Garnison (remplace Économie : élixir de départ, maximum 11, recharge, Surchauffe)
-  vigieDuration: 1.5,
+  vigieDuration: 2,   // simulation : 1,5 → 2 (la Nuée gagnait 81 % de ses combats contre la Garnison)
   alarmeMs: 6000,
   alarmeDps: 2,
 };

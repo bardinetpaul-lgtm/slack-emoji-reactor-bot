@@ -10,6 +10,11 @@
 //  1. Duels à élixir égal : une carte X (rareté R) + 1 commune
 //     contre TOUTES les mains communes de même coût, posées en même
 //     temps dans le même couloir, dans les deux sens.
+//     (la 🗼 Vigie n'y est pas : elle ne pose aucune troupe, elle renforce une
+//     tour, et le duel s'arrête quand un camp n'a plus de troupes → mesurée en 1 bis)
+//  1 bis. 🗼 Vigie commune : combats complets entre BONS joueurs, deck avec la
+//     Vigie contre le même deck où elle est remplacée par une autre commune
+//     (Tank, Guerrier, Tireur, Essaim, Sort à tour de rôle).
 //  2. Combats complets (2 min) entre deux bots : deck avec une carte
 //     rare/épique/légendaire contre deck 100 % commun (indicatif).
 //
@@ -20,7 +25,7 @@
 //
 //  Critères (code de sortie 1 si non respectés) :
 //    • aucune rareté au-dessus de 70 % de victoires en duel (hors spécialité) ;
-//    • chaque archétype commun entre 35 % et 65 % ;
+//    • chaque archétype commun entre 35 % et 65 % (la Vigie en 1 bis) ;
 //    • une spécialité ajoute au plus +8 pts à la même légendaire sans spécialité ;
 //    • chaque Capitaine entre 40 % et 65 % en combat complet ;
 //  5. Stratégie contre raretés (principe de Paul) :
@@ -44,7 +49,7 @@ fs.symlinkSync(path.join(ROOT, 'node_modules'), path.join(TMP, 'node_modules'), 
 fs.mkdirSync(path.join(TMP, 'data'));
 
 const FIGHTERS = ['tank', 'guerrier', 'tireur', 'essaim'];
-const ALL = [...FIGHTERS, 'sort', 'pompe'];
+const ALL = [...FIGHTERS, 'sort', 'vigie'];
 const RARITIES = ['common', 'rare', 'epic', 'legendary'];
 
 // Cartes de test : `<archétype>-<n>`, archétype imposé
@@ -84,7 +89,7 @@ function commonHands(budget) {
     if (spent === budget) { if (hand.some((a) => FIGHTERS.includes(a))) hands.push(hand); return; }
     if (hand.length === 3) return;
     for (let i = start; i < ALL.length; i += 1) {
-      if (ALL[i] === 'pompe') continue;
+      if (ALL[i] === 'vigie') continue;   // pas de troupe : hors duel (voir 1 bis)
       const c = costOf(ALL[i]);
       if (spent + c <= budget) rec(i, [...hand, ALL[i]], spent + c);
     }
@@ -204,6 +209,36 @@ function fullMatchRate(rarity) {
   return (100 * score) / MATCHES;
 }
 
+/** 🗼 Combats complets entre bons joueurs : deck avec une Vigie (rareté `rarity`) contre le même deck où elle
+ *  est remplacée par une autre carte commune (à tour de rôle). → % de victoires du deck avec Vigie */
+function vigieRate(rarity = 'common') {
+  let score = 0;
+  const swaps = [...FIGHTERS, 'sort'];
+  for (let m = 0; m < MATCHES; m += 1) {
+    const rand = lcg(40000 + m);
+    const base = [...ALL, 'guerrier', 'tireur'];
+    const deckV = base.map((a, i) => ({ url: `${a}-${i}`, title: a, rarity: a === 'vigie' ? rarity : 'common' }));
+    const swap = swaps[m % swaps.length];
+    const deckX = base.map((a, i) => {
+      const k = a === 'vigie' ? swap : a;
+      return { url: `${k}-${10 + i}`, title: k, rarity: 'common' };
+    });
+    const copies = (deck) => Object.fromEntries(deck.map((c) => [c.url, 1]));
+    const vSide = Math.floor(m / swaps.length) % 2 === 0 ? 'A' : 'B';
+    const V = { userId: 'V', deck: deckV, copies: copies(deckV) };
+    const X = { userId: 'X', deck: deckX, copies: copies(deckX) };
+    const s = engine.createMatch({ id: `v${m}`, seed: 50000 + m, players: vSide === 'A' ? { A: V, B: X } : { A: X, B: V } });
+    while (s.status === 'running') {
+      goodAct(s, 'A', rand);
+      goodAct(s, 'B', rand);
+      engine.tick(s, 500);
+    }
+    const w = s.result.winner;
+    score += w === vSide ? 1 : w === null ? 0.5 : 0;
+  }
+  return (100 * score) / MATCHES;
+}
+
 /** Combats complets : Capitaine `arch` contre chacun des autres Capitaines (9e carte, hors deck). */
 function captainRate(arch) {
   let score = 0;
@@ -251,6 +286,21 @@ function goodAct(s, side, rand) {
   const hand = p.hand.slice();
   const can = (u) => cost(u) <= p.elixir;
 
+  // 🔔 Alarme (Garnison) : dès que 2 ennemis sont à portée d'une de mes tours
+  if (p.captain && !p.captain.used && p.captain.power === 'alarme') {
+    const underFire = s.buildings.some((b) => b.side === side && b.kind === 'tower' && b.alive
+      && s.units.filter((u) => u.side === foe && engine.distance(u, b) <= b.range + (b.vigie ? b.vigie.rangeBonus : 0)).length >= 2);
+    if (underFire) engine.applyAction(s, side, { type: 'power' });
+  }
+
+  // 🗼 Vigie : une seule tour couverte à la fois (en poste ou en cours de pose)
+  const covered = s.buildings.some((b) => b.side === side && b.vigie) || s.pending.some((q) => q.side === side && q.towerId);
+  const vigie = !covered && hand.find((u) => arch(u) === 'vigie' && can(u));
+  const freeTower = (lane) => {
+    const t = s.buildings.find((b) => b.side === side && b.kind === 'tower' && b.lane === lane);
+    return t && t.alive && !t.vigie;
+  };
+
   // 🛡 Défense : ennemis dans ma moitié
   const threats = s.units.filter((u) => u.side === foe && mineY(u.y) < 45 && !u.recalling);
   if (threats.length) {
@@ -258,6 +308,11 @@ function goodAct(s, side, rand) {
     const lane = lanes.indexOf(Math.max(...lanes));
     const inLane = threats.filter((u) => u.lane === lane);
     const main = inLane[0].archetype;
+    // 🗼 la Vigie monte sur la tour menacée (puis on défend aussi avec une troupe si l'élixir suit)
+    if (vigie && freeTower(lane)) {
+      engine.applyAction(s, side, { type: 'deploy', url: vigie, x: engine.COLUMNS[lane], depth: 15 });
+      hand.splice(hand.indexOf(vigie), 1);
+    }
     if (p.captain && !p.captain.used && ['salve', 'gel', 'rempart'].includes(p.captain.power) && inLane.length >= 2) {
       // pouvoir au point du groupe menaçant (terrain ouvert : une zone, plus une colonne)
       const cx = inLane.reduce((a, u) => a + u.x, 0) / inLane.length;
@@ -272,16 +327,16 @@ function goodAct(s, side, rand) {
     return;
   }
 
-  // 🎖 Surchauffe quand l'élixir est bas (sinon elle est gâchée)
-  if (p.captain && !p.captain.used && p.captain.power === 'surchauffe' && p.elixir < 3 && s.timeMs > 10000) {
-    engine.applyAction(s, side, { type: 'power' });
-  }
-
-  // ⚗️ Économie tôt : Pompe si calme
-  const pompe = hand.find((u) => arch(u) === 'pompe' && can(u));
-  if (pompe && s.timeMs < 60000) {
-    engine.applyAction(s, side, { type: 'deploy', url: pompe, lane: Math.floor(rand() * 3) });
-    return;
+  // 🗼 Vigie dès que l'adversaire a des troupes en jeu (aucune tour couverte) : sur la tour du
+  //    couloir où il en a le plus. Terrain vide : gardée (posée à vide, elle redescendrait sans
+  //    avoir servi), puis sur la tour du milieu dans la dernière minute. Le moteur prend la tour
+  //    libre la plus proche si celle-ci est tombée.
+  if (vigie) {
+    const foes = s.units.filter((u) => u.side === foe && !u.recalling);
+    const lanes = [0, 1, 2].map((l) => foes.filter((u) => u.lane === l).length);
+    const lane = foes.length ? lanes.indexOf(Math.max(...lanes)) : 1;
+    if ((foes.length || s.timeMs > 60000)
+      && engine.applyAction(s, side, { type: 'deploy', url: vigie, x: engine.COLUMNS[lane], depth: 15 }).ok) return;
   }
 
   // 💥 Sort offensif : achever une tour, ou nettoyer les défenseurs d'une poussée
@@ -313,8 +368,7 @@ function goodAct(s, side, rand) {
   }
 
   // ⚔️ Poussée groupée : Tank + soutien d'un coup (sinon on patiente)
-  const max = p.captain && p.captain.archetype === 'pompe' ? 12 : 10;
-  if (p.elixir < max - 1.5) return;
+  if (p.elixir < 10 - 1.5) return;
   const towers = [0, 1, 2].map((l) => {
     const t = s.buildings.find((b) => b.side === foe && b.kind === 'tower' && b.lane === l);
     return t.alive ? t.hp : -1;
@@ -394,6 +448,14 @@ for (const rarity of RARITIES) {
     flag = '  ❌ > 70 %';
   }
   console.log(`${rarity.padEnd(11)}${rates.map((r) => pct(r).padStart(10)).join('')}   ${pct(avg)}${flag}`);
+}
+
+{
+  const rate = vigieRate('common');
+  const bad = rate < 35 || rate > 65;
+  if (bad) failures += 1;
+  console.log(`\n🗼 Vigie commune en combat complet (bons joueurs, contre le même deck avec une autre commune à sa place, ${MATCHES} combats)`);
+  console.log(`vigie      ${pct(rate)}${bad ? '  ❌ hors [35 %, 65 %]' : ''}   (indicatif : légendaire ${pct(vigieRate('legendary'))})`);
 }
 
 console.log(`\n🤖 Combats complets de 2 min entre bots (${MATCHES} par rareté, indicatif)\n`);

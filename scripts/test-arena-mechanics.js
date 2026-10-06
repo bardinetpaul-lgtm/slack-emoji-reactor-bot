@@ -234,18 +234,18 @@ const give = (s, side, urls) => { s.players[side].hand = urls.slice(); s.players
   const lateEv = run(late, 600);
   check('Vigie : tour tombée pendant la pose → pose « expired » + vigie_end', late.poses[0].status === 'expired' && lateEv.some((e) => e.type === 'vigie_end' && e.side === 'A' && e.lane === 0) && !tower(late, 'A', 0).vigie);
 
-  // Portée +4 : un ennemi à portée + 3 de la tour gauche (D = 15)
+  // Portée +2 : un ennemi à portée + 1 de la tour gauche (D = 13)
   const rg = vm();
-  const far = dummy(rg, 17, 30);
+  const far = dummy(rg, 17, 28);
   let h = far.hp;
   run(rg, 1000);
-  check('sans Vigie : ennemi à portée + 3 ignoré par la tour', far.hp === h);
+  check('sans Vigie : ennemi à portée + 1 ignoré par la tour', far.hp === h);
   vigieOn(rg, 0);
   h = far.hp;
   run(rg, 1000);
-  check('avec Vigie : ennemi à portée + 3 visé', far.hp < h);
+  check('avec Vigie : ennemi à portée + 1 visé', far.hp < h);
 
-  // Tir +60 %
+  // Tir +30 %
   const dm = vm();
   const near = dummy(dm, 17, 25);   // D = 10 : à portée dans les deux cas
   h = near.hp;
@@ -255,26 +255,26 @@ const give = (s, side, urls) => { s.players[side].hand = urls.slice(); s.players
   h = near.hp;
   run(dm, 1000);
   const boosted = h - near.hp;
-  check(`Vigie : dégâts de la tour ×1,6 (${base.toFixed(1)} → ${boosted.toFixed(1)} par s)`, Math.abs(base - 80) < 1e-6 && Math.abs(boosted - 128) < 1e-6);
+  check(`Vigie : dégâts de la tour ×1,3 (${base.toFixed(1)} → ${boosted.toFixed(1)} par s)`, Math.abs(base - 80) < 1e-6 && Math.abs(boosted - 104) < 1e-6);
 
   // Garde
   const gd = vm();
   const tg = vigieOn(gd, 0);
-  check('Garde : 250 PV de garde (commune)', tg.vigie.guard === 250 && tg.vigie.guardMax === 250);
+  check('Garde : 150 PV de garde (commune)', tg.vigie.guard === 150 && tg.vigie.guardMax === 150);
   const hitter = dummy(gd, 17, 16.5, { dps: 1000 });   // au pied de la tour : 100 dégâts par pas
   run(gd, 100);
-  check('Garde : 100 dégâts → garde −100, tour intacte', Math.abs(tg.vigie.guard - 150) < 1e-6 && tg.hp === 600);
+  check('Garde : 100 dégâts → garde −100, tour intacte', Math.abs(tg.vigie.guard - 50) < 1e-6 && tg.hp === 600);
   hitter.dps = 3000;
   run(gd, 100);
-  check('Garde : dégâts > garde → l\'excédent touche la tour', tg.vigie.guard === 0 && Math.abs(tg.hp - 450) < 1e-6);
+  check('Garde : dégâts > garde → l\'excédent touche la tour', tg.vigie.guard === 0 && Math.abs(tg.hp - 350) < 1e-6);
   const rp = match({ ...player('UA', VDECK), captain: 'tank3', captainCard: card('tank3') });
   const tr = vigieOn(rp, 0);
   engine.applyAction(rp, 'A', { type: 'power', lane: 0 });
   dummy(rp, 17, 16.5, { dps: 3000 });
   run(rp, 300);
-  check('Garde : Rempart actif → ni la garde ni la tour ne bougent', tr.vigie.guard === 250 && tr.hp === 600);
+  check('Garde : Rempart actif → ni la garde ni la tour ne bougent', tr.vigie.guard === 150 && tr.hp === 600);
 
-  // Expiration : 40 s (commune), 60 s avec le Capitaine Garnison
+  // Expiration : 40 s (commune), 80 s avec le Capitaine Garnison
   const ex = vm();
   vigieOn(ex, 0);   // apparue à 0,5 s (horloge à 0,6 s)
   run(ex, 39800);   // 40,4 s
@@ -283,12 +283,12 @@ const give = (s, side, urls) => { s.players[side].hand = urls.slice(); s.players
   check('Vigie : redescend au bout de 40 s → pose « expired » + vigie_end', tower(ex, 'A', 0).vigie === null && ex.poses[0].status === 'expired' && exEv.some((e) => e.type === 'vigie_end' && e.side === 'A' && e.lane === 0));
   const gx = vm({ captain: 'vigie2' });
   vigieOn(gx, 0);
-  run(gx, 59800);   // 60,4 s
-  check('Garnison : la Vigie est encore en poste à 60,4 s', tower(gx, 'A', 0).vigie !== null);
+  run(gx, 79800);   // 80,4 s
+  check('Garnison : la Vigie est encore en poste à 80,4 s', tower(gx, 'A', 0).vigie !== null);
   run(gx, 100);
-  check(`Garnison : elle reste ${TUNING.vigieDuration * 40} s (+50 %)`, tower(gx, 'A', 0).vigie === null && gx.poses[0].status === 'expired');
+  check(`Garnison : elle reste ${TUNING.vigieDuration * 40} s (deux fois plus longtemps)`, tower(gx, 'A', 0).vigie === null && gx.poses[0].status === 'expired');
   const leg = cards.getCardStats(card('vigie1', 'legendary'));
-  check('Vigie légendaire : garde et durée renforcées, tir et portée inchangés', leg.guard > 250 && leg.durationMs > 40000 && leg.dpsBonus === 0.6 && leg.rangeBonus === 4);
+  check('Vigie légendaire : garde et durée renforcées, tir et portée inchangés', leg.guard > 150 && leg.durationMs > 40000 && leg.dpsBonus === 0.3 && leg.rangeBonus === 2);
 
   // Tour détruite avec sa Vigie : carte perdue
   const de = vm();
@@ -324,7 +324,7 @@ const give = (s, side, urls) => { s.players[side].hand = urls.slice(); s.players
   run(ps, 1000);
   const view = engine.publicState(ps, 'B');
   const vb = view.buildings.find((b) => b.side === 'A' && b.kind === 'tower' && b.lane === 1);
-  check('vue : buildings[].vigie (url, garde, temps restant)', vb.vigie && vb.vigie.url === 'vigie1' && vb.vigie.guard === 250 && vb.vigie.guardMax === 250 && vb.vigie.remainingMs === 500 + 60000 - ps.timeMs);
+  check('vue : buildings[].vigie (url, garde, temps restant)', vb.vigie && vb.vigie.url === 'vigie1' && vb.vigie.guard === 150 && vb.vigie.guardMax === 150 && vb.vigie.remainingMs === 500 + 80000 - ps.timeMs);
   check('vue : pas de Vigie sur les autres bâtiments', view.buildings.filter((b) => b !== vb).every((b) => b.vigie === null));
   check('vue : plus de Surchauffe', !('overheat' in view.players.A));
 

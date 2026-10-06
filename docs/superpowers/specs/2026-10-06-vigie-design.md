@@ -14,9 +14,9 @@ La Pompe (+1 élixir toutes les 7 s pendant 45 s) n'apporte rien au jeu. Paul ve
 | Coût | 4 élixir |
 | Part des cartes | 5 % (la place exacte de la Pompe dans le tirage) |
 | Durée sur la tour | 40 s (la rareté allonge la durée) |
-| Garde | +250 PV de garde, qui encaissent les coups avant la tour (la rareté les augmente) |
-| Tir | dégâts de la tour +60 % |
-| Portée | +4 (la tour touche les troupes qui arrivent au pont) |
+| Garde | +150 PV de garde, qui encaissent les coups avant la tour (la rareté les augmente) — 250 avant équilibrage |
+| Tir | dégâts de la tour +30 % — +60 % avant équilibrage |
+| Portée | +2 — +4 avant équilibrage |
 
 Règles :
 - On pose la Vigie en touchant son camp : elle va sur **sa tour vivante la plus proche du point touché qui n'a pas déjà
@@ -33,7 +33,7 @@ créneaux de la tour, un petit étendard, un halo autour de la tour et une barre
 ## Capitaine « Garnison » (remplace « Économie »)
 
 Le Capitaine est lié à l'archétype de sa carte : le Capitaine d'une Vigie devient « Garnison ».
-- Passif : tes Vigies restent 50 % plus longtemps.
+- Passif : tes Vigies restent deux fois plus longtemps (50 % avant équilibrage).
 - Pouvoir « Alarme » (1×, sans point à viser) : toutes tes tours en vie tirent deux fois plus fort pendant 6 s.
 
 Le style « Économie » (élixir de départ, élixir max 11, recharge +5 %) et le pouvoir « Surchauffe » disparaissent.
