@@ -24,6 +24,7 @@ const RELEASES = [
       '🏆 JP TV affiche aussi le classement de l\'Arène en direct et le résultat des derniers combats.',
       '🙈 Tu préfères rester discret ? Coche « Ne pas me diffuser sur JP TV » dans « Mon deck » : tes combats ne passeront pas en direct (ils comptent toujours au classement).',
       '🌙 Pas de direct pendant le mode soir de la TV (17h45–19h).',
+      '🔢 « Mon deck » et préparation d\'un combat : une carte de ton deck affiche ses exemplaires encore disponibles (ex. 1/3 = il t\'en reste 1 sur les 3 que tu possèdes).',
     ],
   },
   {

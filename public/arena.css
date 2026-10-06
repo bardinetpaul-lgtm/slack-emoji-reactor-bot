@@ -273,6 +273,8 @@ body.wide .top { display: none; }
   color: #fff; font-size: 12px; text-shadow: 0 1px 2px rgba(0, 0, 0, .6);
 }
 .card .copies { right: 6px; bottom: 6px; font-size: 11px; }
+/* 🔢 v2.3 : carte dans le deck → exemplaires encore disponibles / possédés, bien lisible */
+.de-card .de-copies.used { background: var(--ink); padding: 2px 6px; border-radius: 6px; right: 6px; bottom: 6px; font-size: 13px; font-weight: 700; text-shadow: none; }
 .de-cost, .card .cost, .de-spec, .card .spec, .de-badge, .card .tag { z-index: 4; }
 .card .tag { bottom: 22px; }
 .de-grid .de-badge { bottom: 26px; }
@@ -333,7 +335,7 @@ body.wide .top { display: none; }
 
 /* 🏆 Classement (v2.2) : même cadre que le tuto */
 .head-btns { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-.tv-opt { display: inline-flex; align-items: center; gap: 6px; font: 600 13px 'Inter Tight', sans-serif; color: var(--i7); cursor: pointer; white-space: nowrap; }
+.tv-opt { display: inline-flex; align-items: center; gap: 6px; font: 600 13px 'Inter Tight', sans-serif; color: var(--cream); cursor: pointer; white-space: nowrap; }
 .tv-opt input { width: 16px; height: 16px; accent-color: var(--blue); }
 .rk-dialog { width: min(460px, 100%); }
 .rk-body { display: flex; flex-direction: column; gap: 8px; }

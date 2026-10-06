@@ -7,7 +7,8 @@
 //  archétypes, alerte, 🛒 cartes mystère (préparation), « Vider » et
 //  « Prêt » (préparation) ou enregistrement auto.
 //  À droite : toute la collection (vraies images), filtres par
-//  archétype, tri coût / nom, exemplaires possédés, badge « Deck ×n »,
+//  archétype, tri coût / nom, exemplaires possédés (« 2/3 » = encore
+//  disponibles / possédés dès qu'elle est dans le deck), badge « Deck ×n »,
 //  ✨ spécialité des épiques / légendaires.
 //  Une carte ×3 possédée peut occuper jusqu'à 3 emplacements ; chaque
 //  emplacement se joue UNE fois par combat.
@@ -86,6 +87,20 @@
     if (cls) e.className = cls;
     if (text !== undefined) e.textContent = text;
     return e;
+  }
+
+  /**
+   * 🔢 Exemplaires d'une carte de la collection (v2.3) : combien restent
+   * disponibles une fois ceux du deck (et du Capitaine) comptés.
+   * → { free, label (badge), title (info-bulle) }
+   */
+  function copiesInfo(copies, inDeck, isCaptain) {
+    const used = inDeck + (isCaptain ? 1 : 0);
+    const free = Math.max(0, copies - used);
+    const s = (n) => (n > 1 ? 's' : '');
+    if (!used) return { free, label: `×${copies}`, title: `${copies} exemplaire${s(copies)} possédé${s(copies)}` };
+    if (!free) return { free, label: `0/${copies}`, title: `Tous tes exemplaires (${copies}) sont déjà dans le deck` };
+    return { free, label: `${free}/${copies}`, title: `${free} exemplaire${s(free)} encore disponible${s(free)} sur ${copies}` };
   }
 
   const fmt = (n) => n.toFixed(1).replace('.', ',');
@@ -378,8 +393,11 @@
         b.type = 'button';
         b.disabled = picking ? !canCap : !(can || on);
         b.setAttribute('aria-pressed', String(on));
-        b.setAttribute('aria-label', `${c.title}, ${RARITIES[c.rarity] || RARITIES.common}, ${ARCH_LABELS[c.archetype]}, coût ${c.cost}, ${c.copies} exemplaire(s), ${n} dans le deck`);
-        b.append(cardArt(c), el('span', 'de-cost', String(c.cost)), el('span', 'de-copies', `×${c.copies}`));
+        b.setAttribute('aria-label', `${c.title}, ${RARITIES[c.rarity] || RARITIES.common}, ${ARCH_LABELS[c.archetype]}, coût ${c.cost}, ${c.copies} exemplaire(s), ${n} dans le deck, ${copiesInfo(c.copies, n, isCap).free} encore disponible(s)`);
+        const info = copiesInfo(c.copies, n, isCap);   // 🔢 exemplaires encore disponibles
+        const copiesBadge = el('span', `de-copies${on || isCap ? ' used' : ''}`, info.label);
+        copiesBadge.title = info.title;
+        b.append(cardArt(c), el('span', 'de-cost', String(c.cost)), copiesBadge);
         decorate(b, c);
         if (can) b.title += '\n→ Ajouter un emplacement';
         else if (on) b.title += '\n→ Retirer un emplacement';
@@ -426,5 +444,5 @@
     };
   }
 
-  root.DeckEditor = { mount, warningFor, ROLES, RARITIES, roleText, guide };
+  root.DeckEditor = { mount, warningFor, copiesInfo, ROLES, RARITIES, roleText, guide };
 }(typeof self !== 'undefined' ? self : this));
