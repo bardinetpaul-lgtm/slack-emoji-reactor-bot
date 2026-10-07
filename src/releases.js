@@ -16,6 +16,14 @@
 
 const RELEASES = [
   {
+    version: '3.0.1',
+    date: '2026-10-07',
+    title: 'Le compteur sur ton deck',
+    changes: [
+      '🔢 Mon deck et préparation d\'un combat : les cartes de ton deck (à gauche) affichent aussi combien d\'exemplaires il te reste (ex. 1/3), comme dans ta collection.',
+    ],
+  },
+  {
     version: '3.0',
     date: '2026-10-07',
     title: 'L\'Arène en direct sur JP TV et la Vigie',
