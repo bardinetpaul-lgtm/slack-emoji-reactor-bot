@@ -228,7 +228,11 @@
           wrap.append(b);
         } else {
           const c = byUrl[u];
-          b.append(cardArt(c), el('span', 'de-cost', String(c.cost)));
+          // 🔢 v3.0.1 : exemplaires encore disponibles, comme dans la collection
+          const info = copiesInfo(c.copies, d.cards.filter((x) => x === u).length, d.captain === u);
+          const copiesBadge = el('span', 'de-copies used', info.label);
+          copiesBadge.title = info.title;
+          b.append(cardArt(c), el('span', 'de-cost', String(c.cost)), copiesBadge);
           decorate(b, c, { compact: true });
           const sb = specBadge(c);
           if (sb) b.append(sb);
