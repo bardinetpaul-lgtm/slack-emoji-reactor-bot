@@ -326,6 +326,8 @@ body.fight .opp-hand-count { font-size: 14px; }
 @keyframes feed-in { from { transform: scale(.4); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .feed-card { animation: none; } }
 .board-wrap .rage { top: auto; bottom: 10px; }
+#alarm { top: 40px; }
+.board-wrap #alarm { top: auto; bottom: 40px; }
 
 /* ⏳ Carte en charge (pas assez d'élixir) : photo éteinte, jauge rose qui monte */
 .card.poor { background: var(--cream); opacity: 1; }

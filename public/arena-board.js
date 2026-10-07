@@ -189,6 +189,7 @@
   //    se dandinent sans pas visible (« sway »), respiration à l'arrêt.
   //    sprites[url] = 'id' (personnage figé) ou { id, walk }.
   // ─────────────────────────────────────────────
+  const GOLD_ALARM = '#FFB020';
   const UNIT_SCALE = { tank: 0.42, guerrier: 0.42, tireur: 0.4, essaim: 0.32, vigie: 0.3 };
   const FORMATIONS = {
     1: [[0, 0]],
@@ -383,6 +384,13 @@
         svg += `<g data-fx="rempart"><circle cx="${pos.x}" cy="${pos.y - 8}" r="36" fill="${color}" fill-opacity="0.18"/>`
           + pathTag(F(C(pos.x, pos.y - 8, 36), 'none', color, 4, '7 5'))
           + `<text x="${pos.x}" y="${vigie ? barY - 12 : pos.y - 50}" text-anchor="middle" font-size="22">🛡</text></g>`;
+      }
+      // 🔔 Alarme (Garnison) : anneau doré pulsé + 🔔 sur les tours vivantes du camp qui l'a lancée
+      if (b.alive && !king && view.players && view.players[b.side] && view.players[b.side].alarm) {
+        svg += `<g data-fx="alarme"><circle cx="${pos.x}" cy="${pos.y - 8}" r="40" fill="${GOLD_ALARM}" fill-opacity="0.16">`
+          + `<animate attributeName="fill-opacity" values="0.1;0.32;0.1" dur="0.8s" repeatCount="indefinite"/></circle>`
+          + pathTag(F(C(pos.x, pos.y - 8, 40), 'none', GOLD_ALARM, 3, '4 4'))
+          + `<text x="${pos.x + 24}" y="${pos.y - 44}" text-anchor="middle" font-size="18">🔔</text></g>`;
       }
       if (vigie) svg += renderVigie(vigie, pos, color, sprites, barY);
       if (b.alive) {

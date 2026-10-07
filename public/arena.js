@@ -348,6 +348,8 @@ ${DeckEditor.roleText(e.archetype)}`;
     $('opp-cap').textContent = foe.captain && texts[foe.captain.archetype] ? `🎖 ${texts[foe.captain.archetype].style}` : '';
     $('rage').hidden = !me.rage;
     $('opp-rage').hidden = !foe.rage;
+    $('alarm').hidden = !me.alarm;
+    $('opp-alarm').hidden = !foe.alarm;
   }
 
   function armPower(on) {

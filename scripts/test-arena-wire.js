@@ -149,5 +149,13 @@ check('reset : l\'encodeur renvoie tout après une reconnexion', (() => {
   return JSON.stringify(e.encode(v)).includes('guerrier');
 })());
 
+check('Alarme : le drapeau alarm des deux camps traverse le flux', (() => {
+  const e = wire.createEncoder();
+  const d = wire.createDecoder();
+  const v = { phase: 'running', you: 'A', players: { A: { elixir: 1, alarm: true }, B: { elixir: 1, alarm: false } }, units: [], buildings: [], pending: [], events: [] };
+  const out = d.decode(JSON.parse(JSON.stringify(e.encode(v))));
+  return out.players.A.alarm === true && out.players.B.alarm === false;
+})());
+
 console.log(failures ? `\n❌ ${failures} échec(s)` : '\n✅ Tout est bon');
 process.exit(failures ? 1 : 0);

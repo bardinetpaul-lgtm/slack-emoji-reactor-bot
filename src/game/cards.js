@@ -10,9 +10,9 @@
 //  Rareté : renforce les PV (et les dégâts d'un Sort, la garde / la durée
 //  d'une Vigie), jamais les dégâts des unités ; à moitié pour l'Essaim.
 //  Les épiques / légendaires reçoivent en plus une spécialité.
-//  Réglé par la simulation (v2.3, avec la Vigie) : à stratégie égale un deck riche gagne ~51 %
-//  (entre bons joueurs, presque tous les combats finissent sans tour tombée),
-//  mais un bon joueur 100 % commun bat un mauvais joueur au deck riche ~71 %.
+//  Réglé par la simulation (v2.3, avec la Vigie) : à stratégie égale un deck riche gagne ~76 %
+//  (combats presque tous départagés aux PV, très peu de tours tombées),
+//  mais un bon joueur 100 % commun bat un mauvais joueur au deck riche ~69 %.
 //
 //  Contres : l'attaquant fait ×1,5 à ce qu'il contre, ×0,67 à ce
 //  qui le contre. Tank → Guerrier → Tireur → Essaim → Tank ; Sort → Essaim.

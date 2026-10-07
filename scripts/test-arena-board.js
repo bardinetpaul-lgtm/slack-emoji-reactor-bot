@@ -226,5 +226,16 @@ const freeB = { you: 'B', buildings: towers('B'), pending: [] };
 check('Vigie (vue B) : en miroir', board.vigieTower(60, 500, freeB).lane === 2);
 check('Vigie : jamais le QG', board.vigieTower(180, 600, { you: 'A', buildings: [{ side: 'A', kind: 'qg', lane: null, x: 50, y: 5, alive: true }], pending: [] }) === null);
 
+// 🔔 Alarme (Garnison) : les tours vivantes du camp concerné s'illuminent, et seulement elles
+const alarmTower = (side, alive) => ({ id: side === 'A' ? 1 : 2, side, kind: 'tower', lane: 0, x: 17, y: side === 'A' ? 15 : 85, hp: 600, maxHp: 600, alive });
+const alarmView = (alarmA, alarmB, extra = []) => ({ you: 'A', units: [], buildings: [alarmTower('A', true), alarmTower('B', true), ...extra], players: { A: { alarm: alarmA }, B: { alarm: alarmB } } });
+const countFx = (svg) => (svg.match(/data-fx="alarme"/g) || []).length;
+check('Alarme : aucune marque si personne n alarme', countFx(board.renderDynamic(alarmView(false, false), {})) === 0);
+check('Alarme : une marque sur ma tour quand mon alarme est active', countFx(board.renderDynamic(alarmView(true, false), {})) === 1);
+check('Alarme : une marque sur la tour adverse quand la sienne est active', countFx(board.renderDynamic(alarmView(false, true), {})) === 1);
+check('Alarme : tour détruite sans marque', countFx(board.renderDynamic({ ...alarmView(true, false), buildings: [alarmTower('A', false)] }, {})) === 0);
+check('Alarme : pas de marque sur le QG', countFx(board.renderDynamic({ ...alarmView(true, false), buildings: [{ ...alarmTower('A', true), kind: 'qg' }] }, {})) === 0);
+check('Alarme : sans players, rien ne plante', countFx(board.renderDynamic({ you: 'A', units: [], buildings: [alarmTower('A', true)] }, {})) === 0);
+
 console.log(failures ? `\n❌ ${failures} échec(s)` : '\n✅ Tout est bon');
 process.exit(failures ? 1 : 0);
