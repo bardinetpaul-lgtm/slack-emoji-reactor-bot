@@ -202,7 +202,7 @@ Au premier démarrage, `data/credits.json` est importé (log « credits.json imp
 
 **Aperçu local** : `node scripts/preview-stats.js` (données simulées).
 
-## 📺 JP TV : l'Arène en direct (v2.3)
+## 📺 JP TV : l'Arène en direct (v3.0)
 
 La TV du hall (dashboard MagicDIMSI) affiche chaque combat de l'Arène en direct, le classement et les derniers combats.
 
