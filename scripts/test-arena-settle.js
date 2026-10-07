@@ -61,7 +61,7 @@ const r = settleMatch({
 
 check('vainqueur : perd seulement ses cartes détruites', collections.getCount('UA', 'a1') === 1);
 check('vainqueur : survivante gardée', collections.getCount('UA', 'a2') === 1);
-check('vainqueur : Pompe expirée gardée', collections.getCount('UA', 'a3') === 1);
+check('vainqueur : Vigie redescendue (expired) gardée', collections.getCount('UA', 'a3') === 1);
 check('perdant : carte détruite perdue', collections.getCount('UB', 'b1') === 0);
 check('perdant : carte SURVIVANTE perdue aussi', collections.getCount('UB', 'leg1') === 0 || r.A.loot.url === 'leg1');
 check('perdant : carte non posée intacte', collections.getCount('UB', 'b2') === 1 && collections.getCount('UB', 'b3') === 1);
@@ -143,6 +143,26 @@ const rc = settleMatch({
 check('rappel : la carte rappelée est sauvée malgré la défaite', collections.getCount('UK', 'k1') === 1);
 check('rappel : l’autre pose du perdant est perdue', collections.getCount('UK', 'k2') === 0);
 check('rappel : jamais prise en butin', rc.B.loot && rc.B.loot.url === 'k2');
+
+// ─── 🗼 Vigie : redescendue = sauvée (sauf défaite), tombée avec sa tour = perdue ───
+const vpose = (side, url, status) => ({ ...pose(side, url, status), archetype: 'vigie' });
+give('UV', ['v1', 'v2', 'v3']);
+give('UW', ['w1']);
+settleMatch({
+  matchId: 'vigie-win',
+  players: { A: 'UV', B: 'UW' },
+  result: { winner: 'A', reason: 'towers', poses: [vpose('A', 'v1', 'expired'), vpose('A', 'v2', 'destroyed'), vpose('A', 'v3', 'alive'), pose('B', 'w1', 'alive')] },
+}, { random: () => 0, now: T0 });
+check('Vigie : redescendue (expired) gardée par le vainqueur', collections.getCount('UV', 'v1') === 1);
+check('Vigie : tour détruite avec elle (destroyed) → carte perdue, même pour le vainqueur', collections.getCount('UV', 'v2') === 0);
+check('Vigie : encore en poste à la fin (alive) → gardée par le vainqueur', collections.getCount('UV', 'v3') === 1);
+give('UX', ['x1']);
+settleMatch({
+  matchId: 'vigie-loss',
+  players: { A: 'UX', B: 'UY' },
+  result: { winner: 'B', reason: 'qg', poses: [vpose('A', 'x1', 'expired')] },
+}, { random: () => 0, now: T0 });
+check('Vigie : redescendue mais combat perdu → carte perdue (comme l’ancienne Pompe)', collections.getCount('UX', 'x1') === 0);
 
 // ─── Perdant qui n'a rien posé ───
 const empty = settleMatch({ matchId: 'm4', players: { A: 'UI', B: 'UJ' }, result: { winner: 'B', reason: 'forfeit', poses: [] } }, { now: T0 });

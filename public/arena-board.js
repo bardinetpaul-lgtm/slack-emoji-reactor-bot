@@ -19,7 +19,7 @@
   else root.ArenaBoard = api;
 }(typeof self !== 'undefined' ? self : this, function () {
   const INK = '#1A201D', I8 = '#242B28', I7 = '#2F3733', WHITE = '#FFFFFF', CREAM = '#F3EFED', C3 = '#E5E0DD',
-    GREY = '#6B716E', PINK = '#FF73C0', BLUE = '#1C72F1', ORANGE = '#FF6229';
+    GREY = '#6B716E', PINK = '#FF73C0', BLUE = '#1C72F1', ORANGE = '#FF6229', GOLD = '#FFC83D';
   const W = 360, H = 640;
   const LANE_X = [60, 180, 300];
 
@@ -189,7 +189,8 @@
   //    se dandinent sans pas visible (« sway »), respiration à l'arrêt.
   //    sprites[url] = 'id' (personnage figé) ou { id, walk }.
   // ─────────────────────────────────────────────
-  const UNIT_SCALE = { tank: 0.42, guerrier: 0.42, tireur: 0.4, essaim: 0.32, pompe: 0.55 };
+  const GOLD_ALARM = '#FFB020';
+  const UNIT_SCALE = { tank: 0.42, guerrier: 0.42, tireur: 0.4, essaim: 0.32, vigie: 0.3 };
   const FORMATIONS = {
     1: [[0, 0]],
     2: [[-9, -2], [9, 2]],
@@ -275,11 +276,34 @@
   }
 
   // 👁 rôles des poses adverses (même vocabulaire que l'éditeur de deck)
-  const ROLE_ICONS = { tank: '🛡', guerrier: '⚔️', tireur: '🏹', essaim: '🐝', sort: '💥', pompe: '⚗️' };
-  const ROLE_TAGS = { tank: '🛡 Tank', guerrier: '⚔️ Guerrier', tireur: '🏹 Tireur', essaim: '🐝 Essaim', sort: '💥 Sort', pompe: '⚗️ Pompe' };
+  const ROLE_ICONS = { tank: '🛡', guerrier: '⚔️', tireur: '🏹', essaim: '🐝', sort: '💥', vigie: '🗼' };
+  const ROLE_TAGS = { tank: '🛡 Tank', guerrier: '⚔️ Guerrier', tireur: '🏹 Tireur', essaim: '🐝 Essaim', sort: '💥 Sort', vigie: '🗼 Vigie' };
   const RARITY_TAGS = { rare: 'Rare', epic: 'Épique', legendary: 'Légendaire', rose: 'Octobre Rose' };
   const teamColor = (side, viewer) => (side === viewer ? BLUE : ORANGE);
   const bar = (x, y, w, ratio, color) => pathTag(F(R(x - w / 2, y, w, 5, 2.5), I7)) + pathTag(F(R(x - w / 2, y, Math.max(5, w * ratio), 5, 2.5), color));
+
+  /**
+   * 🗼 Vigie en poste sur une tour : halo à la couleur du camp, le personnage
+   * de la carte debout sur les créneaux, un petit étendard doré, et la barre
+   * de garde (dorée) au-dessus de la barre de PV.
+   * pos = pied de la tour sur le plan · barY = hauteur de la barre de PV.
+   */
+  function renderVigie(v, pos, color, sprites, barY) {
+    const halo = `<circle cx="${pos.x}" cy="${pos.y - 8}" r="34" fill="${color}" fill-opacity="0.14"/>`
+      + pathTag(F(C(pos.x, pos.y - 8, 34), 'none', color, 2.5));
+    const sprite = spriteOf(sprites[v.url]);
+    const s = UNIT_SCALE.vigie;
+    const figure = sprite
+      ? `<use href="#${sprite.id}" x="-45" y="-85" width="90" height="95" transform="translate(${pos.x - 4} ${pos.y - 18}) scale(${s})" style="color:${color}"/>`
+      : '';
+    const flag = `<g data-fx="vigie-flag">${pathTag(F(`M${pos.x + 13} ${pos.y - 18}V${pos.y - 40}`, 'none', INK, 1.4))}`
+      + `${pathTag(F(`M${pos.x + 13} ${pos.y - 40}L${pos.x + 23} ${pos.y - 36.5}L${pos.x + 13} ${pos.y - 33}Z`, GOLD, INK, 1.2))}</g>`;
+    const ratio = v.guardMax > 0 ? Math.max(0, Math.min(1, v.guard / v.guardMax)) : 0;
+    const gy = barY - 7;
+    const guard = `<g data-fx="guard">${pathTag(F(R(pos.x - 18, gy, 36, 5, 2.5), I7))}`
+      + (ratio > 0 ? pathTag(F(R(pos.x - 18, gy, Math.max(5, 36 * ratio), 5, 2.5), GOLD)) : '') + '</g>';
+    return `<g data-fx="vigie">${halo}${figure}${flag}</g>${guard}`;
+  }
 
   // ─────────────────────────────────────────────
   // 🧱 Calques dynamiques (tours, unités, effets)
@@ -348,19 +372,31 @@
     for (const b of view.buildings || []) {
       const at = toBoard(b.x, b.y, viewer);
       const color = teamColor(b.side, viewer);
-      if (b.kind === 'pompe') {
-        if (b.alive && spriteOf(sprites[b.url])) items.push({ y: at.y, svg: `<use href="#${spriteOf(sprites[b.url]).id}" x="-45" y="-85" width="90" height="95" transform="translate(${at.x} ${at.y}) scale(${UNIT_SCALE.pompe})" style="color:${color}"/>` + (b.hp < b.maxHp ? bar(at.x, at.y - 52, 22, b.hp / b.maxHp, color) : '') });
-        continue;
-      }
       const king = b.kind === 'qg';
       const pos = king ? { x: W / 2, y: at.y } : { x: at.x, y: at.y + (b.lane === 1 ? -4 : 4) * (b.side === viewer ? 1 : -1) };
       const href = b.alive ? (king ? '#t-king' : '#t-lane') : '#t-ruine';
       let svg = `<use href="${href}" x="-34" y="-46" width="68" height="80" transform="translate(${pos.x} ${pos.y})" style="color:${color}"/>`;
-      if (b.alive && b.shielded) svg += `<g data-fx="rempart">${pathTag(F(C(pos.x, pos.y - 8, 34), 'none', WHITE, 3, '4 4'))}</g>`;
+      // 🗼 Vigie en poste : les barres montent pour laisser la place au personnage
+      const vigie = b.alive && !king && b.vigie ? b.vigie : null;
+      const barY = pos.y + (king ? -54 : vigie ? -52 : -40);
+      // 🎖 Rempart : halo + cercle à la couleur de l'équipe et 🛡 (un cercle blanc disparaissait sur le sol crème)
+      if (b.alive && b.shielded) {
+        svg += `<g data-fx="rempart"><circle cx="${pos.x}" cy="${pos.y - 8}" r="36" fill="${color}" fill-opacity="0.18"/>`
+          + pathTag(F(C(pos.x, pos.y - 8, 36), 'none', color, 4, '7 5'))
+          + `<text x="${pos.x}" y="${vigie ? barY - 12 : pos.y - 50}" text-anchor="middle" font-size="22">🛡</text></g>`;
+      }
+      // 🔔 Alarme (Garnison) : anneau doré pulsé + 🔔 sur les tours vivantes du camp qui l'a lancée
+      if (b.alive && !king && view.players && view.players[b.side] && view.players[b.side].alarm) {
+        svg += `<g data-fx="alarme"><circle cx="${pos.x}" cy="${pos.y - 8}" r="40" fill="${GOLD_ALARM}" fill-opacity="0.16">`
+          + `<animate attributeName="fill-opacity" values="0.1;0.32;0.1" dur="0.8s" repeatCount="indefinite"/></circle>`
+          + pathTag(F(C(pos.x, pos.y - 8, 40), 'none', GOLD_ALARM, 3, '4 4'))
+          + `<text x="${pos.x + 24}" y="${pos.y - 44}" text-anchor="middle" font-size="18">🔔</text></g>`;
+      }
+      if (vigie) svg += renderVigie(vigie, pos, color, sprites, barY);
       if (b.alive) {
         const ratio = b.hp / b.maxHp;
         if (ratio < 0.5) svg += pathTag(F(`M${pos.x - 9} ${pos.y - 2}l4 5l-3 5M${pos.x + 10} ${pos.y + 4}l-3 4l3 4`, 'none', INK, 1.4));
-        svg += bar(pos.x, pos.y + (king ? -54 : -40), king ? 56 : 36, ratio, color);
+        svg += bar(pos.x, barY, king ? 56 : 36, ratio, color);
       }
       items.push({ y: pos.y, svg });
     }
@@ -467,6 +503,25 @@
     return `<g data-fx="ghost">${pathTag(F(C(g.x, g.y - 8, 20), 'none', color, 2, '4 4'))}${figure}</g>`;
   }
 
+  /**
+   * 🗼 Tour qui recevra une Vigie posée au point (px, py) du plan : même règle que
+   * le moteur (ma tour vivante la plus proche, sans Vigie ni Vigie en cours de pose).
+   * → le bâtiment, ou null (aucune tour libre). Pas de zone de pose : tout le terrain compte.
+   */
+  function vigieTower(px, py, view) {
+    const p = planToEngine(px, py, view);
+    const me = view.you;
+    const taken = (t) => (view.pending || []).some((q) => q.side === me && q.archetype === 'vigie' && Math.abs(q.x - t.x) < 0.01 && Math.abs(q.y - t.y) < 0.01);
+    let best = null;
+    let bestD = Infinity;
+    for (const t of view.buildings || []) {
+      if (t.side !== me || t.kind !== 'tower' || !t.alive || t.vigie || taken(t)) continue;
+      const d = Math.hypot((t.x - p.x) * XK, t.y - p.y);
+      if (d < bestD) { best = t; bestD = d; }
+    }
+    return best;
+  }
+
   /** 🎖 Pouvoir : point du moteur touché → { x, depth }. */
   function pointToPower(px, py, view) {
     const p = planToEngine(px, py, view);
@@ -515,9 +570,9 @@
 
   // ─────────────────────────────────────────────
   // 🎞️ Rendu animé (navigateur) : reçoit les états 10 Hz du serveur,
-  //    interpole les positions à 60 images/s, gère Sorts et chips.
+  //    interpole les positions à 60 images/s (option step : 5 Hz sur JP TV), gère Sorts et chips.
   // ─────────────────────────────────────────────
-  function createRenderer(svgEl, { arena = 'jardin', symbols = '', sprites = {} } = {}) {
+  function createRenderer(svgEl, { arena = 'jardin', symbols = '', sprites = {}, step = 100 } = {}) {
     let prev = null;
     let curr = null;
     let currAt = 0;
@@ -529,7 +584,7 @@
     const lastHp = new Map();
     const lastShot = new Map();   // unité → dernier tir montré
     const SHOT_EVERY = { tireur: 750, tank: 1100, guerrier: 650, essaim: 520 };
-    const STEP = 100;
+    const STEP = step;   // ms entre deux états (100 en jeu, 200 sur JP TV)
 
     svgEl.setAttribute('viewBox', `0 0 ${W} ${H}`);
     svgEl.innerHTML = `<defs>${GRADIENT_DEF}${TOWER_SYMBOLS}${symbols}</defs><g data-ground>${renderGround(arena)}</g><g data-live></g>`;
@@ -591,7 +646,6 @@
 
       // Chips de dégâts sur les tours (cumul par tour, une chip par 700 ms)
       for (const b of view.buildings || []) {
-        if (b.kind === 'pompe') continue;
         const before = lastHp.get(b.id);
         if (before !== undefined && b.hp < before.hp) {
           before.pending += before.hp - b.hp;
@@ -648,6 +702,6 @@
     W, H, LANE_X, ARENAS, COLORS: { INK, CREAM, PINK, BLUE, ORANGE, I7, I8 },
     TOWER_SYMBOLS, GRADIENT_DEF,
     toBoard, groundPaths, renderGround, renderDynamic, renderScene, createRenderer,
-    pointToDeploy, pointToPower, renderZones, renderGhost, laneAtPoint, unitAtPoint, unmapY, planX, engineX, BRIDGE_X,
+    pointToDeploy, pointToPower, vigieTower, renderZones, renderGhost, laneAtPoint, unitAtPoint, unmapY, planX, engineX, BRIDGE_X,
   };
 }));

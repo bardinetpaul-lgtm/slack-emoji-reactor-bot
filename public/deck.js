@@ -3,6 +3,7 @@
 //    GET  api/deck?t=  → { name, catalogue, decks, active }
 //    POST api/deck?t=  { decks, active }   (enregistrement auto)
 //                      { tutorial: true }   (🎓 tuto vu : plus montré d'office)
+//                      { tvOptOut: bool }   (📺 ne pas me diffuser sur JP TV)
 // ═══════════════════════════════════════════════════════════
 (function () {
   'use strict';
@@ -22,6 +23,24 @@
     .then((r) => (r.ok ? r.json() : Promise.reject(new Error(r.status === 403 ? 'Lien invalide.' : 'Erreur'))))
     .then((data) => {
       status.hidden = true;
+      // 📺 JP TV : refus de diffusion en direct (enregistré tout de suite)
+      const tvOpt = document.getElementById('tv-opt');
+      tvOpt.checked = Boolean(data.tvOptOut);
+      tvOpt.addEventListener('change', () => {
+        const wanted = tvOpt.checked;
+        fetch(api, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tvOptOut: wanted }),
+        })
+          .then((r) => (r.ok ? r.json() : Promise.reject(new Error('http'))))
+          .then((d) => { if (Boolean(d.tvOptOut) !== wanted) throw new Error('mismatch'); })
+          .catch(() => {
+            tvOpt.checked = !wanted; // rien n'est enregistré : la case reflète l'état réel
+            status.hidden = false;
+            status.textContent = 'Enregistrement impossible, ton choix n’a pas été pris en compte. Réessaie.';
+          });
+      });
       if (data.tutorialSeen === false) openTutorial();
       if (data.name) document.getElementById('title').textContent = `Les decks de ${data.name}`;
       DeckEditor.mount(document.getElementById('editor'), {

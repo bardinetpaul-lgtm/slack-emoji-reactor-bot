@@ -21,7 +21,7 @@ fs.cpSync(path.join(ROOT, 'src'), path.join(TMP, 'src'), { recursive: true });
 fs.symlinkSync(path.join(ROOT, 'node_modules'), path.join(TMP, 'node_modules'), 'junction');
 fs.mkdirSync(path.join(TMP, 'data'));
 const overrides = {};
-for (const a of ['tank', 'guerrier', 'tireur', 'essaim', 'sort', 'pompe']) for (let i = 1; i <= 8; i += 1) overrides[`${a}${i}`] = { archetype: a, specialty: 'none' };
+for (const a of ['tank', 'guerrier', 'tireur', 'essaim', 'sort', 'vigie']) for (let i = 1; i <= 8; i += 1) overrides[`${a}${i}`] = { archetype: a, specialty: 'none' };
 fs.writeFileSync(path.join(TMP, 'data', 'card-overrides.json'), JSON.stringify(overrides));
 
 const engine = require(path.join(TMP, 'src', 'game', 'engine.js'));
@@ -32,8 +32,8 @@ function check(label, cond) {
   if (!cond) failures += 1;
 }
 
-const DECK_A = ['guerrier1', 'guerrier2', 'tireur1', 'tireur2', 'tank1', 'essaim1', 'sort1', 'pompe1'];
-const DECK_B = ['guerrier3', 'guerrier4', 'tireur3', 'tireur4', 'tank2', 'essaim2', 'sort2', 'pompe2'];
+const DECK_A = ['guerrier1', 'guerrier2', 'tireur1', 'tireur2', 'tank1', 'essaim1', 'sort1', 'vigie1'];
+const DECK_B = ['guerrier3', 'guerrier4', 'tireur3', 'tireur4', 'tank2', 'essaim2', 'sort2', 'vigie2'];
 const player = (u, urls) => ({ userId: u, deck: urls.map((x) => ({ url: x, title: x, rarity: 'common' })), copies: Object.fromEntries(urls.map((x) => [x, 1])) });
 const match = () => engine.createMatch({ id: 't', seed: 3, players: { A: player('UA', DECK_A), B: player('UB', DECK_B) } });
 const give = (s, side, urls) => { s.players[side].hand = urls.slice(); s.players[side].elixir = 10; };

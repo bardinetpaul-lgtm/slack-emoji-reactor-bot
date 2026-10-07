@@ -85,6 +85,34 @@ store.markSettled('mX');
 ({ store, collections } = restart());
 check('match réglé, même après redémarrage', store.isSettled('mX') === true);
 
+// 📺 v2.3 : historique enrichi + derniers combats (JP TV)
+store.recordResult({
+  matchId: 'h1', at: T0 + 10 * DAY, winnerId: 'UA', loserId: 'UB', draw: false,
+  players: ['UA', 'UB'], towers: { UA: 3, UB: 1 }, reason: 'qg', durationMs: 95000, arena: 'port',
+});
+store.recordResult({
+  matchId: 'h2', at: T0 + 11 * DAY, draw: true, players: ['UA', 'UC'],
+  towers: { UA: 1, UC: 1 }, reason: 'draw', durationMs: 120000, arena: 'jardin',
+});
+({ store, collections } = restart());
+const recent = store.recentResults(5);
+check('derniers combats : le plus récent en premier', recent[0].matchId === 'h2' && recent[1].matchId === 'h1');
+check('derniers combats : nul avec ses deux joueurs', recent[0].draw === true && recent[0].winnerId === null && recent[0].players.join() === 'UA,UC');
+check('derniers combats : tours et raison gardées', recent[1].towers.UA === 3 && recent[1].towers.UB === 1 && recent[1].reason === 'qg');
+check('derniers combats : limite respectée', store.recentResults(1).length === 1);
+// Ancien format (avant v2.3) : victoire sans players/towers, nul sans joueurs
+const legacy = store.recentResults(50).filter((h) => !['h1', 'h2'].includes(h.matchId));
+check('ancien format : victoires reprises avec gagnant + perdant, sans tours', legacy.length > 0 && legacy.every((h) => h.players.length === 2 && h.players.every(Boolean) && h.towers === null));
+check('ancien format : nuls sans joueurs ignorés', legacy.every((h) => !h.draw || h.players.length === 2));
+
+// 📺 Refus de diffusion sur JP TV
+check('JP TV : diffusé par défaut', store.isTvOptOut('UA') === false);
+store.setTvOptOut('UA', true);
+({ store, collections } = restart());
+check('JP TV : refus gardé après redémarrage', store.isTvOptOut('UA') === true);
+store.setTvOptOut('UA', false);
+check('JP TV : refus retiré', store.isTvOptOut('UA') === false);
+
 try { require(path.join(TMP, 'src', 'db.js')).close(); } catch { /* base jamais ouverte */ }   // Windows : fichier ouvert = non supprimable
 fs.rmSync(TMP, { recursive: true, force: true });
 console.log(failures ? `\n❌ ${failures} échec(s)` : '\n✅ Tout est bon');

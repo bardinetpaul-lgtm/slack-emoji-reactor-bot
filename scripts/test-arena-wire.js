@@ -91,6 +91,51 @@ for (const viewer of ['A', 'B']) {
   check(`vue ${viewer} : volume divisé (${Math.round(full / n)} → ${Math.round(sent / n)} o par état, −${Math.round(gain * 100)} %)`, gain >= 0.6);
 }
 
+// 🗼 Vigie : transportée par le flux (elle change pendant le combat), avec une clé courte d'URL
+{
+  const { getCardStats } = require('../src/game/cards');
+  const watchers = bank.filter((m) => getCardStats(m).archetype === 'vigie');
+  const others = bank.filter((m) => getCardStats(m).archetype !== 'vigie');
+  const deckV = [watchers[0], ...others.slice(0, 7)];
+  const deckO = others.slice(7, 15);
+  const keys = {};
+  [...deckV, ...deckO].forEach((m, i) => { keys[m.url] = `c${i}`; });
+  const s = engine.createMatch({
+    id: 'v', seed: 3,
+    players: {
+      A: { userId: 'UA', deck: toDeck(deckV), copies: copies(deckV), captain: deckV[1].url },
+      B: { userId: 'UB', deck: toDeck(deckO), copies: copies(deckO), captain: deckO[0].url },
+    },
+  });
+  s.players.A.elixir = 10;
+  const posed = engine.applyAction(s, 'A', { type: 'deploy', url: watchers[0].url, lane: 0 });
+  const enc = wire.createEncoder();
+  const dec = wire.createDecoder();
+  let mismatch = 0;
+  let seenKey = false;
+  let longUrl = false;
+  let posted = 0;
+  let after = null;
+  for (let n = 0; n < 600 && s.status === 'running'; n += 1) {
+    const events = engine.tick(s, 100);
+    const view = compact({ matchId: 'v', you: 'A', opponent: 'X', arena: 'jardin', phase: 'running', ...engine.publicState(s, 'A'), events }, { keyOf: keys });
+    const text = JSON.stringify(enc.encode(view));
+    const back = dec.decode(JSON.parse(text));
+    if (!same(back, view)) mismatch += 1;
+    const w = back.buildings.find((b) => b.vigie);
+    if (w) {
+      posted += 1;
+      if (w.vigie.url === keys[watchers[0].url]) seenKey = true;
+      if (text.includes(watchers[0].url)) longUrl = true;
+    } else if (posted) after = after || back;
+  }
+  check('Vigie : pose acceptée', posed.ok);
+  check(`Vigie : en poste dans le flux (${posted} états)`, posted > 100);
+  check('Vigie : clé courte à la place de l\'URL', seenKey && !longUrl);
+  check('Vigie : reconstruite à l\'identique côté navigateur à chaque état', mismatch === 0);
+  check('Vigie : redescendue → plus de vigie sur la tour', after && after.buildings.every((b) => b.vigie === null));
+}
+
 // Les autres phases passent telles quelles ; un nouveau décodeur repart de zéro
 const enc = wire.createEncoder();
 const dec = wire.createDecoder();
@@ -102,6 +147,14 @@ check('reset : l\'encodeur renvoie tout après une reconnexion', (() => {
   e.encode(v);
   e.reset();
   return JSON.stringify(e.encode(v)).includes('guerrier');
+})());
+
+check('Alarme : le drapeau alarm des deux camps traverse le flux', (() => {
+  const e = wire.createEncoder();
+  const d = wire.createDecoder();
+  const v = { phase: 'running', you: 'A', players: { A: { elixir: 1, alarm: true }, B: { elixir: 1, alarm: false } }, units: [], buildings: [], pending: [], events: [] };
+  const out = d.decode(JSON.parse(JSON.stringify(e.encode(v))));
+  return out.players.A.alarm === true && out.players.B.alarm === false;
 })());
 
 console.log(failures ? `\n❌ ${failures} échec(s)` : '\n✅ Tout est bon');

@@ -7,7 +7,7 @@
 //    GET  /api/arena/<id>/ranking?t=   → 🏆 classement (préparation du combat)
 //    GET  /deck?t=                     → « Mon deck » (éditeur hors combat)
 //    GET  /api/deck?t=                 → catalogue + mes decks
-//    POST /api/deck?t=                 → enregistre mes decks ({ tutorial: true } : tuto vu)
+//    POST /api/deck?t=                 → enregistre mes decks ({ tutorial: true } : tuto vu ; { tvOptOut } : JP TV)
 //    GET  /api/deck/ranking?t=         → 🏆 classement (« Mon deck »)
 //
 //  Jeton = « <userId>.<hmac> » (lien personnel, signé comme les autres
@@ -162,7 +162,7 @@ function compact(view, { keyOf = {}, images = {} } = {}) {
     const p = view.players[side];
     const out = {
       userId: p.userId, elixir: r2(p.elixir), handCount: p.handCount, towersDestroyed: p.towersDestroyed,
-      elixirMax: p.elixirMax, captain: p.captain, rage: p.rage, overheat: p.overheat,
+      elixirMax: p.elixirMax, captain: p.captain, rage: p.rage, alarm: p.alarm,
     };
     if (p.hand) {
       const slim = (c) => ({
@@ -177,7 +177,11 @@ function compact(view, { keyOf = {}, images = {} } = {}) {
   return {
     ...view,
     players,
-    buildings: view.buildings.map((b) => ({ ...b, hp: Math.round(b.hp), url: b.url ? key(b.url) : undefined })),
+    // 🗼 Vigie en poste : clé courte du personnage, garde arrondie
+    buildings: view.buildings.map((b) => ({
+      ...b, hp: Math.round(b.hp),
+      vigie: b.vigie ? { url: key(b.vigie.url), guard: Math.round(b.vigie.guard), guardMax: Math.round(b.vigie.guardMax), remainingMs: Math.round(b.vigie.remainingMs) } : null,
+    })),
     // lane = colonne de tour la plus proche, recalculée sur le x ARRONDI (comme le fait la page)
     units: view.units.map((u) => ({
       ...u, x: r2(u.x), y: r2(u.y), lane: r2(u.x) < 33.5 ? 0 : r2(u.x) > 66.5 ? 2 : 1, hp: Math.round(u.hp), maxHp: Math.round(u.maxHp), url: key(u.url),
@@ -313,6 +317,7 @@ async function handleDeckApi(req, res, userId) {
     return ctx.sendJson(res, 200, {
       status: 'ok', name, catalogue: catalogueFor(userId, ''), decks, active, captains: CAPTAINS, specialties: specialties.INFO,
       tutorialSeen: arenaStore.hasSeenTutorial(userId),
+      tvOptOut: arenaStore.isTvOptOut(userId),
     });
   }
   if (req.method === 'POST') {
@@ -321,6 +326,9 @@ async function handleDeckApi(req, res, userId) {
     if (body.tutorial === true) {
       arenaStore.markTutorialSeen(userId);
       return ctx.sendJson(res, 200, { ok: true });
+    }
+    if (typeof body.tvOptOut === 'boolean') {
+      return ctx.sendJson(res, 200, { ok: true, tvOptOut: arenaStore.setTvOptOut(userId, body.tvOptOut) });
     }
     arenaStore.setDecks(userId, body);
     return ctx.sendJson(res, 200, { ok: true });
@@ -396,4 +404,4 @@ async function route(req, res, url) {
   return false;
 }
 
-module.exports = { configure, route, buildArenaUrl, buildDeckUrl, compact };
+module.exports = { configure, route, buildArenaUrl, buildDeckUrl, compact, combatAssets };

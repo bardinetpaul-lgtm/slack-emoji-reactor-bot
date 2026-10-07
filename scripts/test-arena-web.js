@@ -170,16 +170,22 @@ const pathOf = (url) => url.replace('http://jeanpip.test/', '');
   const run = lastState(sA).data;
   check('combat : mon deck est celui choisi', run.players[run.you].hand.every((c) => deckA.includes(c.url)));
   check('allègement : main réduite à l\'utile', run.players[run.you].hand.every((c) => c.hp === undefined && typeof c.cost === 'number' && c.url));
-  check('allègement : pas d\'URL longue pour les bâtiments', run.buildings.every((b) => !b.url || b.url.length <= 5));
+  check('allègement : pas d\'URL longue pour les bâtiments', run.buildings.every((b) => b.url === undefined && (!b.vigie || b.vigie.url.length <= 5)));
 
   const hand = run.players[run.you].hand;
-  const card = hand.find((c) => c.cost <= run.players[run.you].elixir && !['sort', 'pompe'].includes(c.archetype)) || hand[0];
+  const card = hand.find((c) => c.cost <= run.players[run.you].elixir && !['sort', 'vigie'].includes(c.archetype)) || hand[0];
   const before = sB.events.length;
   const dep = await request('POST', `api/arena/${m.id}/action?t=${encodeURIComponent(t)}`, { type: 'deploy', url: card.url, lane: 1 });
   check('pose acceptée', dep.json && dep.json.ok);
   await until(() => sB.events.slice(before).some((e) => e.event === 'state' && (e.data.events || []).some((x) => x.type === 'deploy')), 1500);
   const seen = sB.events.slice(before).find((e) => e.event === 'state' && (e.data.events || []).some((x) => x.type === 'deploy'));
   check('l\'adversaire voit la pose tout de suite', Boolean(seen));
+  // 🂠 v2.3 : cartes restantes de l'adversaire (dos de cartes), jamais ses cartes
+  await until(() => { const v = lastState(sB).data; return v.players && v.players[v.you === 'A' ? 'B' : 'A'].handCount === 7; }, 1500);
+  const vB = lastState(sB).data;
+  const foeB = vB.players[vB.you === 'A' ? 'B' : 'A'];
+  check('cartes restantes de l\'adversaire : 8 − 1 pose = 7', foeB.handCount === 7);
+  check('cartes restantes de l\'adversaire : ses cartes restent cachées', foeB.hand === undefined && foeB.next === undefined);
   check('allègement : l\'événement de pose porte une clé courte', seen && seen.data.events.find((x) => x.type === 'deploy').url.length <= 5);
   await until(() => (lastState(sA).data.units || []).length > 0, 2500);
   const u = lastState(sA).data.units[0];
@@ -224,6 +230,15 @@ const pathOf = (url) => url.replace('http://jeanpip.test/', '');
   const rkArena = await request('GET', pathOf(arenaWeb.buildArenaUrl('m-any', 'UB')).replace(/^arena\/([\w-]+)\?/, 'api/arena/$1/ranking?'));
   check('classement de la préparation : même classement, « toi » = UB', rkArena.json && rkArena.json.top.length === 2 && rkArena.json.top[0].you === true);
   check('pages : le script du classement est servi', (await request('GET', 'arena-ranking.js')).status === 200);
+
+  // 📺 Option « Ne pas me diffuser sur JP TV » (Mon deck)
+  const tvGet = await request('GET', `api/deck?t=${encodeURIComponent(dt)}`);
+  check('Mon deck : diffusion JP TV active par défaut', tvGet.json && tvGet.json.tvOptOut === false);
+  const tvPost = await request('POST', `api/deck?t=${encodeURIComponent(dt)}`, { tvOptOut: true });
+  check('Mon deck : refus de diffusion enregistré', tvPost.json && tvPost.json.ok === true && tvPost.json.tvOptOut === true);
+  check('Mon deck : refus relu', (await request('GET', `api/deck?t=${encodeURIComponent(dt)}`)).json.tvOptOut === true);
+  check('Mon deck : le refus ne touche pas aux decks', (await request('GET', `api/deck?t=${encodeURIComponent(dt)}`)).json.decks[0].name === 'Nouveau');
+  await request('POST', `api/deck?t=${encodeURIComponent(dt)}`, { tvOptOut: false });
 
   sA.close(); sB.close(); sA2.close();
   matches.stop();

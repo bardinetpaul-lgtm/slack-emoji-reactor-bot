@@ -27,15 +27,15 @@ const CAPTAINS = {
     passive: 'Tes Essaims ont deux abeilles de plus.',
     power: { key: 'renforts', label: 'Renforts', lane: true, desc: '4 abeilles gratuites au point touché (aucune carte engagée).' },
   },
-  pompe: {
-    style: 'Économie',
-    passive: '+2 élixir au départ, recharge 5 % plus rapide, et ton élixir monte jusqu’à 11.',
-    power: { key: 'surchauffe', label: 'Surchauffe', lane: false, desc: 'Ton élixir se recharge deux fois plus vite pendant 6 s.' },
+  vigie: {
+    style: 'Garnison',
+    passive: 'Tes Vigies restent deux fois plus longtemps.',
+    power: { key: 'alarme', label: 'Alarme', lane: false, desc: 'Toutes tes tours en vie tirent trois fois plus fort pendant 15 s.' },
   },
   sort: {
     style: 'Magie',
     passive: 'Écho : chaque Sort se relance une seconde fois, gratuitement (sans carte en jeu), et coûte 1 élixir de moins.',
-    power: { key: 'gel', label: 'Gel', lane: true, desc: 'Les unités ennemies autour du point touché sont figées 3 s.' },
+    power: { key: 'gel', label: 'Gel', lane: true, desc: 'Les unités ennemies autour du point touché sont figées 5 s.' },
   },
 };
 
@@ -48,9 +48,6 @@ const TUNING = {
   rushDps: 1.15,
   towerRange: 1.1,
   extraSwarm: 2,
-  startElixir: 2,
-  elixirMax: 11,
-  ecoRegen: 1.05,
   spellDiscount: 1,
   spellDamage: 1,
   rempartMs: 10000,
@@ -59,8 +56,12 @@ const TUNING = {
   chargeDps: 1.4,
   salveDamage: 200,
   renforts: 4,
-  surchauffeMs: 6000,
-  gelMs: 3000,
+  gelMs: 5000,   // v2.3 : 3 s → 5 s (sans la Pompe et ses élixirs en plus, la Magie tombait à ~32 %)
+  // v2.3 : Garnison (remplace Économie : élixir de départ, maximum 11, recharge, Surchauffe)
+  vigieDuration: 2,   // simulation : 1,5 → 2 (la Nuée gagnait 81 % de ses combats contre la Garnison)
+  // simulation (nuls départagés) : Alarme ×2 pendant 6 s → ×3 pendant 15 s (la Garnison tombait à 27 %)
+  alarmeMs: 15000,
+  alarmeDps: 3,
 };
 
 module.exports = { CAPTAINS, TUNING };

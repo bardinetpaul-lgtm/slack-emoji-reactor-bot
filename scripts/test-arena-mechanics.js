@@ -19,9 +19,10 @@ fs.cpSync(path.join(ROOT, 'src'), path.join(TMP, 'src'), { recursive: true });
 fs.symlinkSync(path.join(ROOT, 'node_modules'), path.join(TMP, 'node_modules'), 'junction');
 fs.mkdirSync(path.join(TMP, 'data'));
 
-const ARCHS = ['tank', 'guerrier', 'tireur', 'essaim', 'sort', 'pompe'];
+const ARCHS = ['tank', 'guerrier', 'tireur', 'essaim', 'sort', 'vigie'];
 const overrides = {};
 for (const a of ARCHS) for (let i = 1; i <= 8; i += 1) overrides[`${a}${i}`] = { archetype: a, specialty: 'none' };
+overrides['old-pompe'] = { archetype: 'pompe' };   // ancienne surcharge (avant la v2.3) : lue « vigie »
 for (const spec of ['charge', 'bouclier', 'vampire', 'explosion', 'invocation', 'ralenti', 'soin']) {
   const arch = { charge: 'guerrier', bouclier: 'tank', vampire: 'guerrier', explosion: 'guerrier', invocation: 'tank', ralenti: 'tireur', soin: 'tireur' }[spec];
   overrides[`spec-${spec}`] = { archetype: arch, specialty: spec };
@@ -48,8 +49,8 @@ function player(userId, urls, { captain = null, copies = {} } = {}) {
   for (const d of deck) c[d.url] = copies[d.url] || (c[d.url] || 0) + 1;
   return { userId, deck, copies: c, captain };
 }
-const DECK_A = ['guerrier1', 'guerrier2', 'tireur1', 'tireur2', 'tank1', 'essaim1', 'sort1', 'pompe1'];
-const DECK_B = ['guerrier3', 'guerrier4', 'tireur3', 'tireur4', 'tank2', 'essaim2', 'sort2', 'pompe2'];
+const DECK_A = ['guerrier1', 'guerrier2', 'tireur1', 'tireur2', 'tank1', 'essaim1', 'sort1', 'vigie1'];
+const DECK_B = ['guerrier3', 'guerrier4', 'tireur3', 'tireur4', 'tank2', 'essaim2', 'sort2', 'vigie2'];
 const match = (A = player('UA', DECK_A), B = player('UB', DECK_B)) => engine.createMatch({ id: 'm', seed: 3, players: { A, B } });
 const run = (s, ms) => engine.tick(s, ms);
 const tower = (s, side, lane) => s.buildings.find((b) => b.side === side && b.kind === 'tower' && b.lane === lane);
@@ -67,10 +68,8 @@ const give = (s, side, urls) => { s.players[side].hand = urls.slice(); s.players
   check('Capitaine hors deck ignoré', match(player('UA', DECK_A, { captain: 'nope' })).players.A.captain === null);
 
   // Passifs
-  const pompe = match(player('UA', DECK_A, { captain: 'pompe1' }));
-  check(`Économie (Pompe) : +${TUNING.startElixir} élixir au départ`, pompe.players.A.elixir === 5 + TUNING.startElixir);
-  run(pompe, 20000);
-  check(`Économie (Pompe) : élixir jusqu’à ${TUNING.elixirMax}`, pompe.players.A.elixir === TUNING.elixirMax && engine.publicState(pompe, 'A').players.A.elixirMax === TUNING.elixirMax);
+  const garn = match(player('UA', DECK_A, { captain: 'vigie1' }));
+  check('Garnison (Vigie) : élixir de départ et maximum normaux', garn.players.A.elixir === 5 && engine.publicState(garn, 'A').players.A.elixirMax === 10);
   const sortC = match(player('UA', DECK_A, { captain: 'sort1' }));
   check('Magie (Sort) : Sorts à −1 élixir', engine.cardStats(sortC, 'A', 'sort1').cost === cards.getCardStats(card('sort1')).cost - 1);
   const echo = match(player('UA', ['sort1', 'sort2', 'guerrier1', 'guerrier2', 'tireur1', 'tireur2', 'tank1', 'essaim1'], { captain: 'sort1' }));
@@ -129,8 +128,8 @@ const give = (s, side, urls) => { s.players[side].hand = urls.slice(); s.players
   const y0 = gel.units[0].y;
   run(gel, 1500);
   check('Gel : les unités de la zone sont figées', gel.units[0].y === y0);
-  run(gel, 2000);
-  check('Gel : 3 s puis ça repart', gel.units[0].y !== y0);
+  run(gel, 4000);
+  check('Gel : 5 s puis ça repart', gel.units[0].y !== y0);
 
   const rem = match(player('UA', DECK_A, { captain: 'tank1' }));
   engine.applyAction(rem, 'A', { type: 'power', lane: 1 });
@@ -139,13 +138,6 @@ const give = (s, side, urls) => { s.players[side].hand = urls.slice(); s.players
   engine.applyAction(rem, 'B', { type: 'deploy', url: 'sort2', lane: 1 });
   run(rem, 1000);
   check('Rempart : la tour ne prend aucun dégât pendant 4 s', tower(rem, 'A', 1).hp === 600);
-
-  const surch = match(player('UA', DECK_A, { captain: 'pompe1' }));
-  surch.players.A.elixir = 0;
-  surch.players.B.elixir = 0;
-  engine.applyAction(surch, 'A', { type: 'power' });
-  run(surch, 2800);
-  check('Surchauffe : élixir ×2 (× la recharge Économie en plus)', Math.abs(surch.players.A.elixir - 2 * TUNING.ecoRegen * surch.players.B.elixir) < 0.02);
 
   const renf = match(player('UA', DECK_A, { captain: 'essaim1' }));
   engine.applyAction(renf, 'A', { type: 'power', lane: 1 });
@@ -182,6 +174,174 @@ const give = (s, side, urls) => { s.players[side].hand = urls.slice(); s.players
     const res = u ? engine.applyAction(far, side, { type: 'power', x: u.x, depth: depthOf(u) }) : { ok: false };
     check(`Charge dans le camp ennemi (camp ${side}) : acceptée et appliquée`, Boolean(u) && depthOf(u) >= 60 && res.ok && u.chargeUntil > far.timeMs);
   }
+}
+
+// ═══ 🗼 Vigie ═══
+{
+  const VDECK = ['vigie1', 'vigie2', 'vigie3', 'vigie4', 'guerrier1', 'tireur1', 'tank1', 'sort1'];
+  const vm = (opts = {}) => match(player('UA', VDECK, opts));
+  const pay = (s, side = 'A') => { s.players[side].elixir = 10; };
+  // Un mannequin ennemi immobile (un seul Guerrier du camp B), à (x, y) du terrain
+  const dummy = (s, x, y, { dps = 0 } = {}) => {
+    give(s, 'B', ['guerrier3']);
+    engine.applyAction(s, 'B', { type: 'deploy', url: 'guerrier3', lane: 1 });
+    run(s, 600);
+    const [u, ...rest] = s.units.filter((v) => v.side === 'B');
+    s.units = s.units.filter((v) => !rest.includes(v));
+    Object.assign(u, { x, y, speed: 0, dps, hp: 5000, maxHp: 5000 });
+    return u;
+  };
+  const vigieOn = (s, lane, side = 'A', url = 'vigie1') => {
+    give(s, side, [url]);
+    engine.applyAction(s, side, { type: 'deploy', url, lane });
+    run(s, 600);
+    return tower(s, side, lane);
+  };
+
+  // Pose : tour la plus proche du point, sans Vigie
+  const s = vm();
+  give(s, 'A', ['vigie1', 'vigie2', 'vigie3', 'vigie4']);
+  check('Vigie : pose acceptée', engine.applyAction(s, 'A', { type: 'deploy', url: 'vigie1', x: 80, depth: 30 }).ok);
+  check('Vigie : la pose en attente prend la place de sa tour', s.pending[0].x === 83 && s.pending[0].y === 15 && s.pending[0].towerId === tower(s, 'A', 2).id);
+  const evs = run(s, 600);
+  check('Vigie : sur la tour la plus proche du point touché', tower(s, 'A', 2).vigie && tower(s, 'A', 2).vigie.url === 'vigie1' && !tower(s, 'A', 0).vigie && !tower(s, 'A', 1).vigie);
+  check('Vigie : événement d\'apparition à la tour', evs.some((e) => e.type === 'spawn' && e.archetype === 'vigie' && e.x === 83 && e.y === 15));
+  check('Vigie : la pose est en poste (alive)', s.poses[0].status === 'alive');
+  pay(s);
+  engine.applyAction(s, 'A', { type: 'deploy', url: 'vigie2', x: 83, depth: 20 });
+  run(s, 600);
+  check('Vigie : une tour déjà gardée est sautée (la plus proche libre)', tower(s, 'A', 1).vigie && tower(s, 'A', 1).vigie.url === 'vigie2');
+  pay(s);
+  check('Vigie : pose sur la dernière tour libre (en attente)', engine.applyAction(s, 'A', { type: 'deploy', url: 'vigie3', lane: 1 }).ok && s.pending[0].towerId === tower(s, 'A', 0).id);
+  pay(s);
+  check('Vigie : refus « no_tower » quand les 3 tours sont prises (dont une en attente)', engine.applyAction(s, 'A', { type: 'deploy', url: 'vigie4', lane: 0 }).reason === 'no_tower');
+  check('Vigie : élixir non débité au refus, carte gardée en main', s.players.A.elixir === 10 && s.players.A.hand.includes('vigie4'));
+  const dead = vm();
+  give(dead, 'A', ['vigie1']);
+  dead.buildings.filter((b) => b.side === 'A' && b.kind === 'tower').forEach((b) => { b.alive = false; b.hp = 0; });
+  check('Vigie : refus « no_tower » quand toutes les tours sont détruites', engine.applyAction(dead, 'A', { type: 'deploy', url: 'vigie1', lane: 1 }).reason === 'no_tower' && dead.players.A.elixir === 10);
+  const sb = match(player('UA', DECK_A), player('UB', VDECK));
+  give(sb, 'B', ['vigie1']);
+  engine.applyAction(sb, 'B', { type: 'deploy', url: 'vigie1', x: 20, depth: 25 });
+  run(sb, 600);
+  check('Vigie (camp B) : sur sa propre tour la plus proche', tower(sb, 'B', 0).vigie && tower(sb, 'B', 0).vigie.url === 'vigie1');
+
+  // Tour visée tombée pendant la pose : redescend aussitôt (carte sauvée, élixir perdu)
+  const late = vm();
+  give(late, 'A', ['vigie1']);
+  engine.applyAction(late, 'A', { type: 'deploy', url: 'vigie1', lane: 0 });
+  tower(late, 'A', 0).alive = false;
+  const lateEv = run(late, 600);
+  check('Vigie : tour tombée pendant la pose → pose « expired » + vigie_end', late.poses[0].status === 'expired' && lateEv.some((e) => e.type === 'vigie_end' && e.side === 'A' && e.lane === 0) && !tower(late, 'A', 0).vigie);
+
+  // Portée +2 : un ennemi à portée + 1 de la tour gauche (D = 13)
+  const rg = vm();
+  const far = dummy(rg, 17, 28);
+  let h = far.hp;
+  run(rg, 1000);
+  check('sans Vigie : ennemi à portée + 1 ignoré par la tour', far.hp === h);
+  vigieOn(rg, 0);
+  h = far.hp;
+  run(rg, 1000);
+  check('avec Vigie : ennemi à portée + 1 visé', far.hp < h);
+
+  // Tir +40 %
+  const dm = vm();
+  const near = dummy(dm, 17, 25);   // D = 10 : à portée dans les deux cas
+  h = near.hp;
+  run(dm, 1000);
+  const base = h - near.hp;
+  vigieOn(dm, 0);
+  h = near.hp;
+  run(dm, 1000);
+  const boosted = h - near.hp;
+  check(`Vigie : dégâts de la tour ×1,4 (${base.toFixed(1)} → ${boosted.toFixed(1)} par s)`, Math.abs(base - 80) < 1e-6 && Math.abs(boosted - 112) < 1e-6);
+
+  // Garde
+  const gd = vm();
+  const tg = vigieOn(gd, 0);
+  check('Garde : 200 PV de garde (commune)', tg.vigie.guard === 200 && tg.vigie.guardMax === 200);
+  const hitter = dummy(gd, 17, 16.5, { dps: 1000 });   // au pied de la tour : 100 dégâts par pas
+  run(gd, 100);
+  check('Garde : 100 dégâts → garde −100, tour intacte', Math.abs(tg.vigie.guard - 100) < 1e-6 && tg.hp === 600);
+  hitter.dps = 3000;
+  run(gd, 100);
+  check('Garde : dégâts > garde → l\'excédent touche la tour', tg.vigie.guard === 0 && Math.abs(tg.hp - 400) < 1e-6);
+  const rp = match({ ...player('UA', VDECK), captain: 'tank3', captainCard: card('tank3') });
+  const tr = vigieOn(rp, 0);
+  engine.applyAction(rp, 'A', { type: 'power', lane: 0 });
+  dummy(rp, 17, 16.5, { dps: 3000 });
+  run(rp, 300);
+  check('Garde : Rempart actif → ni la garde ni la tour ne bougent', tr.vigie.guard === 200 && tr.hp === 600);
+
+  // Expiration : 40 s (commune), 80 s avec le Capitaine Garnison
+  const ex = vm();
+  vigieOn(ex, 0);   // apparue à 0,5 s (horloge à 0,6 s)
+  run(ex, 39800);   // 40,4 s
+  check('Vigie : encore en poste juste avant 40 s', tower(ex, 'A', 0).vigie !== null);
+  const exEv = run(ex, 100);
+  check('Vigie : redescend au bout de 40 s → pose « expired » + vigie_end', tower(ex, 'A', 0).vigie === null && ex.poses[0].status === 'expired' && exEv.some((e) => e.type === 'vigie_end' && e.side === 'A' && e.lane === 0));
+  const gx = vm({ captain: 'vigie2' });
+  vigieOn(gx, 0);
+  run(gx, 79800);   // 80,4 s
+  check('Garnison : la Vigie est encore en poste à 80,4 s', tower(gx, 'A', 0).vigie !== null);
+  run(gx, 100);
+  check(`Garnison : elle reste ${TUNING.vigieDuration * 40} s (deux fois plus longtemps)`, tower(gx, 'A', 0).vigie === null && gx.poses[0].status === 'expired');
+  const leg = cards.getCardStats(card('vigie1', 'legendary'));
+  check('Vigie légendaire : garde et durée renforcées, tir et portée inchangés', leg.guard > 200 && leg.durationMs > 40000 && leg.dpsBonus === 0.4 && leg.rangeBonus === 2);
+
+  // Tour détruite avec sa Vigie : carte perdue
+  const de = vm();
+  const td = vigieOn(de, 0);
+  td.vigie.guard = 0;
+  td.hp = 1;
+  give(de, 'B', ['sort2']);
+  engine.applyAction(de, 'B', { type: 'deploy', url: 'sort2', x: 17, depth: 85 });
+  run(de, 200);
+  check('Vigie : tour détruite → pose « destroyed », plus de Vigie', !td.alive && td.vigie === null && de.poses.find((p) => p.url === 'vigie1').status === 'destroyed');
+  const end = vm();
+  vigieOn(end, 1);
+  engine.applyAction(end, 'B', { type: 'forfeit' });
+  check('fin du combat : une Vigie en poste compte comme vivante', end.result.poses.find((p) => p.url === 'vigie1').status === 'alive');
+
+  // 🎖 Alarme : tours ×3 pendant 15 s
+  const al = vm({ captain: 'vigie2' });
+  const tgt = dummy(al, 17, 25);
+  check('Alarme : acceptée (sans point visé)', engine.applyAction(al, 'A', { type: 'power' }).ok);
+  check('vue : alarme visible', engine.publicState(al, 'B').players.A.alarm === true && engine.publicState(al, 'B').players.B.alarm === false);
+  h = tgt.hp;
+  run(al, 1000);
+  check('Alarme : les tours tirent trois fois plus fort', Math.abs(h - tgt.hp - 240) < 1e-6);
+  run(al, 14000);
+  h = tgt.hp;
+  run(al, 1000);
+  check('Alarme : finie après 15 s', Math.abs(h - tgt.hp - 80) < 1e-6 && engine.publicState(al, 'A').players.A.alarm === false);
+  check('Alarme : une seule fois par combat', engine.applyAction(al, 'A', { type: 'power' }).reason === 'power_used');
+
+  // 👁 Vue publique
+  const ps = vm({ captain: 'vigie2' });
+  vigieOn(ps, 1);
+  run(ps, 1000);
+  const view = engine.publicState(ps, 'B');
+  const vb = view.buildings.find((b) => b.side === 'A' && b.kind === 'tower' && b.lane === 1);
+  check('vue : buildings[].vigie (url, garde, temps restant)', vb.vigie && vb.vigie.url === 'vigie1' && vb.vigie.guard === 200 && vb.vigie.guardMax === 200 && vb.vigie.remainingMs === 500 + 80000 - ps.timeMs);
+  check('vue : pas de Vigie sur les autres bâtiments', view.buildings.filter((b) => b !== vb).every((b) => b.vigie === null));
+  check('vue : plus de Surchauffe', !('overheat' in view.players.A));
+
+  // 🔁 Migration Pompe → Vigie
+  check('Vigie : la place exacte de la Pompe dans le tirage (dernière, 5 %)', Object.keys(cards.ARCHETYPES).pop() === 'vigie' && cards.ARCHETYPES.vigie.share === 5 && !cards.ARCHETYPES.pompe);
+  check('surcharge « pompe » lue « vigie »', cards.getCardStats(card('old-pompe')).archetype === 'vigie');
+  const crypto = require('crypto');
+  let drawn = null;
+  for (let i = 0; i < 5000 && !drawn; i += 1) {
+    const u = `tirage-${i}`;
+    if ((crypto.createHash('sha256').update(u).digest().readUInt32BE(0) / 0x100000000) * 100 >= 95) drawn = u;
+  }
+  check('une carte qui tirait Pompe tire Vigie', drawn && cards.archetypeFromUrl(drawn) === 'vigie');
+  const old = match(player('UA', ['old-pompe', ...DECK_A.slice(1)], { captain: 'old-pompe' }));
+  check('Capitaine sur une ancienne Pompe → Garnison (Alarme)', old.players.A.captain.archetype === 'vigie' && old.players.A.captain.power === 'alarme' && captains.CAPTAINS.vigie.style === 'Garnison' && !captains.CAPTAINS.pompe);
+  check('admin : le type « pompe » est refusé', cards.setArchetype('x', 'pompe').ok === false);
+  check('Économie retirée (élixir de départ / max / recharge, Surchauffe)', ['startElixir', 'elixirMax', 'ecoRegen', 'surchauffeMs'].every((k) => !(k in TUNING)));
 }
 
 // ═══ 🏹 Tireurs : tir en reculant ═══

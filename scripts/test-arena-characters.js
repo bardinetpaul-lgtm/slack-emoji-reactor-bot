@@ -23,7 +23,7 @@ fs.symlinkSync(path.join(ROOT, 'node_modules'), path.join(TMP, 'node_modules'), 
 fs.mkdirSync(path.join(TMP, 'data'));
 fs.copyFileSync(path.join(ROOT, 'data', 'media-bank.json'), path.join(TMP, 'data', 'media-bank.json'));
 
-const ARCHS = ['tank', 'guerrier', 'tireur', 'essaim', 'sort', 'pompe'];
+const ARCHS = ['tank', 'guerrier', 'tireur', 'essaim', 'sort', 'vigie'];
 const overrides = {};
 for (const a of ARCHS) for (let i = 0; i < 60; i += 1) overrides[`${a}-${i}`] = { archetype: a };
 overrides.retouche = { archetype: 'guerrier', character: { head: 'couronne', weapon: 'hache', glasses: 'soleil', facial: 'guidon', accessories: ['pipe'], outfit: '#1C72F1' } };
@@ -68,7 +68,10 @@ const dist = all('tireur');
 check('Tireur : toujours un arc (calque arme) et un carquois', dist.every((c) => layerOf(c, 'weapon').some((p) => p.d.startsWith('M21 -58Q41')) && layerOf(c, 'back').length >= 4));
 const swarm = all('essaim');
 check('Essaim : ailé, il vole', swarm.every((c) => c.walk === 'fly' && layerOf(c, 'wings').length >= 2 && c.swarm));
-check('Pompe et Sort immobiles', all('pompe').every((c) => c.walk === 'none') && all('sort').every((c) => c.walk === 'none'));
+check('Sort immobile', all('sort').every((c) => c.walk === 'none'));
+check('Vigie : silhouette d\'archer', all('vigie').every((c) => c.silhouette === 'distance' && c.kind === 'fighter'));
+check('Vigie : un vrai personnage (marche, arc à part) pour le plateau', all('vigie').every((c) => c.walk === 'step' && layerOf(c, 'weapon').length > 0));
+check('Vigie : description « 🗼 Vigie · arc… » (plus de bâtiment)', /🗼 \*Vigie\* · arc/.test(characters.describeText(card('vigie-0'))) && !/bâtiment/.test(characters.describeText(card('vigie-0'))));
 check('Sort : jamais un symbole rose sur le disque rose', all('sort').every((c) => c.parts[2].fill !== '#FF73C0'));
 
 // 🔎 Le look de la carte habille le perso

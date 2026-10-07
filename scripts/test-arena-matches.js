@@ -176,6 +176,75 @@ check('combats terminés purgés après 10 min', matches.getMatch(m5.id) === nul
   check('match_finished : issue cohérente', rows.every((d) => d.players.length === 2 && d.players.every((p) => ['win', 'loss', 'draw', 'cancelled'].includes(p.outcome))));
 }
 
+// ─── 📺 v2.3 : historique enrichi à la fin d'un vrai combat ───
+{
+  giveCards('UE', 'e');
+  giveCards('UF', 'f');
+  const t = T + 2_000_000;
+  const h = matches.createMatchFor('UE', 'UF', t, { arena: 'port' });
+  matches.connect(h.id, 'UE', t);
+  matches.connect(h.id, 'UF', t);
+  matches.setReady(h.id, 'UE');
+  matches.setReady(h.id, 'UF');
+  matches.step(t + S);
+  matches.action(h.id, 'UE', { type: 'forfeit' });
+  matches.step(t + 2 * S);
+  const last = arenaStore.recentResults(1)[0];
+  check('historique : combat enregistré avec ses deux joueurs', last && last.matchId === h.id && last.players.slice().sort().join() === 'UE,UF');
+  check('historique : vainqueur = celui qui n\'a pas abandonné', last.winnerId === 'UF' && last.draw === false);
+  check('historique : raison + tours détruites par joueur', last.reason === 'forfeit' && last.towers && last.towers.UE === 0 && last.towers.UF === 0);
+}
+
+// ─── 📺 v2.3 : JP TV (spectateurs) ───
+{
+  giveCards('UG', 'g');
+  giveCards('UH', 'h');
+  const seen = [];
+  const off = matches.subscribeSpectator((match, evts) => seen.push({ id: match.id, events: evts.length }));
+  const start = (id, t) => {
+    matches.connect(id, 'UG', t);
+    matches.connect(id, 'UH', t);
+    matches.setReady(id, 'UG');
+    matches.setReady(id, 'UH');
+  };
+  const t = T + 3_000_000;
+  const tv = matches.createMatchFor('UG', 'UH', t);
+  start(tv.id, t);
+  check('JP TV : rien diffusé pendant la préparation', seen.length === 0);
+  check('JP TV : un combat en préparation n\'est pas listé', !matches.listForTv().some((m) => m.id === tv.id));
+  matches.step(t + S);
+  const mt = matches.getMatch(tv.id);
+  check('JP TV : combat lancé → diffusable, heure de début notée', mt.broadcast === true && mt.startedAt === t + S);
+  check('JP TV : spectateurs prévenus', seen.some((s) => s.id === tv.id));
+  const sv = matches.spectatorView(mt);
+  check('JP TV : vue spectateur en combat, camp A en bas', sv.phase === 'running' && sv.you === 'A' && sv.arena === 'jardin');
+  check('JP TV : ni main ni élixir des joueurs', ['A', 'B'].every((s) => sv.players[s].hand === undefined && sv.players[s].elixir === undefined && sv.players[s].elixirMax === undefined));
+  check('JP TV : terrain visible (bâtiments)', Array.isArray(sv.buildings) && sv.buildings.length > 0);
+  check('JP TV : listForTv le contient', matches.listForTv().some((m) => m.id === tv.id && m.status === 'running' && m.players.A === mt.players.A.userId && m.broadcast));
+  matches.action(tv.id, 'UG', { type: 'forfeit' });
+  matches.step(t + 2 * S);
+  const ev = matches.spectatorView(mt);
+  check('JP TV : vue de fin = vainqueur, raison, tours', ev.phase === 'ended' && ev.result.reason === 'forfeit' && ev.result.winner && ev.result.towers && ev.result.poses === undefined);
+  off();
+  const before = seen.length;
+
+  // Refus de diffusion d'un seul joueur → combat non diffusé, mais bien compté
+  arenaStore.setTvOptOut('UG', true);
+  const t2 = t + 60 * S;
+  const tv2 = matches.createMatchFor('UG', 'UH', t2);
+  const seen2 = [];
+  const off2 = matches.subscribeSpectator((match) => seen2.push(match.id));
+  start(tv2.id, t2);
+  matches.step(t2 + S);
+  check('JP TV : un joueur refuse → combat non diffusé', matches.getMatch(tv2.id).broadcast === false && !seen2.includes(tv2.id));
+  matches.action(tv2.id, 'UH', { type: 'forfeit' });
+  matches.step(t2 + 2 * S);
+  check('JP TV : combat non diffusé quand même dans les derniers combats', arenaStore.recentResults(1)[0].matchId === tv2.id);
+  check('JP TV : désabonné → plus rien reçu', seen.length === before);
+  off2();
+  arenaStore.setTvOptOut('UG', false);
+}
+
 try { require(path.join(TMP, 'src', 'db.js')).close(); } catch { /* base jamais ouverte */ }   // Windows : fichier ouvert = non supprimable
 fs.rmSync(TMP, { recursive: true, force: true });
 console.log(failures ? `\n❌ ${failures} échec(s)` : '\n✅ Tout est bon');

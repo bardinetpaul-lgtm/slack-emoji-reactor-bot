@@ -203,6 +203,20 @@ body.wide .top { display: none; }
 
 .opp-cap { margin-left: 8px; font-size: 12px; font-weight: 600; color: var(--muted); }
 .opp-rage { margin-left: 4px; }
+/* 🂠 v2.3 : cartes restantes de l'adversaire, face cachée */
+.opp-hand { display: inline-flex; align-items: center; gap: 8px; margin-left: 10px; }
+.opp-hand[hidden] { display: none; }
+.opp-hand .backs { display: inline-flex; }
+.card-back {
+  display: inline-block; width: 14px; height: 19px; border-radius: 3px; border: 1.5px solid var(--cream);
+  background: repeating-linear-gradient(45deg, var(--pink) 0 3px, var(--i7) 3px 6px);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .35);
+}
+.card-back + .card-back { margin-left: -6px; }
+.opp-hand-count { font-size: 12px; font-weight: 600; color: var(--muted); white-space: nowrap; }
+body.fight .card-back { width: 20px; height: 27px; border-radius: 4px; }
+body.fight .card-back + .card-back { margin-left: -8px; }
+body.fight .opp-hand-count { font-size: 14px; }
 .rage { position: absolute; left: 10px; top: 10px; background: var(--orange); color: var(--ink); border-radius: 999px; padding: 3px 10px; font-size: 12px; font-weight: 600; }
 .power-row { display: flex; align-items: center; gap: 10px; padding: 0 2px 4px; }
 .power { border: none; cursor: pointer; border-radius: 10px; padding: 8px 12px; font: 600 13px 'Inter Tight', sans-serif; background: var(--cream); color: var(--ink); white-space: nowrap; }
@@ -273,6 +287,8 @@ body.wide .top { display: none; }
   color: #fff; font-size: 12px; text-shadow: 0 1px 2px rgba(0, 0, 0, .6);
 }
 .card .copies { right: 6px; bottom: 6px; font-size: 11px; }
+/* 🔢 v2.3 : carte dans le deck → exemplaires encore disponibles / possédés, bien lisible */
+.de-card .de-copies.used { background: var(--ink); padding: 2px 6px; border-radius: 6px; right: 6px; bottom: 6px; font-size: 13px; font-weight: 700; text-shadow: none; }
 .de-cost, .card .cost, .de-spec, .card .spec, .de-badge, .card .tag { z-index: 4; }
 .card .tag { bottom: 22px; }
 .de-grid .de-badge { bottom: 26px; }
@@ -310,6 +326,8 @@ body.wide .top { display: none; }
 @keyframes feed-in { from { transform: scale(.4); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .feed-card { animation: none; } }
 .board-wrap .rage { top: auto; bottom: 10px; }
+#alarm { top: 40px; }
+.board-wrap #alarm { top: auto; bottom: 40px; }
 
 /* ⏳ Carte en charge (pas assez d'élixir) : photo éteinte, jauge rose qui monte */
 .card.poor { background: var(--cream); opacity: 1; }
@@ -333,6 +351,8 @@ body.wide .top { display: none; }
 
 /* 🏆 Classement (v2.2) : même cadre que le tuto */
 .head-btns { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.tv-opt { display: inline-flex; align-items: center; gap: 6px; font: 600 13px 'Inter Tight', sans-serif; color: var(--cream); cursor: pointer; white-space: nowrap; }
+.tv-opt input { width: 16px; height: 16px; accent-color: var(--blue); }
 .rk-dialog { width: min(460px, 100%); }
 .rk-body { display: flex; flex-direction: column; gap: 8px; }
 .rk-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }

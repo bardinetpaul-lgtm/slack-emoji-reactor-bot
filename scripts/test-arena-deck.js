@@ -18,7 +18,7 @@ fs.cpSync(path.join(ROOT, 'src'), path.join(TMP, 'src'), { recursive: true });
 fs.symlinkSync(path.join(ROOT, 'node_modules'), path.join(TMP, 'node_modules'), 'junction');
 fs.mkdirSync(path.join(TMP, 'data'));
 
-const ARCHS = ['tank', 'guerrier', 'tireur', 'essaim', 'sort', 'pompe'];
+const ARCHS = ['tank', 'guerrier', 'tireur', 'essaim', 'sort', 'vigie'];
 const overrides = {};
 for (const a of ARCHS) for (let i = 1; i <= 5; i += 1) overrides[`${a}${i}`] = { archetype: a };
 fs.writeFileSync(path.join(TMP, 'data', 'card-overrides.json'), JSON.stringify(overrides));
@@ -46,7 +46,7 @@ check('distinctCount', deck.distinctCount(collection) === 18);
 check('distinctCount ignore les cartes à 0', deck.distinctCount([c('a', 0), c('b', 1)]) === 1);
 
 // ✔️ Validation
-const valid = ['tank1', 'guerrier2', 'guerrier3', 'tireur2', 'tireur3', 'essaim1', 'sort1', 'pompe1'];
+const valid = ['tank1', 'guerrier2', 'guerrier3', 'tireur2', 'tireur3', 'essaim1', 'sort1', 'vigie1'];
 check('deck valide', deck.validateDeck(collection, valid).ok);
 check('refus : taille', deck.validateDeck(collection, valid.slice(0, 7)).reason === 'size');
 check('refus : plus d’emplacements que d’exemplaires', deck.validateDeck(collection, [...valid.slice(0, 7), 'tank1']).reason === 'copies');
@@ -64,7 +64,7 @@ check('deck auto : légendaire en double acceptée', auto.includes('tireur1'));
 check('deck auto : déterministe', JSON.stringify(deck.buildAutoDeck(collection)) === JSON.stringify(auto));
 
 // Petite collection (8 cartes pile, dont une légendaire unique) → on la prend quand même
-const small = ['tank1', 'guerrier1', 'guerrier2', 'tireur1', 'tireur2', 'essaim1', 'sort1', 'pompe1'].map((u) => c(u));
+const small = ['tank1', 'guerrier1', 'guerrier2', 'tireur1', 'tireur2', 'essaim1', 'sort1', 'vigie1'].map((u) => c(u));
 small[1].rarity = 'legendary';
 check('deck auto : petite collection → les 8 cartes', deck.validateDeck(small, deck.buildAutoDeck(small)).ok);
 check('deck auto : moins de 8 cartes → null', deck.buildAutoDeck(small.slice(0, 7)) === null);

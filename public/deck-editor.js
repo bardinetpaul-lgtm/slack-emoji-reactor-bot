@@ -7,7 +7,8 @@
 //  archétypes, alerte, 🛒 cartes mystère (préparation), « Vider » et
 //  « Prêt » (préparation) ou enregistrement auto.
 //  À droite : toute la collection (vraies images), filtres par
-//  archétype, tri coût / nom, exemplaires possédés, badge « Deck ×n »,
+//  archétype, tri coût / nom, exemplaires possédés (« 2/3 » = encore
+//  disponibles / possédés dès qu'elle est dans le deck), badge « Deck ×n »,
 //  ✨ spécialité des épiques / légendaires.
 //  Une carte ×3 possédée peut occuper jusqu'à 3 emplacements ; chaque
 //  emplacement se joue UNE fois par combat.
@@ -25,7 +26,7 @@
 (function (root) {
   'use strict';
 
-  const ARCH_LABELS = { tank: 'Tank', guerrier: 'Guerrier', tireur: 'Tireur', essaim: 'Essaim', sort: 'Sort', pompe: 'Pompe' };
+  const ARCH_LABELS = { tank: 'Tank', guerrier: 'Guerrier', tireur: 'Tireur', essaim: 'Essaim', sort: 'Sort', vigie: 'Vigie' };
   const RARITY_LABELS = { epic: 'Épique', legendary: 'Légendaire' };
   const RARITIES = { common: 'Commune', rare: 'Rare', epic: 'Épique', legendary: 'Légendaire', rose: 'Octobre Rose' };
   const RARITY_ORDER = { legendary: 0, rose: 1, epic: 1, rare: 2, common: 3 };
@@ -40,7 +41,7 @@
     tireur:   { emoji: '🏹', label: 'Tireur',   role: '3 archers légers et vifs qui tirent de loin, fragiles : à protéger derrière un Tank.', vs: 'Nettoie l’🐝 Essaim (×1,5). Tape mal sur les ⚔️ Guerriers (×0,67), qui l’écrasent en retour.' },
     essaim:   { emoji: '🐝', label: 'Essaim',   role: '6 petits volants très rapides.', vs: 'Fait fondre les 🛡 Tanks (×1,5). Tape mal sur les 🏹 Tireurs (×0,67), qui le nettoient. Craint les 💥 Sorts.' },
     sort:     { emoji: '💥', label: 'Sort',     role: 'Explose au point visé (zone). Seulement 40 % des dégâts sur les bâtiments.', vs: 'Écrase l’🐝 Essaim (×1,5).' },
-    pompe:    { emoji: '⚗️', label: 'Pompe',    role: 'Bâtiment : +1 élixir toutes les 7 s pendant 45 s. Une seule à la fois.', vs: '' },
+    vigie:    { emoji: '🗼', label: 'Vigie',    role: 'Monte sur une de tes tours : garde, tir et portée en plus pendant 40 s. Une par tour.', vs: 'Rend une tour très dure à prendre, mais la carte est perdue si la tour tombe.' },
   };
   const roleText = (k) => (ROLES[k] ? `${ROLES[k].role} ${ROLES[k].vs}`.trim() : '');
 
@@ -86,6 +87,20 @@
     if (cls) e.className = cls;
     if (text !== undefined) e.textContent = text;
     return e;
+  }
+
+  /**
+   * 🔢 Exemplaires d'une carte de la collection (v2.3) : combien restent
+   * disponibles une fois ceux du deck (et du Capitaine) comptés.
+   * → { free, label (badge), title (info-bulle) }
+   */
+  function copiesInfo(copies, inDeck, isCaptain) {
+    const used = inDeck + (isCaptain ? 1 : 0);
+    const free = Math.max(0, copies - used);
+    const s = (n) => (n > 1 ? 's' : '');
+    if (!used) return { free, label: `×${copies}`, title: `${copies} exemplaire${s(copies)} possédé${s(copies)}` };
+    if (!free) return { free, label: `0/${copies}`, title: `Tous tes exemplaires (${copies}) sont déjà dans le deck` };
+    return { free, label: `${free}/${copies}`, title: `${free} exemplaire${s(free)} encore disponible${s(free)} sur ${copies}` };
   }
 
   const fmt = (n) => n.toFixed(1).replace('.', ',');
@@ -378,8 +393,11 @@
         b.type = 'button';
         b.disabled = picking ? !canCap : !(can || on);
         b.setAttribute('aria-pressed', String(on));
-        b.setAttribute('aria-label', `${c.title}, ${RARITIES[c.rarity] || RARITIES.common}, ${ARCH_LABELS[c.archetype]}, coût ${c.cost}, ${c.copies} exemplaire(s), ${n} dans le deck`);
-        b.append(cardArt(c), el('span', 'de-cost', String(c.cost)), el('span', 'de-copies', `×${c.copies}`));
+        b.setAttribute('aria-label', `${c.title}, ${RARITIES[c.rarity] || RARITIES.common}, ${ARCH_LABELS[c.archetype]}, coût ${c.cost}, ${c.copies} exemplaire(s), ${n} dans le deck, ${copiesInfo(c.copies, n, isCap).free} encore disponible(s)`);
+        const info = copiesInfo(c.copies, n, isCap);   // 🔢 exemplaires encore disponibles
+        const copiesBadge = el('span', `de-copies${on || isCap ? ' used' : ''}`, info.label);
+        copiesBadge.title = info.title;
+        b.append(cardArt(c), el('span', 'de-cost', String(c.cost)), copiesBadge);
         decorate(b, c);
         if (can) b.title += '\n→ Ajouter un emplacement';
         else if (on) b.title += '\n→ Retirer un emplacement';
@@ -426,5 +444,5 @@
     };
   }
 
-  root.DeckEditor = { mount, warningFor, ROLES, RARITIES, roleText, guide };
+  root.DeckEditor = { mount, warningFor, copiesInfo, ROLES, RARITIES, roleText, guide };
 }(typeof self !== 'undefined' ? self : this));

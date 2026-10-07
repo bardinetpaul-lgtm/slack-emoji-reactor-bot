@@ -14,7 +14,7 @@
 //    Une rivière (y 45 → 55) se franchit par 2 PONTS (x = 28 et 72) ;
 //    l'Essaim vole et passe partout.
 //  Chaque unité va vers la cible la plus proche : un ennemi repéré
-//  (≤ SIGHT), sinon le bâtiment ennemi le plus proche (tour, Pompe, QG).
+//  (≤ SIGHT), sinon le bâtiment ennemi le plus proche (tour ou QG).
 //  Le Tank ne vise que les bâtiments.
 //  Distances : D(a, b) = hypot((xa − xb) × XK, ya − yb), XK = 0,6 (le
 //  terrain est plus haut que large : 100 en x ≈ 60 en y à l'écran).
@@ -36,6 +36,11 @@
 //    🏳 Rappel     : un groupe retourne à sa tour la plus proche ; sorti
 //                    du terrain, sa carte est sauvée (même en cas de défaite)
 //    🔥 Rage       : perdre une tour → +2 élixir et +10 % de dégâts 10 s
+//    🗼 Vigie      : (v2.3, remplace la Pompe) pas une unité : un état de la tour
+//                    (`tower.vigie`). Elle monte sur la tour libre la plus proche
+//                    du point touché ; sa garde encaisse avant la tour, la tour
+//                    tire plus fort et plus loin. Redescendue au bout de sa durée
+//                    → « expired » (carte sauvée) ; tour tombée → « destroyed ».
 //    ✨ Spécialités : pouvoirs de certaines cartes (src/game/specialties.js)
 //
 //  Pas de simulation fixe : 100 ms.
@@ -172,12 +177,12 @@ function createMatch({ id, seed = 1, players }) {
     const order = shuffle(state, slots);
     state.players[side] = {
       userId: p.userId,
-      elixir: ELIXIR_START + (arch === 'pompe' ? TUNING.startElixir : 0),
+      elixir: ELIXIR_START,
       hand: order,
       copies,
       cards,
       captain,
-      effects: { overheatUntil: 0, rageUntil: 0 },
+      effects: { alarmUntil: 0, rageUntil: 0 },   // 🎖 Alarme (Garnison) · 🔥 Rage
       echo: {},   // 🎖 Magie : url → nombre de relances gratuites restantes
     };
     if (arch === 'sort') {
@@ -190,6 +195,7 @@ function createMatch({ id, seed = 1, players }) {
         hp: TOWER.hp, maxHp: TOWER.hp, dps: TOWER.dps,
         range: TOWER.range * (arch === 'tireur' ? TUNING.towerRange : 1),
         alive: true, invulnerableUntil: 0,
+        vigie: null,   // 🗼 { poseId, url, until, guard, guardMax, dpsBonus, rangeBonus }
       });
     });
     state.buildings.push({
@@ -207,7 +213,6 @@ function createMatch({ id, seed = 1, players }) {
 const cardStats = (state, side, url) => state.players[side].cards[url];
 const towerOf = (state, side, lane) => state.buildings.find((b) => b.side === side && b.kind === 'tower' && b.lane === lane);
 const qgOf = (state, side) => state.buildings.find((b) => b.side === side && b.kind === 'qg');
-const elixirMax = (player) => (player.captain && player.captain.archetype === 'pompe' ? TUNING.elixirMax : ELIXIR_MAX);
 const captainArch = (state, side) => (state.players[side].captain ? state.players[side].captain.archetype : null);
 const poseOf = (state, id) => state.poses.find((p) => p.id === id);
 
@@ -215,9 +220,23 @@ function towersDestroyed(state, side) {
   return state.buildings.filter((b) => b.side === side && b.kind === 'tower' && !b.alive).length;
 }
 
-function hasPump(state, side) {
-  return state.buildings.some((b) => b.side === side && b.kind === 'pompe' && b.alive)
-    || state.pending.some((p) => p.side === side && cardStats(state, side, p.url).archetype === 'pompe');
+// 🗼 Tir et portée effectifs d'un bâtiment (Vigie en poste, 🎖 Alarme sur les tours)
+const reachOf = (b) => b.range + (b.vigie ? b.vigie.rangeBonus : 0);
+function towerDps(state, b) {
+  let dps = b.dps * (b.vigie ? 1 + b.vigie.dpsBonus : 1);
+  if (b.kind === 'tower' && state.players[b.side].effects.alarmUntil > state.timeMs) dps *= TUNING.alarmeDps;
+  return dps;
+}
+
+/**
+ * 🗼 Tour qui recevra une Vigie posée au point `pt` : la tour vivante du camp la plus
+ * proche, sans Vigie ni Vigie en cours de pose. → la tour, ou null (aucune tour libre).
+ */
+function freeTowerFor(state, side, pt) {
+  const taken = new Set(state.pending.filter((p) => p.side === side && p.towerId).map((p) => p.towerId));
+  return state.buildings
+    .filter((b) => b.side === side && b.kind === 'tower' && b.alive && !b.vigie && !taken.has(b.id))
+    .sort((a, b) => D(a, pt) - D(b, pt))[0] || null;
 }
 
 // ─────────────────────────────────────────────
@@ -297,10 +316,15 @@ function applyAction(state, side, action) {
     if (!pt) return { ok: false, reason: 'lane', events };
     pt.auto = true;
   } else {
-    const defDepth = stats.archetype === 'pompe' ? 18 : (action.forward ? 72 : 20);   // avancée : au pied de la tour tombée
+    const defDepth = stats.archetype === 'vigie' ? 15 : (action.forward ? 72 : 20);   // avancée : au pied de la tour tombée
     pt = pointOf(side, action, defDepth);
     if (!pt) return { ok: false, reason: 'lane', events };
-    if (spell) {
+    if (stats.archetype === 'vigie') {
+      // 🗼 pas de zone de pose : le point désigne la tour (libre) la plus proche
+      const t = freeTowerFor(state, side, pt);
+      if (!t) return { ok: false, reason: 'no_tower', events };
+      pt = { x: t.x, y: t.y, fx: t.x, depth: 15, towerId: t.id };
+    } else if (spell) {
       if (pt.fx < ZONE.spellMin || pt.fx > ZONE.spellMax || pt.depth < ZONE.spellMin || pt.depth > ZONE.spellMax) return { ok: false, reason: 'zone', events };
     } else {
       const err = placementError(state, side, pt);
@@ -308,7 +332,6 @@ function applyAction(state, side, action) {
     }
   }
   const forward = pt.depth >= ZONE.foeMin;
-  if (stats.archetype === 'pompe' && hasPump(state, side)) return { ok: false, reason: 'pump_active', events };
 
   // 💧 Paiement ; 🎖 Écho (Magie) : la relance d'un Sort n'engage aucune carte
   player.elixir -= stats.cost;
@@ -334,6 +357,7 @@ function applyAction(state, side, action) {
   const lane = columnOf(pt.x);
   state.pending.push({
     poseId: pose.id, side, url, lane, forward, x: pt.x, y: pt.y, auto: Boolean(pt.auto),
+    towerId: pt.towerId || null,   // 🗼 tour visée par une Vigie
     // 💥 un Sort visé frappe au pas suivant ; sans point visé, il attend que les poses adverses apparaissent
     readyAt: state.timeMs + (spell ? (pt.auto ? DEPLOY_DELAY_MS + STEP_MS : 0) : DEPLOY_DELAY_MS),
   });
@@ -392,8 +416,8 @@ function usePower(state, side, action, events) {
       }
       break;
     }
-    case 'surchauffe':
-      player.effects.overheatUntil = now + TUNING.surchauffeMs;
+    case 'alarme':
+      player.effects.alarmUntil = now + TUNING.alarmeMs;
       break;
     case 'gel':
       for (const u of state.units) if (u.side === foe && inZone(u)) u.frozenUntil = now + TUNING.gelMs;
@@ -438,20 +462,25 @@ function spawn(state, pending, events) {
     return;
   }
 
-  pose.status = 'alive';
-
-  if (stats.archetype === 'pompe') {
-    state.buildings.push({
-      id: state.nextId++, side, kind: 'pompe', lane: pending.lane, x: pending.x, y: pending.y,
-      hp: stats.hp, maxHp: stats.hp, dps: 0, range: 0, alive: true, poseId: pose.id,
-      archetype: 'pompe', url, invulnerableUntil: 0,
-      nextProductionAt: state.timeMs + stats.productionMs,
-      productionMs: stats.productionMs,
-      expiresAt: state.timeMs + stats.lifetimeMs,
-    });
-    events.push({ type: 'spawn', side, lane: pending.lane, poseId: pose.id, archetype: 'pompe' });
+  if (stats.archetype === 'vigie') {
+    const t = state.buildings.find((b) => b.id === pending.towerId);
+    if (!t || !t.alive || t.vigie) {
+      // tour tombée (ou prise) pendant la pose : la Vigie redescend aussitôt (carte sauvée, élixir perdu)
+      pose.status = 'expired';
+      events.push({ type: 'vigie_end', side, lane: pending.lane });
+      return;
+    }
+    pose.status = 'alive';
+    const duration = stats.durationMs * (captainArch(state, side) === 'vigie' ? TUNING.vigieDuration : 1);   // 🎖 Garnison
+    t.vigie = {
+      poseId: pose.id, url, until: state.timeMs + duration,
+      guard: stats.guard, guardMax: stats.guard, dpsBonus: stats.dpsBonus, rangeBonus: stats.rangeBonus,
+    };
+    events.push({ type: 'spawn', side, lane: t.lane, poseId: pose.id, archetype: 'vigie', x: t.x, y: t.y });
     return;
   }
+
+  pose.status = 'alive';
 
   const arch = captainArch(state, side);
   const count = stats.count + (arch === 'essaim' && stats.archetype === 'essaim' ? TUNING.extraSwarm : 0);
@@ -484,7 +513,7 @@ function castSpell(state, side, stats, events, at) {
       const d = dir(side);
       center = inColumn.reduce((best, u) => (d * u.y < d * best.y ? u : best));
     } else {
-      const b = state.buildings.filter((x) => x.side === foe && x.alive && x.kind !== 'qg' && Math.abs(x.x - at.x) <= 17).sort((a, c) => (a.kind === 'pompe' ? -1 : c.kind === 'pompe' ? 1 : 0))[0] || qgOf(state, foe);
+      const b = state.buildings.find((x) => x.side === foe && x.alive && x.kind !== 'qg' && Math.abs(x.x - at.x) <= 17) || qgOf(state, foe);
       center = b;
     }
   }
@@ -501,7 +530,7 @@ function castSpell(state, side, stats, events, at) {
 
 // ─────────────────────────────────────────────
 // 🎯 Cible d'une unité : l'ennemi repéré le plus proche (≤ SIGHT), sinon
-//    le bâtiment ennemi le plus proche (tour, Pompe, QG).
+//    le bâtiment ennemi le plus proche (tour ou QG).
 //    Le Tank ne vise que les bâtiments.
 // ─────────────────────────────────────────────
 
@@ -525,15 +554,16 @@ function findTarget(state, unit) {
   return best;
 }
 
-// Cible d'une tour / du QG : unité ennemie la plus proche à portée
+// Cible d'une tour / du QG : unité ennemie la plus proche à portée (🗼 Vigie : plus loin)
 function findBuildingTarget(state, building) {
   const foe = other(building.side);
+  const reach = reachOf(building);
   let best = null;
   let bestDist = Infinity;
   for (const u of state.units) {
     if (u.side !== foe || u.hp <= 0) continue;
     const d = D(u, building);
-    if (d <= building.range && d < bestDist) { best = u; bestDist = d; }
+    if (d <= reach && d < bestDist) { best = u; bestDist = d; }
   }
   return best;
 }
@@ -627,7 +657,7 @@ function callHook(state, unit, hook, extra, events) {
 }
 
 // ─────────────────────────────────────────────
-// 🩸 Dégâts (bouclier, invulnérabilité) + morts en chaîne
+// 🩸 Dégâts (bouclier, garde d'une Vigie, invulnérabilité) + morts en chaîne
 // ─────────────────────────────────────────────
 
 function hurt(target, dmg) {
@@ -635,6 +665,11 @@ function hurt(target, dmg) {
   if (target.shield > 0) {
     const absorbed = Math.min(target.shield, left);
     target.shield -= absorbed;
+    left -= absorbed;
+  }
+  if (target.vigie && target.vigie.guard > 0) {   // 🗼 la garde encaisse avant la tour
+    const absorbed = Math.min(target.vigie.guard, left);
+    target.vigie.guard -= absorbed;
     left -= absorbed;
   }
   target.hp -= left;
@@ -669,12 +704,15 @@ function applyDamage(state, hits, events) {
     if (!b.alive || b.hp > 0) continue;
     b.hp = 0;
     b.alive = false;
-    if (b.kind === 'pompe') poseOf(state, b.poseId).status = 'destroyed';
+    if (b.vigie) {   // 🗼 tombée avec sa Vigie : carte perdue
+      poseOf(state, b.vigie.poseId).status = 'destroyed';
+      b.vigie = null;
+    }
     events.push({ type: 'destroyed', side: b.side, kind: b.kind, lane: b.lane, x: b.x, y: b.y });
     // 🔥 Rage : le camp qui perd une tour se déchaîne
     if (b.kind === 'tower') {
       const p = state.players[b.side];
-      p.elixir = Math.min(elixirMax(p), p.elixir + RAGE.elixir);
+      p.elixir = Math.min(ELIXIR_MAX, p.elixir + RAGE.elixir);
       p.effects.rageUntil = state.timeMs + RAGE.ms;
       events.push({ type: 'rage', side: b.side });
     }
@@ -691,10 +729,8 @@ function step(state, events) {
   const remaining = state.durationMs - now;
   for (const side of SIDES) {
     const p = state.players[side];
-    let regenMs = remaining <= DOUBLE_ELIXIR_MS ? ELIXIR_REGEN_MS / 2 : ELIXIR_REGEN_MS;
-    if (p.effects.overheatUntil > now) regenMs /= 2;   // 🎖 Surchauffe
-    if (p.captain && p.captain.archetype === 'pompe') regenMs /= TUNING.ecoRegen;   // 🎖 Économie
-    p.elixir = Math.min(elixirMax(p), p.elixir + STEP_MS / regenMs);
+    const regenMs = remaining <= DOUBLE_ELIXIR_MS ? ELIXIR_REGEN_MS / 2 : ELIXIR_REGEN_MS;
+    p.elixir = Math.min(ELIXIR_MAX, p.elixir + STEP_MS / regenMs);
   }
 
   // ✨ Poses arrivées à échéance
@@ -702,20 +738,12 @@ function step(state, events) {
   state.pending = state.pending.filter((p) => p.readyAt > now);
   for (const p of ready) spawn(state, p, events);
 
-  // ⚗️ Pompes : production + expiration
+  // 🗼 Vigies : au bout de leur durée, elles redescendent (carte sauvée)
   for (const b of state.buildings) {
-    if (b.kind !== 'pompe' || !b.alive) continue;
-    if (now >= b.nextProductionAt) {
-      const p = state.players[b.side];
-      p.elixir = Math.min(elixirMax(p), p.elixir + 1);
-      b.nextProductionAt += b.productionMs;
-      events.push({ type: 'pump', side: b.side });
-    }
-    if (now >= b.expiresAt) {
-      b.alive = false;
-      poseOf(state, b.poseId).status = 'expired';
-      events.push({ type: 'expired', side: b.side, lane: b.lane });
-    }
+    if (!b.vigie || now < b.vigie.until) continue;
+    poseOf(state, b.vigie.poseId).status = 'expired';
+    b.vigie = null;
+    events.push({ type: 'vigie_end', side: b.side, lane: b.lane });
   }
 
   // 🎯 Déplacements et attaques (dégâts appliqués en même temps)
@@ -774,7 +802,7 @@ function step(state, events) {
   for (const b of state.buildings) {
     if (!b.alive || !b.dps) continue;
     const target = findBuildingTarget(state, b);
-    if (target) hit(target, b.dps * dt);
+    if (target) hit(target, towerDps(state, b) * dt);   // 🗼 Vigie, 🎖 Alarme
   }
 
   // 🏳 Groupes rappelés arrivés à leur tour : sortis, carte sauvée
@@ -825,6 +853,8 @@ function endByTime(state, events) {
 // 🏁 Fin du combat → state.result
 //    Poses en attente d'apparition = encore « vivantes ».
 //    Poses rappelées = « recalled » (jamais perdues).
+//    🗼 Vigie en poste = « alive » (règle des troupes vivantes) ;
+//    Vigie redescendue = « expired ».
 // ─────────────────────────────────────────────
 
 function endMatch(state, winner, reason, events = []) {
@@ -838,6 +868,9 @@ function endMatch(state, winner, reason, events = []) {
     winner,
     reason,
     outOfCards: Boolean(state.outOfCards),   // fini avant 2:00 : toutes les cartes jouées
+    // 📺 JP TV : tours détruites PAR chaque camp, durée réelle du combat
+    towers: { A: towersDestroyed(state, 'B'), B: towersDestroyed(state, 'A') },
+    durationMs: state.timeMs,
     // les poses « free » (Écho) n'engagent aucune carte : exclues du bilan
     poses: state.poses.filter((p) => !p.free).map(({ side, url, title, rarity, archetype, status }) => ({ side, url, title, rarity, archetype, status })),
   };
@@ -881,9 +914,9 @@ function publicState(state, viewer) {
       handCount: p.hand.length,
       towersDestroyed: towersDestroyed(state, other(side)),
       captain: p.captain ? { ...p.captain } : null,
-      elixirMax: elixirMax(p),
+      elixirMax: ELIXIR_MAX,
       rage: p.effects.rageUntil > now,
-      overheat: p.effects.overheatUntil > now,
+      alarm: p.effects.alarmUntil > now,   // 🎖 Alarme (Garnison)
     };
     if (side === viewer) {
       view.hand = handView(p);
@@ -899,8 +932,10 @@ function publicState(state, viewer) {
     remainingMs: Math.max(0, state.durationMs - now),
     doubleElixir: state.durationMs - now <= DOUBLE_ELIXIR_MS,
     players,
-    buildings: state.buildings.map(({ id, side, kind, lane, x, y, hp, maxHp, alive, expiresAt, url, invulnerableUntil }) => ({
-      id, side, kind, lane, x, y, hp, maxHp, alive, expiresAt, url, shielded: invulnerableUntil > now,
+    buildings: state.buildings.map(({ id, side, kind, lane, x, y, hp, maxHp, alive, invulnerableUntil, vigie }) => ({
+      id, side, kind, lane, x, y, hp, maxHp, alive, shielded: invulnerableUntil > now,
+      // 🗼 Vigie en poste (tours seulement ; null sinon)
+      vigie: vigie ? { url: vigie.url, guard: vigie.guard, guardMax: vigie.guardMax, remainingMs: Math.max(0, vigie.until - now) } : null,
     })),
     units: state.units.map((u) => ({
       id: u.id, side: u.side, lane: u.lane, x: u.x, y: u.y, hp: u.hp, maxHp: u.maxHp, archetype: u.archetype, url: u.url,

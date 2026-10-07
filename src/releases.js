@@ -16,6 +16,23 @@
 
 const RELEASES = [
   {
+    version: '3.0',
+    date: '2026-10-07',
+    title: 'L\'Arène en direct sur JP TV et la Vigie',
+    changes: [
+      '📺 Tes combats de l\'Arène passent en direct sur JP TV, la TV du hall : une alerte « Priorité au direct », puis tout le combat, et le résultat à la fin. Ni ta main ni ton élixir ne sont montrés.',
+      '🏆 JP TV affiche aussi le classement de l\'Arène en direct et le résultat des derniers combats.',
+      '🙈 Tu préfères rester discret ? Coche « Ne pas me diffuser sur JP TV » dans « Mon deck » : tes combats ne passeront pas en direct (ils comptent toujours au classement).',
+      '🌙 Pas de direct pendant le mode soir de la TV (17h45–19h).',
+      '🔢 « Mon deck » et préparation d\'un combat : une carte de ton deck affiche ses exemplaires encore disponibles (ex. 1/3 = il t\'en reste 1 sur les 3 que tu possèdes).',
+      '🛡 Capitaine Tank : le Rempart se voit enfin. La tour protégée s\'entoure d\'un halo à ta couleur avec un 🛡 pendant 10 s, et un message confirme chaque pouvoir de Capitaine lancé.',
+      '🂠 Arène : à côté du nom de ton adversaire, ses cartes restantes s\'affichent face cachée, avec leur nombre. Tu sais ce qu\'il lui reste à poser, sans savoir quoi.',
+      '🗼 Nouvelle carte : la Vigie remplace la Pompe (tes Pompes deviennent des Vigies). Elle coûte 4 élixir et grimpe sur ta tour libre la plus proche pendant 40 s. La tour gagne +200 PV de garde (absorbés en premier), tire 40 % plus fort, portée +2. Une Vigie par tour : si la tour tombe, tu perds la Vigie. Après 40 s elle redescend et tu la récupères, sauf si tu perds le combat (comme toute carte posée). Rare : ↑ durée et garde.',
+      '🎖️ Nouveau Capitaine Garnison (remplace Économie) : tes Vigies restent deux fois plus longtemps. Pouvoir Alarme : tes tours vivantes tirent trois fois plus fort pendant 15 s.',
+      '❄️ Capitaine Magie : le Gel fige maintenant les ennemis 5 s (au lieu de 3 s).',
+    ],
+  },
+  {
     version: '2.2.1',
     date: '2026-10-05',
     title: 'Signale un bug, gagne des JP$',

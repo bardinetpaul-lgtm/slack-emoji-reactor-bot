@@ -43,17 +43,18 @@ for (const [key, arch] of Object.entries(cards.ARCHETYPES)) {
 
 // ✍️ Surcharge manuelle prioritaire
 fs.writeFileSync(path.join(TMP, 'data', 'card-overrides.json'), JSON.stringify({
-  [url]: { archetype: 'pompe', specialty: 'ralenti' },
+  [url]: { archetype: 'vigie', specialty: 'ralenti' },
 }));
 cards.reloadOverrides();
 const over = cards.getCardStats({ url, title: 'Surprise #1', rarity: 'common' });
-check('surcharge : archétype imposé', over.archetype === 'pompe');
+check('surcharge : archétype imposé', over.archetype === 'vigie');
 check('surcharge : spécialité transmise', over.specialty === 'ralenti');
 
 // 💎 Rareté
 fs.writeFileSync(path.join(TMP, 'data', 'card-overrides.json'), JSON.stringify({
   'u-guerrier': { archetype: 'guerrier' },
-  'u-pompe': { archetype: 'pompe' },
+  'u-vigie': { archetype: 'vigie' },
+  'u-pompe': { archetype: 'pompe' },   // ancienne surcharge (avant la v2.3)
   'u-sort': { archetype: 'sort' },
 }));
 cards.reloadOverrides();
@@ -65,10 +66,12 @@ check('légendaire : dégâts inchangés (la rareté ne renforce que les PV)', g
 check('légendaire : coût +1', gL.cost === gC.cost + L.cost);
 check('rareté inconnue → commune', cards.getCardStats({ url: 'u-guerrier', rarity: 'bidon' }).hp === gC.hp);
 
-const pC = cards.getCardStats({ url: 'u-pompe', rarity: 'common' });
-const pL = cards.getCardStats({ url: 'u-pompe', rarity: 'legendary' });
-check('Pompe légendaire : PV et durée de vie augmentés', pL.hp > pC.hp && pL.lifetimeMs > pC.lifetimeMs);
-check('Pompe légendaire : cadence de production inchangée', pL.productionMs === pC.productionMs);
+const vC = cards.getCardStats({ url: 'u-vigie', rarity: 'common' });
+const vL = cards.getCardStats({ url: 'u-vigie', rarity: 'legendary' });
+check('Vigie commune : 4 élixir, 40 s, garde 200, tir +40 %, portée +2', vC.cost === 4 && vC.durationMs === 40000 && vC.guard === 200 && vC.dpsBonus === 0.4 && vC.rangeBonus === 2);
+check('Vigie légendaire : garde et durée multipliées', Math.abs(vL.guard - 200 * L.mult) < 1e-9 && Math.abs(vL.durationMs - 40000 * L.mult) < 1e-9);
+check('Vigie légendaire : tir et portée inchangés', vL.dpsBonus === vC.dpsBonus && vL.rangeBonus === vC.rangeBonus);
+check('ancienne surcharge « pompe » lue « vigie »', cards.getCardStats({ url: 'u-pompe', rarity: 'common' }).archetype === 'vigie');
 
 const sL = cards.getCardStats({ url: 'u-sort', rarity: 'legendary' });
 check('Sort légendaire : dégâts multipliés', sL.damage > cards.getCardStats({ url: 'u-sort', rarity: 'common' }).damage);

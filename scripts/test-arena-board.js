@@ -49,7 +49,7 @@ const view = {
     { id: 2, side: 'B', kind: 'tower', lane: 0, x: 17, y: 85, hp: 200, maxHp: 600, alive: true },
     { id: 3, side: 'B', kind: 'tower', lane: 2, x: 83, y: 85, hp: 0, maxHp: 600, alive: false },
     { id: 4, side: 'B', kind: 'qg', lane: null, x: 50, y: 95, hp: 2000, maxHp: 2000, alive: true },
-    { id: 5, side: 'A', kind: 'pompe', lane: 1, x: 50, y: 18, hp: 500, maxHp: 500, alive: true, url: 'p' },
+    { id: 5, side: 'A', kind: 'tower', lane: 1, x: 50, y: 15, hp: 600, maxHp: 600, alive: true, vigie: { url: 'p', guard: 125, guardMax: 250, remainingMs: 30000 } },
   ],
   units: [
     { id: 10, side: 'A', lane: 1, x: 50, y: 40, hp: 100, maxHp: 170, archetype: 'guerrier', url: 'g', slot: 0, packSize: 3 },
@@ -66,7 +66,7 @@ check('scène : tour détruite en ruine', svg.includes('#t-ruine'));
 check('scène : tour principale', svg.includes('#t-king'));
 check('scène : mes unités en bleu, les adverses en orange', svg.includes('#s1') && svg.includes('#1C72F1') && svg.includes('#FF6229'));
 check('scène : chaque personnage du groupe est dessiné', (svg.match(/href="#s2"/g) || []).length === 3);
-check('scène : Pompe dessinée avec son personnage', svg.includes('href="#s3"'));
+check('scène : Vigie dessinée sur sa tour avec son personnage', svg.includes('href="#s3"'));
 check('scène : pose en cours d\'apparition visible', svg.includes('stroke-dasharray="3 5"'));
 check('scène : barre de vie de la tour abîmée', svg.includes('#FF6229') && svg.includes('#2F3733'));
 check('scène : aucune valeur cassée', !/NaN|undefined/.test(svg));
@@ -175,8 +175,67 @@ check('gel : anneau bleu', fs2.includes('data-fx="frozen"'));
 check('bouclier : anneau blanc', fs2.includes('data-fx="shield"'));
 check('retraite : groupe estompé', fs2.includes('opacity="0.55"'));
 check('Rempart : tour protégée', fs2.includes('data-fx="rempart"'));
+// 🐛 v2.3 : le cercle blanc était invisible sur le sol crème → couleur de l'équipe + 🛡
+const rempart = /<g data-fx="rempart">([\s\S]*?)<\/g>/.exec(fs2)[1];
+check('Rempart : cercle à la couleur de mon équipe (bleu), pas blanc', rempart.includes(`stroke="${board.COLORS.BLUE}"`) && !rempart.includes('stroke="#FFFFFF"'));
+check('Rempart : bouclier 🛡 au-dessus de la tour', rempart.includes('🛡'));
+const foeShield = board.renderDynamic({ ...fv, buildings: [{ ...fv.buildings[0], side: 'B', y: 85 }] }, { sprites: { g: 's1' } });
+check('Rempart adverse : cercle orange', /<g data-fx="rempart">[\s\S]*?stroke="#FF6229"/.test(foeShield));
 const fx2 = board.renderDynamic({ you: 'A', units: [], buildings: [] }, { fx: [{ type: 'lane', lane: 1, color: '#FF73C0', age: 100 }, { type: 'ring', x: 10, y: 10, age: 0, color: '#FF6229' }] });
 check('pouvoir : le couloir visé s\'illumine', fx2.includes('data-fx="lane"'));
+
+// 🗼 Vigie : le personnage de la carte sur sa tour, étendard, halo, barre de garde dorée
+const GOLD = '#FFC83D';
+const watchTower = (side, vigie) => ({ id: 1, side, kind: 'tower', lane: 0, x: 17, y: side === 'A' ? 15 : 85, hp: 600, maxHp: 600, alive: true, vigie });
+const watch = { url: 'v', guard: 100, guardMax: 250, remainingMs: 20000 };
+const vs = board.renderDynamic({ you: 'A', units: [], buildings: [watchTower('A', watch)] }, { sprites: { v: { id: 'vg', walk: 'step' } } });
+check('Vigie : groupe data-fx="vigie" sur la tour', vs.includes('data-fx="vigie"'));
+check('Vigie : le personnage de la carte (<use> de son sprite)', /<use href="#vg"/.test(vs));
+check('Vigie : petite échelle (~0,3) sur les créneaux', /scale\(0\.3\)/.test(vs));
+check('Vigie : barre de garde dorée', vs.includes(`fill="${GOLD}"`) && vs.includes('data-fx="guard"'));
+const vigieTower = /<g data-fx="vigie">([\s\S]*?)<\/g>/.exec(vs);
+check('Vigie : halo à la couleur de mon camp (bleu)', vigieTower && vigieTower[1].includes(board.COLORS.BLUE));
+check('Vigie : étendard', vs.includes('data-fx="vigie-flag"'));
+check('Vigie : aucune valeur cassée', !/NaN|undefined/.test(vs));
+const guardY = Number((/data-fx="guard"[^>]*><path d="M[\d.]+ ([\d.]+)/.exec(vs) || [])[1]);
+const plain = board.renderDynamic({ you: 'A', units: [], buildings: [watchTower('A', null)] }, { sprites: { v: 'vg' } });
+check('sans Vigie : ni halo, ni personnage, ni garde', !plain.includes('data-fx="vigie"') && !plain.includes('#vg') && !plain.includes('data-fx="guard"') && !plain.includes(GOLD));
+const hpY = Number((/<path d="M[\d.]+ ([\d.]+)h/.exec(plain.slice(plain.indexOf('t-lane'))) || [])[1]);
+check('Vigie : barre de garde au-dessus de la barre de PV', guardY < hpY);
+const foeWatch = board.renderDynamic({ you: 'A', units: [], buildings: [watchTower('B', watch)] }, { sprites: { v: 'vg' } });
+check('Vigie adverse : halo orange', /<g data-fx="vigie">[\s\S]*?#FF6229/.test(foeWatch));
+const noGuard = board.renderDynamic({ you: 'A', units: [], buildings: [watchTower('A', { ...watch, guard: 0 })] }, { sprites: { v: 'vg' } });
+check('Vigie sans garde restante : toujours là, barre de garde vide', noGuard.includes('data-fx="vigie"') && noGuard.includes('data-fx="guard"'));
+const ruined = board.renderDynamic({ you: 'A', units: [], buildings: [{ ...watchTower('A', watch), alive: false }] }, { sprites: { v: 'vg' } });
+check('tour en ruine : pas de Vigie dessinée', !ruined.includes('data-fx="vigie"'));
+const noSprite = board.renderDynamic({ you: 'A', units: [], buildings: [watchTower('A', watch)] }, { sprites: {} });
+check('Vigie sans dessin connu : halo et garde quand même, rien de cassé', noSprite.includes('data-fx="vigie"') && !/NaN|undefined/.test(noSprite));
+
+// 🗼 Tour qui recevra la Vigie (même règle que le moteur : la plus proche, libre)
+const free = { you: 'A', buildings: towers('A'), pending: [] };
+const tL = board.toBoard(COL[0], 15, 'A');
+check('Vigie : point près de ma tour gauche → tour gauche', board.vigieTower(tL.x + 5, tL.y - 60, free).lane === 0);
+check('Vigie : point n’importe où (même chez l’adversaire) → ma tour la plus proche', board.vigieTower(300, 150, free).lane === 2);
+const takenL = { you: 'A', buildings: towers('A').map((t) => (t.lane === 0 ? { ...t, vigie: watch } : t)), pending: [] };
+check('Vigie : tour déjà gardée sautée', board.vigieTower(tL.x, tL.y, takenL).lane === 1);
+const pendL = { you: 'A', buildings: towers('A'), pending: [{ side: 'A', archetype: 'vigie', x: COL[0], y: 15 }] };
+check('Vigie : tour visée par une Vigie en pose sautée', board.vigieTower(tL.x, tL.y, pendL).lane === 1);
+const none = { you: 'A', buildings: towers('A', [1, 2]).map((t) => (t.lane === 0 ? { ...t, vigie: watch } : t)), pending: [] };
+check('Vigie : aucune tour libre → null', board.vigieTower(180, 500, none) === null);
+const freeB = { you: 'B', buildings: towers('B'), pending: [] };
+check('Vigie (vue B) : en miroir', board.vigieTower(60, 500, freeB).lane === 2);
+check('Vigie : jamais le QG', board.vigieTower(180, 600, { you: 'A', buildings: [{ side: 'A', kind: 'qg', lane: null, x: 50, y: 5, alive: true }], pending: [] }) === null);
+
+// 🔔 Alarme (Garnison) : les tours vivantes du camp concerné s'illuminent, et seulement elles
+const alarmTower = (side, alive) => ({ id: side === 'A' ? 1 : 2, side, kind: 'tower', lane: 0, x: 17, y: side === 'A' ? 15 : 85, hp: 600, maxHp: 600, alive });
+const alarmView = (alarmA, alarmB, extra = []) => ({ you: 'A', units: [], buildings: [alarmTower('A', true), alarmTower('B', true), ...extra], players: { A: { alarm: alarmA }, B: { alarm: alarmB } } });
+const countFx = (svg) => (svg.match(/data-fx="alarme"/g) || []).length;
+check('Alarme : aucune marque si personne n alarme', countFx(board.renderDynamic(alarmView(false, false), {})) === 0);
+check('Alarme : une marque sur ma tour quand mon alarme est active', countFx(board.renderDynamic(alarmView(true, false), {})) === 1);
+check('Alarme : une marque sur la tour adverse quand la sienne est active', countFx(board.renderDynamic(alarmView(false, true), {})) === 1);
+check('Alarme : tour détruite sans marque', countFx(board.renderDynamic({ ...alarmView(true, false), buildings: [alarmTower('A', false)] }, {})) === 0);
+check('Alarme : pas de marque sur le QG', countFx(board.renderDynamic({ ...alarmView(true, false), buildings: [{ ...alarmTower('A', true), kind: 'qg' }] }, {})) === 0);
+check('Alarme : sans players, rien ne plante', countFx(board.renderDynamic({ you: 'A', units: [], buildings: [alarmTower('A', true)] }, {})) === 0);
 
 console.log(failures ? `\n❌ ${failures} échec(s)` : '\n✅ Tout est bon');
 process.exit(failures ? 1 : 0);

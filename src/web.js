@@ -15,6 +15,7 @@
 //    GET  /api/card-thumb/<fileId>    → sa miniature (classeur)
 //    …/arena/…, …/api/arena/…, /deck, /api/deck → Arène (src/game/arenaWeb.js)
 //    /stats, /api/stats/…             → Dashboard admin (src/stats/web.js)
+//    /tv/arena, /api/tv/…             → 📺 JP TV : Arène en direct (src/game/tvWeb.js)
 //    GET  /<fichier>                  → statiques de public/
 //
 //  Désactivé si WEB_PUBLIC_URL est vide (ouverture Slack uniquement).
@@ -33,6 +34,7 @@ const { buildAlbum } = require('./album');
 const arenaWeb = require('./game/arenaWeb');
 const arenaMatches = require('./game/matches');
 const statsWeb = require('./stats/web');
+const tvWeb = require('./game/tvWeb');
 const collections = require('./collections');
 const { getAllMedia } = require('./media');
 
@@ -379,6 +381,7 @@ function createHandler(deps) {
       if (req.method === 'GET' && (m = /^\/api\/card-thumb\/([A-Z0-9]+)$/.exec(pathname))) {
         return await handleCardImage(res, m[1], deps, { thumb: true });
       }
+      if (await tvWeb.route(req, res, url)) return undefined;
       if (await statsWeb.route(req, res, url)) return undefined;
       if (await arenaWeb.route(req, res, url)) return undefined;
       if (req.method === 'GET' && pathname !== '/') {
@@ -408,6 +411,7 @@ function startWebServer({ client, logger = console, port = WEB_PORT, host = '127
   getSecret();
   configureArena({ client, logger });
   configureStats({ client, logger });
+  configureTv({ client, logger });
   arenaMatches.start();   // boucle 10 Hz des combats (idempotent)
   const server = http.createServer(createHandler({ client, logger, onOpened }));
   server.on('error', (err) => logger.error('[web] serveur:', err.message));
@@ -439,10 +443,22 @@ function configureStats({ client = null, logger = console } = {}) {
 }
 configureStats();
 
+// 📺 JP TV : mêmes secret, réponses et pages que le reste du site
+function configureTv({ client = null, logger = console } = {}) {
+  tvWeb.configure({ publicUrl: WEB_PUBLIC_URL, getSecret, send, sendJson, servePage, userProfile, client, logger });
+}
+configureTv();
+
+/** Liens JP TV { page, api } (null si la page web est désactivée). */
+function buildTvUrls() {
+  if (!isEnabled()) return null;
+  return tvWeb.buildTvUrls();
+}
+
 /** Lien du dashboard /stats (admins seulement ; null sinon ou si la page web est désactivée). */
 function buildStatsUrl(userId) {
   if (!isEnabled()) return null;
   return statsWeb.buildStatsUrl(userId);
 }
 
-module.exports = { startWebServer, buildOpenUrl, buildCollectionUrl, buildDeckUrl, buildArenaUrl, buildStatsUrl, isEnabled, signToken, verifyToken };
+module.exports = { startWebServer, buildOpenUrl, buildCollectionUrl, buildDeckUrl, buildArenaUrl, buildStatsUrl, buildTvUrls, isEnabled, signToken, verifyToken };
