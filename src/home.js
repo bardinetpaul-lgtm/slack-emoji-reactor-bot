@@ -217,7 +217,7 @@ ${seasonal.emoji} *Booster ${seasonal.label}* : 1 ou 2 cartes exclusives qu'on n
 function buildFarmQuotaBlock(ctx) {
   let text;
   if (ctx.farmRemainingMs > 0) {
-    text = `🚜 *Pénalité anti-farm :* encore *${ctx.formatRemaining(ctx.farmRemainingMs)}* — tes Jeanpips n'envoient rien aux autres et ne rapportent pas de JP$.`;
+    text = `🚜 *Pénalité anti-farm :* encore *${ctx.formatRemaining(ctx.farmRemainingMs)}* — tes Jeanpips n'envoient rien aux autres, tu ne reçois aucune image et tu ne gagnes pas de JP$.`;
   } else {
     const { used, max, nextFreeMs } = ctx.farmQuota;
     const full = used >= max;
