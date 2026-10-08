@@ -21,8 +21,8 @@
 //        message?: { channel, ts } } } }
 // ═══════════════════════════════════════════════════════════
 
-const fs = require('fs');
 const path = require('path');
+const { readJson, writeJsonAtomic } = require('./storage');
 
 const { drawCardOfRarity } = require('./media');
 const octobreRose = require('./octobreRose');
@@ -235,8 +235,7 @@ const BOOSTERS_PATH = path.join(__dirname, '..', 'data', 'boosters.json');
 
 function loadStore() {
   try {
-    if (!fs.existsSync(BOOSTERS_PATH)) return { boosters: {} };
-    const data = JSON.parse(fs.readFileSync(BOOSTERS_PATH, 'utf-8'));
+    const data = readJson(BOOSTERS_PATH, { boosters: {} });
     return data && typeof data.boosters === 'object' ? data : { boosters: {} };
   } catch {
     return { boosters: {} };
@@ -245,7 +244,7 @@ function loadStore() {
 
 function saveStore(data) {
   try {
-    fs.writeFileSync(BOOSTERS_PATH, JSON.stringify(data, null, 2), 'utf-8');
+    writeJsonAtomic(BOOSTERS_PATH, data);
   } catch (e) {
     console.error('[boosters] écriture:', e.message);
   }

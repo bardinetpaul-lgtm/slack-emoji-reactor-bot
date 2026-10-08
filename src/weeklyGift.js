@@ -8,8 +8,8 @@
 //    { week_start: "<ISO du dernier vendredi 9h distribué>", users: { U123: 12 } }
 // ═══════════════════════════════════════════════════════════
 
-const fs = require('fs');
 const path = require('path');
+const { readJson, writeJsonAtomic } = require('./storage');
 const credits = require('./credits');
 const broadcast = require('./broadcast');
 
@@ -22,8 +22,7 @@ const WEEKLY_AMOUNT = 20;
 
 function load() {
   try {
-    if (!fs.existsSync(WEEKLY_GIFT_PATH)) return null;
-    const data = JSON.parse(fs.readFileSync(WEEKLY_GIFT_PATH, 'utf-8'));
+    const data = readJson(WEEKLY_GIFT_PATH, null);
     return data && typeof data.users === 'object' && data.week_start ? data : null;
   } catch {
     return null;
@@ -32,7 +31,7 @@ function load() {
 
 function save(data) {
   try {
-    fs.writeFileSync(WEEKLY_GIFT_PATH, JSON.stringify(data, null, 2), 'utf-8');
+    writeJsonAtomic(WEEKLY_GIFT_PATH, data);
   } catch (e) {
     console.error('[weeklyGift] écriture:', e.message);
   }

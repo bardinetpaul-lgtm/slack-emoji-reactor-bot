@@ -13,9 +13,9 @@
 //        title, rarity, type, count, firstAt, lastAt } } } } }
 // ═══════════════════════════════════════════════════════════
 
-const fs = require('fs');
 const path = require('path');
 const events = require('./events');
+const { readJson, writeJsonAtomic } = require('./storage');
 
 const COLLECTIONS_PATH = path.join(__dirname, '..', 'data', 'collections.json');
 
@@ -25,8 +25,7 @@ const COLLECTIONS_PATH = path.join(__dirname, '..', 'data', 'collections.json');
 
 function load() {
   try {
-    if (!fs.existsSync(COLLECTIONS_PATH)) return { users: {} };
-    const data = JSON.parse(fs.readFileSync(COLLECTIONS_PATH, 'utf-8'));
+    const data = readJson(COLLECTIONS_PATH, { users: {} });
     return data && typeof data.users === 'object' ? data : { users: {} };
   } catch {
     return { users: {} };
@@ -35,7 +34,7 @@ function load() {
 
 function save(data) {
   try {
-    fs.writeFileSync(COLLECTIONS_PATH, JSON.stringify(data, null, 2), 'utf-8');
+    writeJsonAtomic(COLLECTIONS_PATH, data);
   } catch (e) {
     console.error('[collections] écriture:', e.message);
   }

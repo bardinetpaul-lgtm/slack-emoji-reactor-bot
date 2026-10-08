@@ -41,3 +41,5 @@ data/credits.json.bak-*
 data/credits.json.imported
 data/jeanpip-backup-*.db
 data/jeanpip.db.avant-*
+data/**/*.tmp-*
+data/**/*.corrupt-*

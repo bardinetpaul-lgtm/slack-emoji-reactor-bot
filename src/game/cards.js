@@ -24,9 +24,9 @@
 //  vitesse en cases/s, durées en ms.
 // ═══════════════════════════════════════════════════════════
 
-const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const { readJson, writeJsonAtomic } = require('../storage');
 
 const OVERRIDES_PATH = path.join(__dirname, '..', '..', 'data', 'card-overrides.json');
 
@@ -93,9 +93,7 @@ let overrides = null;
 
 function reloadOverrides() {
   try {
-    overrides = fs.existsSync(OVERRIDES_PATH)
-      ? JSON.parse(fs.readFileSync(OVERRIDES_PATH, 'utf-8')) || {}
-      : {};
+    overrides = readJson(OVERRIDES_PATH, {}) || {}; // abîmé → mis de côté (.corrupt-*), jamais écrasé
   } catch (e) {
     console.error('[cards] card-overrides.json illisible:', e.message);
     overrides = {};
@@ -131,10 +129,7 @@ function setArchetype(url, archetype) {
   if (Object.keys(entry).length) data[url] = entry;
   else delete data[url];
   try {
-    fs.mkdirSync(path.dirname(OVERRIDES_PATH), { recursive: true });
-    const tmp = `${OVERRIDES_PATH}.tmp`;
-    fs.writeFileSync(tmp, JSON.stringify(data, null, 2));
-    fs.renameSync(tmp, OVERRIDES_PATH);
+    writeJsonAtomic(OVERRIDES_PATH, data);
   } catch (e) {
     return { ok: false, error: 'ecriture', detail: e.message };
   }

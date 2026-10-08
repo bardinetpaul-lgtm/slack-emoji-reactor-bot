@@ -15,6 +15,7 @@
 const path = require('path');
 const fs = require('fs');
 const events = require('./events');
+const { readJson, writeJsonAtomic } = require('./storage');
 
 // ─────────────────────────────────────────────
 // 🎨 Définition des raretés
@@ -64,7 +65,7 @@ let customMedia = [];
 
 try {
   if (fs.existsSync(CUSTOM_BANK_PATH)) {
-    const parsed = JSON.parse(fs.readFileSync(CUSTOM_BANK_PATH, 'utf-8'));
+    const parsed = readJson(CUSTOM_BANK_PATH, null); // abîmé → mis de côté, jamais écrasé
     if (Array.isArray(parsed)) {
       customMedia = parsed;
       const active = customMedia.filter((m) => !m.removedAt);
@@ -332,7 +333,7 @@ function addMedia({ url, rarity, title, author }) {
 
   // 3. Persistance dans la banque custom (gitignored)
   try {
-    fs.writeFileSync(CUSTOM_BANK_PATH, JSON.stringify(customMedia, null, 2), 'utf-8');
+    writeJsonAtomic(CUSTOM_BANK_PATH, customMedia);
   } catch (e) {
     return { ok: false, error: 'ecriture', detail: e.message };
   }
@@ -366,7 +367,7 @@ function migrateCustomNumbers() {
   }
 
   try {
-    fs.writeFileSync(CUSTOM_BANK_PATH, JSON.stringify(customMedia, null, 2), 'utf-8');
+    writeJsonAtomic(CUSTOM_BANK_PATH, customMedia);
     console.log(`🔢 ${sansNumero.length} média(s) custom numéroté(s) rétroactivement (jusqu'à #${next - 1})`);
   } catch (e) {
     console.error('[media] migration numéros:', e.message);
@@ -402,7 +403,7 @@ function removeMedia(number) {
 
   media.removedAt = new Date().toISOString();
   try {
-    fs.writeFileSync(CUSTOM_BANK_PATH, JSON.stringify(customMedia, null, 2), 'utf-8');
+    writeJsonAtomic(CUSTOM_BANK_PATH, customMedia);
   } catch (e) {
     delete media.removedAt;
     return { ok: false, error: 'ecriture', detail: e.message };

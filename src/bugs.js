@@ -14,8 +14,8 @@
 //                       adminMessages: [{ adminId, channel, ts }] }] }
 // ═══════════════════════════════════════════════════════════
 
-const fs = require('fs');
 const path = require('path');
+const { readJson, writeJsonAtomic } = require('./storage');
 
 const BUGS_PATH = path.join(__dirname, '..', 'data', 'bugs.json');
 
@@ -25,8 +25,7 @@ const MAX_FILES = 3;            // captures par signalement
 
 function load() {
   try {
-    if (!fs.existsSync(BUGS_PATH)) return { nextId: 1, bugs: [] };
-    const data = JSON.parse(fs.readFileSync(BUGS_PATH, 'utf-8')) || {};
+    const data = readJson(BUGS_PATH, {}) || {};
     return { nextId: Number(data.nextId) || 1, bugs: Array.isArray(data.bugs) ? data.bugs : [] };
   } catch {
     return { nextId: 1, bugs: [] };
@@ -35,7 +34,7 @@ function load() {
 
 function save(data) {
   try {
-    fs.writeFileSync(BUGS_PATH, JSON.stringify(data, null, 2), 'utf-8');
+    writeJsonAtomic(BUGS_PATH, data);
   } catch (e) {
     console.error('[bugs] écriture:', e.message);
   }
