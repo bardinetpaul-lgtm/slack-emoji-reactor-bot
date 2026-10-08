@@ -1069,6 +1069,9 @@ app.command('/jeanpip-booster', async ({ command, ack, client, logger }) => {
 // 🛒 Action : clic sur un bouton d'achat de booster
 //    action_id = buy_booster_<type> · value = <type>
 // ─────────────────────────────────────────────
+const STOCK_BOOSTER_CLICK_MS = 3000;
+const lastStockBoosterClick = new Map();   // `${userId}:${type}` → dernier clic traité (ms)
+
 app.action(/^buy_booster_/, async ({ ack, body, action, client, logger }) => {
   await ack();
 
@@ -1080,6 +1083,18 @@ app.action(/^buy_booster_/, async ({ ack, body, action, client, logger }) => {
     if (!booster) {
       logger.warn(`⚠️ Type de booster inconnu : ${type}`);
       return;
+    }
+
+    // 🚦 v3.0.3 : booster à stock du jour (Octobre Rose) → un clic traité toutes les 3 s
+    //    par personne ; les clics en rafale sont ignorés (ni DM, ni lecture du stock).
+    if (booster.dailyStock) {
+      const key = `${userId}:${type}`;
+      const now = Date.now();
+      if (now - (lastStockBoosterClick.get(key) || -Infinity) < STOCK_BOOSTER_CLICK_MS) {
+        logger.info(`🚦 Clic booster ${type} ignoré (rafale) : <@${userId}>`);
+        return;
+      }
+      lastStockBoosterClick.set(key, now);
     }
 
     // 🎀 Booster saisonnier : hors saison, stock du jour pas encore arrivé

@@ -164,7 +164,13 @@ const at = (iso) => { NOW = RealDate.parse(iso); };
   await buy('UA');
   check(posted.at(-1).text.includes('acheté') && credits.getBalance('UA') === 135, 'UA achète (200 → 135)');
   check(boosters.stockLeft(rose) === 1, 'stock 1/2');
+  // 🚦 v3.0.3 : clics en rafale (spam) → un seul traité toutes les 3 s par personne
+  const beforeSpam = posted.length;
+  NOW += 4000;   // > 3 s après son achat : le 1er clic de la rafale est traité
+  for (let i = 0; i < 5; i += 1) await buy('UA');
+  check(posted.length - beforeSpam === 1 && credits.getBalance('UA') === 135 && boosters.stockLeft(rose) === 1, 'rafale de 5 clics en 1 s : 1 seule réponse, rien débité en plus');
   // 🙅 1 par personne et par jour : UA ne peut pas prendre le 2e du jour
+  NOW += 5000;
   await buy('UA');
   check(posted.at(-1).text.includes('déjà eu ton Booster') && credits.getBalance('UA') === 135 && boosters.stockLeft(rose) === 1, 'UA refusé pour le 2e du jour : rien débité, stock intact');
   check(boosters.purchaseBlock(rose, Date.now(), 'UA') === 'user_limit' && boosters.purchaseBlock(rose, Date.now(), 'UB') === null, 'limite par personne : UA bloqué, UB libre');
