@@ -22,6 +22,7 @@ const RELEASES = [
     changes: [
       '📺 JP TV : le combat en direct s\'affiche maintenant en entier sur la TV du hall (la moitié de l\'écran était coupée).',
       '🂠 JP TV : sous le nom de chaque joueur, ses cartes restantes s\'affichent face cachée, avec leur nombre. Le public voit ce qu\'il reste à poser, jamais quelles cartes.',
+      '🎀 Booster Octobre Rose : plus de booster le samedi ni le dimanche. À partir du lundi 12 octobre, il y en a 3 par jour (du lundi au vendredi) au prix de 80 JP$.',
     ],
   },
   {

@@ -95,6 +95,12 @@ const BOOSTERS = {
     dailyStock: 2,
     dailyPerUser: 1,   // v2.1.2 : personne ne peut prendre les 2 du jour à lui seul
     seasonal: true,
+    // 📅 v3.0.4 (décision de Paul le 8/10) : plus rien le week-end dès aujourd'hui ;
+    //    à partir du lundi 12/10, 3 par jour à 80 JP$. Jour de Paris, bornes incluses.
+    schedule: [
+      { from: '2026-10-08', weekdaysOnly: true },
+      { from: '2026-10-12', weekdaysOnly: true, price: 80, dailyStock: 3 },
+    ],
     slots: [
       ...commonSlots(3),
       { rare: 40, common: 30, epic: 30 },
@@ -128,14 +134,36 @@ function rollRarity(distribution) {
 // 🃏 Accès au catalogue
 // ─────────────────────────────────────────────
 
-function getBooster(type) {
-  return BOOSTERS[type] || null;
+/**
+ * 📅 Règles du jour d'un booster : sa définition + la dernière étape de son
+ * `schedule` déjà commencée (prix, stock du jour, fermeture le week-end).
+ */
+function effective(booster, now = Date.now()) {
+  if (!booster || !booster.schedule) return booster;
+  const day = octobreRose.parisDay(now);
+  const step = booster.schedule.filter((s) => day >= s.from).pop();
+  if (!step) return booster;
+  const { from, ...rules } = step;
+  return { ...booster, ...rules };
+}
+
+/** Samedi ou dimanche, à l'heure de Paris. */
+function isWeekend(now = Date.now()) {
+  const wd = new Date(`${octobreRose.parisDay(now)}T12:00:00Z`).getUTCDay();
+  return wd === 0 || wd === 6;
+}
+
+function getBooster(type, now = Date.now()) {
+  return BOOSTERS[type] ? effective(BOOSTERS[type], now) : null;
 }
 
 /** Boosters en vente maintenant (le saisonnier n'apparaît qu'en saison). */
 function listBoosters(now = Date.now()) {
-  return BOOSTER_ORDER.map((type) => BOOSTERS[type]).filter((b) => b && isOnSale(b, now));
+  return BOOSTER_ORDER.map((type) => getBooster(type, now)).filter((b) => b && isOnSale(b, now));
 }
+
+/** Règles du jour d'un booster déjà en main (un objet gardé d'un autre jour est remis à jour). */
+const rulesOf = (booster, now) => (booster && BOOSTERS[booster.type] ? effective(BOOSTERS[booster.type], now) : booster);
 
 /** En vente : toujours, sauf le saisonnier (période + cartes Octobre Rose renseignées). */
 function isOnSale(booster, now = Date.now()) {
@@ -148,6 +176,7 @@ function isOnSale(booster, now = Date.now()) {
  * ou null si le booster n'a pas de stock quotidien.
  */
 function stockLeft(booster, now = Date.now()) {
+  booster = rulesOf(booster, now);
   if (!booster.dailyStock) return null;
   const today = octobreRose.parisDay(now);
   const sold = Object.values(loadStore().boosters)
@@ -164,12 +193,14 @@ function boughtToday(booster, userId, now = Date.now()) {
 
 /**
  * Raison pour laquelle on ne peut pas acheter ce booster maintenant
- * ('closed' | 'not_yet' | 'user_limit' | 'sold_out'), ou null. À appeler JUSTE avant
+ * ('closed' | 'weekend' | 'not_yet' | 'user_limit' | 'sold_out'), ou null. À appeler JUSTE avant
  * spend() + createPending(), sans await entre les deux (Node mono-thread).
  * userId : applique aussi la limite par personne (dailyPerUser).
  */
 function purchaseBlock(booster, now = Date.now(), userId = null) {
+  booster = rulesOf(booster, now);
   if (!isOnSale(booster, now)) return 'closed';
+  if (booster.weekdaysOnly && isWeekend(now)) return 'weekend';
   if (booster.dailyStock && !octobreRose.hasDropped(now)) return 'not_yet';
   if (userId && booster.dailyPerUser && boughtToday(booster, userId, now) >= booster.dailyPerUser) return 'user_limit';
   if (stockLeft(booster, now) === 0) return 'sold_out';
@@ -180,11 +211,24 @@ function purchaseBlock(booster, now = Date.now(), userId = null) {
 const DROP_TEXT = `Les boosters du jour arrivent ${octobreRose.DROP_WINDOW.text} (heure de Paris).`;
 const RESTOCK_TEXT = `Ils reviennent demain ${octobreRose.DROP_WINDOW.text} (heure de Paris).`;
 
+/** « demain », ou « lundi » si demain tombe un week-end fermé (booster ouvert en semaine seulement). */
+function nextSaleDay(booster, now = Date.now()) {
+  const b = rulesOf(booster || BOOSTERS.octobre_rose, now);
+  return b && b.weekdaysOnly && isWeekend(now + 24 * 3600 * 1000) ? 'lundi' : 'demain';
+}
+
+/** « Ils reviennent demain (ou lundi) entre 9h et 10h (heure de Paris). » */
+function restockText(now = Date.now(), booster = null) {
+  return `Ils reviennent ${nextSaleDay(booster, now)} ${octobreRose.DROP_WINDOW.text} (heure de Paris).`;
+}
+
 /** Texte du bouton d'achat : « 🎀 Octobre Rose (65) · 1/2 aujourd'hui ». */
 function buttonLabel(booster, now = Date.now()) {
+  booster = rulesOf(booster, now);
+  if (booster.weekdaysOnly && isWeekend(now)) return `${booster.emoji} ${booster.label} (${booster.price}) · retour lundi`;
   const left = stockLeft(booster, now);
   let stock = '';
-  if (left === 0) stock = ' · épuisé, retour demain';
+  if (left === 0) stock = ` · épuisé, retour ${nextSaleDay(booster, now)}`;
   else if (left !== null && !octobreRose.hasDropped(now)) stock = ` · arrive ${octobreRose.DROP_WINDOW.text}`;
   else if (left !== null) stock = ` · ${left}/${booster.dailyStock} aujourd'hui`;
   return `${booster.emoji} ${booster.label} (${booster.price})${stock}`;
@@ -338,6 +382,8 @@ module.exports = {
   purchaseBlock,
   buttonLabel,
   boughtToday,
+  isWeekend,
+  restockText,
   RESTOCK_TEXT,
   DROP_TEXT,
   openBooster,

@@ -127,12 +127,15 @@ function buildHomeView(userId, ctx) {
   const spamLock = seasonal ? boosterSpam.lockedUntil(userId) : 0;
   blocks.push(section(`🎁 *Boosters* — 8 cartes chacun, plus il est cher, plus les cartes rares sont probables.${seasonal
     ? `
-${seasonal.emoji} *Booster ${seasonal.label}* : 1 ou 2 cartes exclusives qu'on ne trouve nulle part ailleurs, et 30 % de chances d'une légendaire. Seulement *${seasonal.dailyStock} par jour pour tout le monde*${seasonal.dailyPerUser ? `, *${seasonal.dailyPerUser} par personne*` : ''} !${seasonal.dailyPerUser && boosters.boughtToday(seasonal, userId) >= seasonal.dailyPerUser
+${seasonal.emoji} *Booster ${seasonal.label}* : 1 ou 2 cartes exclusives qu'on ne trouve nulle part ailleurs, et 30 % de chances d'une légendaire. Seulement *${seasonal.dailyStock} par jour pour tout le monde*${seasonal.weekdaysOnly ? ', *du lundi au vendredi*' : ''}${seasonal.dailyPerUser ? `, *${seasonal.dailyPerUser} par personne*` : ''} !${boosters.purchaseBlock(seasonal) === 'weekend'
       ? `
-✅ *Tu as déjà eu le tien aujourd'hui.* Reviens demain 😉`
+🏖️ *Pas de booster le week-end.* ${boosters.restockText()}`
+      : seasonal.dailyPerUser && boosters.boughtToday(seasonal, userId) >= seasonal.dailyPerUser
+      ? `
+✅ *Tu as déjà eu le tien aujourd'hui.* Reviens ${boosters.restockText().includes('lundi') ? 'lundi' : 'demain'} 😉`
       : boosters.stockLeft(seasonal) === 0
       ? `
-😢 *Épuisé pour aujourd'hui* : les ${seasonal.dailyStock} boosters du jour sont partis. ${boosters.RESTOCK_TEXT}`
+😢 *Épuisé pour aujourd'hui* : les ${seasonal.dailyStock} boosters du jour sont partis. ${boosters.restockText()}`
       : boosters.purchaseBlock(seasonal) === 'not_yet' ? `
 ⏳ ${boosters.DROP_TEXT}` : ''}${spamLock ? `
 🚫 *Bloqué jusqu'à ${spamLockTime(spamLock)}* : tu as cliqué en rafale sur ce booster. Un seul clic suffit 😉` : ''}`
@@ -140,7 +143,7 @@ ${seasonal.emoji} *Booster ${seasonal.label}* : 1 ou 2 cartes exclusives qu'on n
   blocks.push({
     type: 'actions',
     block_id: 'home_boosters',
-    elements: boosters.listBoosters().filter((b) => !(spamLock && b === seasonal)).map((b) => button(
+    elements: boosters.listBoosters().filter((b) => !(spamLock && b.type === seasonal.type)).map((b) => button(
       boosters.buttonLabel(b),
       `buy_booster_${b.type}`,
       { value: b.type, ...(balance >= b.price && !boosters.purchaseBlock(b, Date.now(), userId) ? { style: 'primary' } : {}) },
