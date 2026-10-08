@@ -16,6 +16,16 @@
 
 const RELEASES = [
   {
+    version: '3.0.3',
+    date: '2026-10-08',
+    title: 'Classeur, booster et données',
+    changes: [
+      '📮 Si tu fais un Jeanpip à quelqu\'un qui n\'est pas dans la liste de diffusion (ou qui est en pénalité anti-farm), tu ne reçois plus rien et un petit message, visible de toi seul, te prévient. Résultat : toute image que tu reçois va bien dans ton classeur.',
+      '🎀 Booster Octobre Rose : cliquer plusieurs fois de suite sur « Acheter » ne sert à rien, un seul clic est pris en compte toutes les 3 secondes.',
+      '💾 Tes cartes, tes JP$ et tes decks sont mieux protégés : une coupure du serveur ne peut plus les effacer.',
+    ],
+  },
+  {
     version: '3.0.2',
     date: '2026-10-08',
     title: 'L\'anti-farm se durcit',
