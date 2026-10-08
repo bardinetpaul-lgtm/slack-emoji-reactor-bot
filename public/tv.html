@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=1920, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex, nofollow">
   <title>JP TV · Arène en direct</title>
   <!-- Chemins relatifs : la page est servie sur …/tv/arena (derrière un préfixe de proxy) -->
@@ -12,7 +12,7 @@
   <link rel="stylesheet" href="../tv.css?v=__ASSET_VERSION__">
 </head>
 <body>
-  <main class="tv">
+  <main class="tv" id="stage">
     <header class="tv-top">
       <span class="on-air">🔴 EN DIRECT · JP TV</span>
       <span class="tv-title">⚔️ Arène Jeanpip</span>
@@ -23,6 +23,7 @@
       <aside class="side side-b">
         <span class="who"><i class="dot orange"></i><b id="name-b">Joueur B</b></span>
         <span class="towers" id="towers-b">0 tour détruite</span>
+        <span class="tv-hand" id="hand-b"></span>
       </aside>
       <div class="board-wrap"><svg id="board" role="img" aria-label="Arène en direct"></svg>
         <span class="x2" id="x2" hidden>×2 élixir</span>
@@ -30,6 +31,7 @@
       <aside class="side side-a">
         <span class="who"><i class="dot blue"></i><b id="name-a">Joueur A</b></span>
         <span class="towers" id="towers-a">0 tour détruite</span>
+        <span class="tv-hand" id="hand-a"></span>
       </aside>
     </section>
 

@@ -2,7 +2,9 @@
 :root { --ink: #1A201D; --i7: #2F3733; --cream: #F3EFED; --blue: #1C72F1; --orange: #FF6229; --red: #E5332A; --pink: #FF73C0; }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { width: 100%; height: 100%; overflow: hidden; background: var(--ink); color: var(--cream); font-family: 'Inter Tight', sans-serif; }
-.tv { position: relative; width: 100vw; height: 100vh; display: flex; flex-direction: column; }
+/* 🖥️ v3.0.4 : toile fixe 1920×1080, mise à l'échelle de l'écran par tv.js (comme le dashboard) :
+   le navigateur de la TV a un écran « logique » plus petit (ex. 960×540) et coupait la moitié de la page. */
+.tv { position: absolute; top: 0; left: 0; width: 1920px; height: 1080px; transform-origin: 0 0; display: flex; flex-direction: column; }
 .tv-top { display: flex; align-items: center; gap: 24px; padding: 18px 40px; font-weight: 800; font-size: 28px; }
 .on-air { background: var(--red); color: #fff; border-radius: 999px; padding: 6px 18px; letter-spacing: 1px; }
 .tv-title { flex: 1; }
@@ -17,6 +19,17 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: var(--ink)
 .dot { width: 22px; height: 22px; border-radius: 50%; display: inline-block; }
 .dot.blue { background: var(--blue); } .dot.orange { background: var(--orange); }
 .towers { font-size: 26px; opacity: .8; }
+/* 🂠 v3.0.4 : cartes restantes, face cachée */
+.tv-hand { display: flex; flex-direction: column; gap: 10px; }
+.side-b .tv-hand { align-items: flex-end; }
+.tv-hand .backs { display: flex; }
+.card-back {
+  display: inline-block; width: 44px; height: 60px; border-radius: 7px; border: 3px solid var(--cream);
+  background: repeating-linear-gradient(45deg, var(--pink) 0 6px, var(--i7) 6px 12px);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, .45);
+}
+.card-back + .card-back { margin-left: 6px; }
+.hand-count { font-size: 24px; font-weight: 600; opacity: .8; }
 .x2 { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); background: var(--pink); color: var(--ink); font-weight: 800; border-radius: 999px; padding: 4px 14px; font-size: 22px; }
 .tv-ended, .tv-idle { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; text-align: center; }
 .tv-ended h1, .tv-idle h1 { font-size: 96px; font-weight: 800; }

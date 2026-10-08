@@ -141,6 +141,9 @@ const launch = (a, b) => {
   check('flux : états reçus', await until(() => tv.events.some((e) => e.event === 'state')));
   const st = tv.events.filter((e) => e.event === 'state').pop().data;
   check('flux : ni main ni élixir', ['A', 'B'].every((s) => !st.players[s].hand && (st.players[s].elixir === null || st.players[s].elixir === undefined)));
+  check('flux : nombre de cartes restantes de chaque joueur (v3.0.4)', ['A', 'B'].every((s) => st.players[s].handCount === 8 && st.players[s].next === undefined));
+  const tvPage = await request(`tv/arena?k=${k}`);
+  check('page JP TV : zones « cartes restantes » des deux joueurs', /id="hand-a"/.test(tvPage.body) && /id="hand-b"/.test(tvPage.body));
   check('flux : « Aussi en direct » = 2e combat', await until(() => tv.events.some((e) => e.event === 'also' && e.data.length === 1 && e.data[0].a && e.data[0].b)));
 
   const live = (await request(`api/tv/arena?k=${k}`)).json;

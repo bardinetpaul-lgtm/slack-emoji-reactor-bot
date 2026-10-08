@@ -28,7 +28,7 @@ fs.copyFileSync(path.join(ROOT, 'data', 'media-bank.json'), path.join(TMP, 'data
 
 // ⏰ Horloge simulée (Date.now ET new Date())
 const RealDate = Date;
-let NOW = RealDate.parse('2026-10-10T08:00:00Z');
+let NOW = RealDate.parse('2026-10-08T08:00:00Z');
 global.Date = class extends RealDate {
   constructor(...a) { if (a.length) super(...a); else super(NOW); }
   static now() { return NOW; }
@@ -108,7 +108,7 @@ const at = (iso) => { NOW = RealDate.parse(iso); };
   check(!boosters.listBoosters().some((b) => b.type === 'octobre_rose'), 'plus en vente le 1er novembre');
   check(boosters.purchaseBlock(rose) === 'closed', 'achat hors saison → closed');
   check(boosters.listBoosters().map((b) => b.type).join() === 'common,rare,epic', 'les 3 boosters classiques restent en vente');
-  at('2026-10-10T08:00:00Z');
+  at('2026-10-08T08:00:00Z');
 
   // ── Répartition (tirages en masse, sans rien persister) ──
   const N = 20000;
@@ -152,8 +152,8 @@ const at = (iso) => { NOW = RealDate.parse(iso); };
   check(allAfter !== null && allAfter <= 6, `les 6 cartes roses sont toutes sorties après ${allAfter} boosters`);
   check(!boosters.getBooster('common').slots.some((sl) => sl.rose) && !boosters.getBooster('epic').slots.some((sl) => sl.rose), 'aucune carte rose dans les autres boosters');
 
-  // ── Stock partagé 2/jour (les 40 ci-dessus datent du 10/10) ──
-  at('2026-10-11T21:30:00Z'); // 23h30 Paris le 11/10
+  // ── Stock partagé 2/jour (les 40 ci-dessus datent du jeudi 8/10) ──
+  at('2026-10-09T21:30:00Z'); // 23h30 Paris le vendredi 9/10
   check(boosters.stockLeft(rose) === 2, 'nouveau jour → stock 2/2');
   check(boosters.buttonLabel(rose) === "🎀 Octobre Rose (65) · 2/2 aujourd'hui", `bouton : « ${boosters.buttonLabel(rose)} »`);
 
@@ -171,6 +171,7 @@ const at = (iso) => { NOW = RealDate.parse(iso); };
   const spamDMs = posted.slice(beforeSpam);
   check(spamDMs.length === 2 && credits.getBalance('UA') === 135 && boosters.stockLeft(rose) === 1, `rafale de 5 clics : 1 réponse normale + 1 erreur, rien débité (${spamDMs.length} DM)`);
   check(spamDMs[1] && /bloqué/i.test(spamDMs[1].text) && /2 min/.test(JSON.stringify(spamDMs[1].blocks)) && /5 min/.test(JSON.stringify(spamDMs[1].blocks)), 'DM d\'erreur : bouton bloqué 2 min, prochaine fois 5 min');
+  await new Promise((r) => setTimeout(r, 100));   // l'Accueil est republié en arrière-plan
   check(/Bloqué jusqu'à/.test(JSON.stringify(published.at(-1))) && !JSON.stringify(published.at(-1)).includes('buy_booster_octobre_rose'), 'Accueil : bouton Octobre Rose remplacé par « Bloqué jusqu\'à … »');
   const duringLock = posted.length;
   NOW += 60000;
@@ -184,12 +185,12 @@ const at = (iso) => { NOW = RealDate.parse(iso); };
   check(JSON.stringify(published.at(-1)).includes("déjà eu le tien aujourd'hui"), 'Accueil de UA : « tu as déjà eu le tien aujourd\'hui »');
   await buy('UB');
   check(credits.getBalance('UB') === 135 && boosters.stockLeft(rose) === 0, 'UB achète le dernier');
-  check(boosters.buttonLabel(rose) === '🎀 Octobre Rose (65) · épuisé, retour demain', `bouton : « ${boosters.buttonLabel(rose)} »`);
+  check(boosters.buttonLabel(rose) === '🎀 Octobre Rose (65) · épuisé, retour lundi', `bouton : « ${boosters.buttonLabel(rose)} »`);
   check(JSON.stringify(published.at(-1)).includes("déjà eu le tien aujourd'hui"), 'Accueil de UB (déjà servi) : « tu as déjà eu le tien »');
   const homeUC = JSON.stringify(req('home.js').buildHomeView('UC', { isAdmin: false, attackPrice: 50, creditsPerJeanpipLabel: '0,5', targetEmoji: 'jeanpip', farmRemainingMs: 0, farmQuota: { used: 0, max: 10, nextFreeMs: 0 }, formatRemaining: String }));
-  check(homeUC.includes("Épuisé pour aujourd'hui") && homeUC.includes('reviennent demain entre 9h et 10h') && homeUC.includes('1 par personne'), 'Accueil de UC (pas servi) : « épuisé, ils reviennent demain entre 9h et 10h », règle « 1 par personne » affichée');
+  check(homeUC.includes("Épuisé pour aujourd'hui") && homeUC.includes('reviennent lundi entre 9h et 10h') && homeUC.includes('1 par personne'), 'Accueil de UC (pas servi) : « épuisé, ils reviennent lundi entre 9h et 10h », règle « 1 par personne » affichée');
   await buy('UC');
-  check(posted.at(-1).text.includes("Plus de Booster") && posted.at(-1).text.includes('reviennent demain entre 9h et 10h') && credits.getBalance('UC') === 200, 'UC refusé : stock épuisé, rien débité');
+  check(posted.at(-1).text.includes("Plus de Booster") && posted.at(-1).text.includes('reviennent lundi entre 9h et 10h') && credits.getBalance('UC') === 200, 'UC refusé : stock épuisé, rien débité');
   check(boosters.countPending('UC') === 0, 'UC n\'a pas de booster');
 
   // ⏰ Le lendemain, le stock arrive à une minute aléatoire entre 9h et 10h
@@ -197,15 +198,44 @@ const at = (iso) => { NOW = RealDate.parse(iso); };
   check(drops.every((m) => m >= 540 && m < 600), `heures d'arrivée entre 9h et 10h (${drops.map((m) => `9h${String(m - 540).padStart(2, '0')}`).join(', ')})`);
   check(new Set(drops).size > 1, "l'heure d'arrivée change d'un jour à l'autre");
   const drop12 = RealDate.parse('2026-10-12T07:00:00Z') + (octobreRose.dropMinute('2026-10-12') - 540) * 60000; // 9h Paris = 7h UTC (heure d'été)
+  // 📅 v3.0.4 : à partir du lundi 12/10 → 3 par jour à 80 JP$, rien le samedi ni le dimanche
   NOW = drop12 - 60000;
-  check(boosters.stockLeft(rose) === 2 && boosters.purchaseBlock(rose) === 'not_yet', "1 min avant l'arrivée : stock 2 mais pas encore en vente");
-  check(boosters.buttonLabel(rose) === '🎀 Octobre Rose (65) · arrive entre 9h et 10h', `bouton : « ${boosters.buttonLabel(rose)} »`);
+  check(boosters.stockLeft(rose) === 3 && boosters.purchaseBlock(rose) === 'not_yet', "lundi 12/10, 1 min avant l'arrivée : stock 3 mais pas encore en vente");
+  check(boosters.buttonLabel(rose) === '🎀 Octobre Rose (80) · arrive entre 9h et 10h', `bouton : « ${boosters.buttonLabel(rose)} »`);
+  check(boosters.getBooster('octobre_rose').price === 80 && boosters.getBooster('octobre_rose').dailyStock === 3, 'lundi 12/10 : prix 80, 3 par jour');
   await buy('UC');
   check(posted.at(-1).text.includes('Pas encore') && posted.at(-1).text.includes('entre 9h et 10h') && credits.getBalance('UC') === 200, 'UC refusé avant 9h-10h, rien débité');
   NOW = drop12;
-  check(boosters.purchaseBlock(rose) === null && boosters.buttonLabel(rose).endsWith("2/2 aujourd'hui"), "à l'heure d'arrivée : 2/2 en vente");
+  check(boosters.purchaseBlock(rose) === null && boosters.buttonLabel(rose).endsWith("3/3 aujourd'hui"), "à l'heure d'arrivée : 3/3 en vente");
   await buy('UC');
-  check(credits.getBalance('UC') === 135, 'UC achète le lendemain');
+  check(credits.getBalance('UC') === 120, 'UC achète le lundi à 80 JP$ (200 → 120)');
+
+  // Vendredi 16/10 épuisé → « retour lundi »
+  at('2026-10-16T09:30:00Z');   // 11h30 Paris, stock arrivé
+  for (const u of ['UE', 'UF', 'UG']) {
+    credits.setBalance(u, 200);
+    await buy(u);
+  }
+  check(boosters.stockLeft(rose) === 0 && boosters.buttonLabel(rose) === '🎀 Octobre Rose (80) · épuisé, retour lundi', `vendredi épuisé : « ${boosters.buttonLabel(rose)} »`);
+  check(boosters.restockText() .includes('lundi'), `vendredi : « ${boosters.restockText()} »`);
+
+  // Samedi 17 et dimanche 18/10 : pas de booster
+  at('2026-10-17T09:30:00Z');
+  credits.setBalance('UH', 200);
+  check(boosters.purchaseBlock(rose) === 'weekend' && boosters.buttonLabel(rose) === '🎀 Octobre Rose (80) · retour lundi', `samedi : bloqué (« ${boosters.buttonLabel(rose)} »)`);
+  await buy('UH');
+  check(/week-end/.test(posted.at(-1).text) && credits.getBalance('UH') === 200, 'samedi : achat refusé (week-end), rien débité');
+  at('2026-10-18T09:30:00Z');
+  check(boosters.purchaseBlock(rose) === 'weekend', 'dimanche : bloqué aussi');
+  const homeWE = JSON.stringify(req('home.js').buildHomeView('UH', { isAdmin: false, attackPrice: 50, creditsPerJeanpipLabel: '0,5', targetEmoji: 'jeanpip', farmRemainingMs: 0, farmQuota: { used: 0, max: 10, nextFreeMs: 0 }, formatRemaining: String }));
+  check(homeWE.includes('week-end') && homeWE.includes('3 par jour'), 'Accueil le dimanche : « pas de booster le week-end », 3 par jour annoncé');
+  at('2026-10-19T09:30:00Z');
+  check(boosters.purchaseBlock(rose, Date.now(), 'UH') === null, 'lundi 19/10 : de nouveau en vente');
+  // Week-end coupé DÈS le samedi 10/10 ; prix et stock ne changent que le lundi 12/10
+  const sat10 = RealDate.parse('2026-10-10T09:30:00Z');
+  check(boosters.purchaseBlock(rose, sat10) === 'weekend' && boosters.getBooster('octobre_rose', sat10).price === 65, 'samedi 10/10 : déjà fermé (week-end), prix encore 65');
+  const fri9 = RealDate.parse('2026-10-09T15:00:00Z');
+  check(boosters.getBooster('octobre_rose', fri9).price === 65 && boosters.getBooster('octobre_rose', fri9).dailyStock === 2, 'vendredi 9/10 : encore 65 JP$, 2 par jour');
 
   at('2026-11-01T09:00:00Z');
   credits.setBalance('UD', 200);
@@ -215,7 +245,7 @@ const at = (iso) => { NOW = RealDate.parse(iso); };
 
   // ── Accueil ──
   const home = JSON.stringify(published.at(-1) || {});
-  check(home.includes('Octobre Rose (65)'), 'onglet Accueil : bouton Octobre Rose');
+  check(/Octobre Rose \((65|80)\)/.test(home), 'onglet Accueil : bouton Octobre Rose');
 
   // ── Classeur ──
   const roseCard = octobreRose.ROSE_CARDS[2];

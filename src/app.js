@@ -1117,14 +1117,16 @@ app.action(/^buy_booster_/, async ({ ack, body, action, client, logger }) => {
     //    simultanés ne peuvent pas dépasser le stock.
     const blocked = boosters.purchaseBlock(booster, Date.now(), userId);
     if (blocked) {
-      const why = blocked === 'user_limit'
-        ? `🎀 *Tu as déjà eu ton Booster ${booster.emoji} ${booster.label} aujourd'hui !* C'est ${booster.dailyPerUser} par personne et par jour, pour en laisser aux autres. Reviens demain 😉`
+      const why = blocked === 'weekend'
+        ? `🏖️ *Pas de Booster ${booster.emoji} ${booster.label} le week-end !* ${boosters.restockText()}`
+        : blocked === 'user_limit'
+        ? `🎀 *Tu as déjà eu ton Booster ${booster.emoji} ${booster.label} aujourd'hui !* C'est ${booster.dailyPerUser} par personne et par jour, pour en laisser aux autres. Reviens ${boosters.restockText().includes('lundi') ? 'lundi' : 'demain'} 😉`
         : blocked === 'not_yet'
         ? `⏳ *Pas encore de Booster ${booster.emoji} ${booster.label} aujourd'hui !* ${boosters.DROP_TEXT} Reviens un peu plus tard 😉`
         : blocked === 'sold_out'
         ? `😢 *Plus de Booster ${booster.emoji} ${booster.label} aujourd'hui !* Les ${booster.dailyStock} du jour sont partis.
 
-${boosters.RESTOCK_TEXT} Sois rapide 😉`
+${boosters.restockText()} Sois rapide 😉`
         : `⏳ *Le Booster ${booster.emoji} ${booster.label} n'est plus en vente.*`;
       sendDM(client, userId, { text: why, blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `${why}
 
