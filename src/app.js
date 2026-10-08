@@ -21,6 +21,7 @@ const home = require('./home');
 const { createAdminActions, formatCredits, AUTHOR_REWARDS } = require('./admin');
 const settings = require('./settings');
 const farm = require('./farm');
+const boosterSpam = require('./boosterSpam');
 const weeklyGift = require('./weeklyGift');
 const { SPAM_CARDS } = require('./spamCards');
 const looks = require('./game/looks');
@@ -1069,8 +1070,9 @@ app.command('/jeanpip-booster', async ({ command, ack, client, logger }) => {
 // 🛒 Action : clic sur un bouton d'achat de booster
 //    action_id = buy_booster_<type> · value = <type>
 // ─────────────────────────────────────────────
-const STOCK_BOOSTER_CLICK_MS = 3000;
-const lastStockBoosterClick = new Map();   // `${userId}:${type}` → dernier clic traité (ms)
+const parisClock = new Intl.DateTimeFormat('fr-FR', { timeZone: 'Europe/Paris', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+/** Heure de Paris « 9h42 ». */
+const parisTime = (ms) => parisClock.format(new Date(ms)).replace(':', 'h');
 
 app.action(/^buy_booster_/, async ({ ack, body, action, client, logger }) => {
   await ack();
@@ -1085,16 +1087,28 @@ app.action(/^buy_booster_/, async ({ ack, body, action, client, logger }) => {
       return;
     }
 
-    // 🚦 v3.0.3 : booster à stock du jour (Octobre Rose) → un clic traité toutes les 3 s
-    //    par personne ; les clics en rafale sont ignorés (ni DM, ni lecture du stock).
+    // 🚦 v3.0.3 : booster à stock du jour (Octobre Rose) → anti-spam (src/boosterSpam.js) :
+    //    un clic traité toutes les 3 s ; une rafale bloque le bouton 2 min, puis 5, 10…
     if (booster.dailyStock) {
-      const key = `${userId}:${type}`;
-      const now = Date.now();
-      if (now - (lastStockBoosterClick.get(key) || -Infinity) < STOCK_BOOSTER_CLICK_MS) {
-        logger.info(`🚦 Clic booster ${type} ignoré (rafale) : <@${userId}>`);
+      const verdict = boosterSpam.click(userId, Date.now());
+      if (verdict.action === 'ignore') {
+        logger.info(`🚦 Clic booster ${type} ignoré (${verdict.reason}) : <@${userId}>`);
         return;
       }
-      lastStockBoosterClick.set(key, now);
+      if (verdict.action === 'lock') {
+        const until = parisTime(verdict.until);
+        const text = `🚫 Clics en rafale sur le Booster ${booster.label} : ton bouton est bloqué ${verdict.minutes} min.`;
+        logger.warn(`🚦 SPAM booster ${type} : <@${userId}> bloqué ${verdict.minutes} min (jusqu'à ${until})`);
+        sendDM(client, userId, {
+          text,
+          blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `🚫 *Doucement !* Tu as cliqué en rafale sur le Booster ${booster.emoji} ${booster.label}.\n\nTon bouton est *bloqué ${verdict.minutes} min*, jusqu'à *${until}*. Si tu recommences, ce sera *${verdict.nextMinutes} min*, et ainsi de suite.\n\n_Un seul clic suffit : le premier arrivé est servi. Aucun JP$ n'a été débité._` } }],
+        }).catch((e) => logger.error('❌ DM anti-spam booster :', e.message));
+        refreshHomeIfSeen(client, userId, logger);
+        // ⏰ À la fin du blocage, l'Accueil réaffiche le bouton
+        const timer = setTimeout(() => refreshHomeIfSeen(client, userId, logger), verdict.until - Date.now() + 1000);
+        if (typeof timer.unref === 'function') timer.unref();
+        return;
+      }
     }
 
     // 🎀 Booster saisonnier : hors saison, stock du jour pas encore arrivé
