@@ -4,7 +4,7 @@
 //  certains cliquent en rafale pour l'avoir. Règles (v3.0.3) :
 //    • un clic traité toutes les 3 s par personne (un double-clic
 //      accidentel est simplement ignoré, sans sanction) ;
-//    • 3 clics ou plus en moins de 5 s = spam → bouton bloqué
+//    • plus de 4 clics (5) en moins de 5 s = spam → bouton bloqué
 //      2 min, puis 5, 10, 20, 30 et 60 min à chaque récidive ;
 //    • pendant le blocage, les clics sont ignorés (ils ne comptent pas) ;
 //    • le compteur de récidives repart à zéro chaque jour (Paris).
@@ -15,7 +15,7 @@
 const { parisDay } = require('./octobreRose');
 
 const COOLDOWN_MS = 3000;                   // un clic traité toutes les 3 s
-const BURST = { clicks: 3, windowMs: 5000 }; // 3 clics en moins de 5 s = spam
+const BURST = { clicks: 5, windowMs: 5000 }; // plus de 4 clics en moins de 5 s = spam
 const LADDER_MIN = [2, 5, 10, 20, 30, 60];   // durée du blocage (min) par récidive
 
 const states = new Map();   // userId → { day, level, until, clicks: [ms], lastProcessed }

@@ -21,7 +21,7 @@ const RELEASES = [
     title: 'Classeur, booster et données',
     changes: [
       '📮 Si tu fais un Jeanpip à quelqu\'un qui n\'est pas dans la liste de diffusion (ou qui est en pénalité anti-farm), tu ne reçois plus rien et un petit message, visible de toi seul, te prévient. Résultat : toute image que tu reçois va bien dans ton classeur.',
-      '🎀 Booster Octobre Rose : un seul clic suffit ! Si tu cliques en rafale sur « Acheter » (3 clics en moins de 5 s), tu reçois un avertissement et ton bouton est bloqué 2 min, puis 5, 10, 20, 30 et 60 min si tu recommences. Le compteur repart à zéro chaque jour.',
+      '🎀 Booster Octobre Rose : un seul clic suffit ! Si tu cliques en rafale sur « Acheter » (plus de 4 clics en moins de 5 s), tu reçois un avertissement et ton bouton est bloqué 2 min, puis 5, 10, 20, 30 et 60 min si tu recommences. Le compteur repart à zéro chaque jour.',
       '💾 Tes cartes, tes JP$ et tes decks sont mieux protégés : une coupure du serveur ne peut plus les effacer.',
     ],
   },
