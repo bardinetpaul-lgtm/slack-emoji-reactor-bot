@@ -183,7 +183,7 @@ function scheduleFarmRelease(client, userId, logger, delayMs = farm.FARM_PENALTY
             type: 'section',
             text: {
               type: 'mrkdwn',
-              text: `✅ *Ton accès au Jeanpip est rétabli !* :${TARGET_EMOJI}:\n\nTa pénalité anti-farm est terminée. Tu peux de nouveau :\n• 📤 Envoyer des Jeanpips aux autres\n• 💰 Gagner des JP$\n\n_Reste sous ${farmMaxPerHour()} Jeanpips par heure pour éviter un nouveau bridage._ 😉`,
+              text: `✅ *Ton accès au Jeanpip est rétabli !* :${TARGET_EMOJI}:\n\nTa pénalité anti-farm est terminée. Tu peux de nouveau :\n• 📤 Envoyer des Jeanpips aux autres\n• 📥 Recevoir des images\n• 💰 Gagner des JP$\n\n_Reste sous ${farmMaxPerHour()} Jeanpips par heure pour éviter un nouveau bridage._ 😉`,
             },
           },
         ],
@@ -221,10 +221,16 @@ async function safeSendDM(client, userId, message, logger) {
 /**
  * Envoie un Jeanpip (média) en DM ET l'ajoute à la collection du
  * destinataire, avec la phrase Nouvelle / Doublon / Triplon… dans l'en-tête.
- *   • collect = false → envoi simple, sans collection (ex. anti-farm)
+ *   • collect = false → envoi simple, sans collection (Jeanpip qui ne compte pas)
  * La carte n'est ajoutée que si le DM est vraiment parti.
+ * 🚜 v3.0.2 : sous pénalité anti-farm, le destinataire ne reçoit AUCUNE image
+ *    (ni la sienne, ni celles des autres, ni auto-réaction, ni attaque) → false.
  */
 async function sendJeanpipDM(client, userId, { text, headerText, media, collect = true }, logger) {
+  if (getFarmPenaltyRemaining(userId) > 0) {
+    logger.info(`🚜 <@${userId}> sous pénalité anti-farm → aucune image envoyée`);
+    return false;
+  }
   const nextCount = collect && media && media.url ? collections.getCount(userId, media.url) + 1 : 0;
   const ok = await safeSendDM(client, userId, {
     text,
@@ -453,8 +459,12 @@ app.event('reaction_added', async ({ event, client, logger }) => {
     //    s'est inscrit via /jeanpip. Sinon le Jeanpip n'atteint personne → il ne
     //    compte pas (ni crédit, ni score, ni compteur anti-farm).
     //    Le réacteur reçoit quand même SON image.
-    const delivers = broadcast.isSubscribed(originalAuthorId);
-    if (!delivers) {
+    //    🚜 v3.0.2 : un auteur sous pénalité anti-farm ne reçoit rien non plus → même règle.
+    const authorPenalized = Boolean(originalAuthorId) && getFarmPenaltyRemaining(originalAuthorId) > 0;
+    const delivers = broadcast.isSubscribed(originalAuthorId) && !authorPenalized;
+    if (authorPenalized) {
+      logger.info(`🚜 <@${originalAuthorId}> est sous pénalité anti-farm → rien ne lui est envoyé, aucun JP$ pour <@${reactingUserId}>`);
+    } else if (!delivers) {
       logger.info(`📮 <@${originalAuthorId}> n'est pas dans la liste de diffusion → rien ne lui est envoyé, aucun JP$ pour <@${reactingUserId}>`);
     }
 
@@ -474,7 +484,7 @@ app.event('reaction_added', async ({ event, client, logger }) => {
             type: 'section',
             text: {
               type: 'mrkdwn',
-              text: `🚜 *ALERTE ANTI-FARM !* :${TARGET_EMOJI}:\n\nTu as posé *plus de ${farmMaxPerHour()} Jeanpips en moins d'une heure*.\n\n*Pendant 1 heure :*\n• ❌ Tes Jeanpips n'envoient plus rien aux autres\n• ❌ Tu n'accumules plus de JP$\n• ✅ Tu continues à *recevoir* des Jeanpips\n• ✅ Tu peux toujours *ouvrir tes boosters*\n\n_Lève le pied, ça revient tout seul dans 1 h._ 😉`,
+              text: `🚜 *ALERTE ANTI-FARM !* :${TARGET_EMOJI}:\n\nTu as posé *plus de ${farmMaxPerHour()} Jeanpips en moins d'une heure*.\n\n*Pendant 1 heure :*\n• ❌ Tes Jeanpips n'envoient plus rien aux autres\n• ❌ Tu ne reçois plus *aucune image* (ni la tienne, ni celles des autres)\n• ❌ Tu n'accumules plus de JP$\n• ✅ Tu peux toujours *ouvrir tes boosters*\n\n_Lève le pied, ça revient tout seul dans 1 h._ 😉`,
             },
           },
         ],
@@ -546,7 +556,7 @@ app.event('reaction_added', async ({ event, client, logger }) => {
     //    et si le réacteur n'est pas sous pénalité anti-farm.
     //    (Le réacteur a quand même reçu SON image juste au-dessus.)
     if (!delivers) {
-      logger.info(`📮 Aucun envoi à <@${originalAuthorId}> : pas dans la liste de diffusion`);
+      logger.info(`📮 Aucun envoi à <@${originalAuthorId}> : ${authorPenalized ? 'sous pénalité anti-farm' : 'pas dans la liste de diffusion'}`);
     } else if (farmBlocked) {
       logger.info(`🚜 Envoi à l'auteur bloqué (anti-farm) pour <@${reactingUserId}>`);
     } else if (originalAuthorId && originalAuthorId !== reactingUserId) {
@@ -1898,7 +1908,7 @@ app.command('/jeanpip-help', async ({ command, ack, client, logger }) => {
           type: 'section',
           text: {
             type: 'mrkdwn',
-            text: `🚜 *Anti-farm*\nSi tu poses *plus de ${farmMaxPerHour()} Jeanpips en 1 heure*, tu prends une alerte et pendant *1 heure* :\n• ❌ Tes Jeanpips n'envoient plus rien aux autres\n• ❌ Tu n'accumules plus de JP$\n• ✅ Tu continues à *recevoir* des Jeanpips\n• ✅ Tu peux toujours *ouvrir tes boosters*\n\n_Le Jeanpip se déguste, il ne se farme pas._`,
+            text: `🚜 *Anti-farm*\nSi tu poses *plus de ${farmMaxPerHour()} Jeanpips en 1 heure*, tu prends une alerte et pendant *1 heure* :\n• ❌ Tes Jeanpips n'envoient plus rien aux autres\n• ❌ Tu ne reçois plus *aucune image* (ni la tienne, ni celles des autres)\n• ❌ Tu n'accumules plus de JP$\n• ✅ Tu peux toujours *ouvrir tes boosters*\n\n_Le Jeanpip se déguste, il ne se farme pas._`,
           },
         },
         { type: 'divider' },

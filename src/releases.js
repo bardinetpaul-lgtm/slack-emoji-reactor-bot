@@ -16,6 +16,15 @@
 
 const RELEASES = [
   {
+    version: '3.0.2',
+    date: '2026-10-08',
+    title: 'L\'anti-farm se durcit',
+    changes: [
+      '🚜 Anti-farm : pendant l\'heure de pénalité, tu ne reçois plus aucune image, ni la tienne quand tu réagis, ni celles des autres (Jeanpips, Attaques). Tes Jeanpips n\'envoient toujours rien et ne rapportent pas de JP$. Tu peux toujours ouvrir tes boosters.',
+      '🚜 Réagir au message d\'une personne sous pénalité ne rapporte rien : elle ne reçoit pas ton Jeanpip (tu reçois quand même ton image).',
+    ],
+  },
+  {
     version: '3.0.1',
     date: '2026-10-07',
     title: 'Le compteur sur ton deck',
