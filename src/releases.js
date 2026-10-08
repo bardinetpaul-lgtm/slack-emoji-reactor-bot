@@ -16,6 +16,14 @@
 
 const RELEASES = [
   {
+    version: '3.0.4',
+    date: '2026-10-08',
+    title: 'JP TV en plein écran',
+    changes: [
+      '📺 JP TV : le combat en direct s\'affiche maintenant en entier sur la TV du hall (la moitié de l\'écran était coupée).',
+    ],
+  },
+  {
     version: '3.0.3',
     date: '2026-10-08',
     title: 'Classeur, booster et données',

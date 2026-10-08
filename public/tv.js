@@ -12,6 +12,19 @@
   'use strict';
 
   const $ = (id) => document.getElementById(id);
+
+  // 🖥️ v3.0.4 : la page est dessinée en 1920×1080 puis mise à l'échelle de l'écran,
+  //    centrée, sans rien couper (le navigateur de la TV a un écran logique plus petit).
+  const STAGE = { w: 1920, h: 1080 };
+  function fitStage() {
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const s = Math.min(vw / STAGE.w, vh / STAGE.h);
+    $('stage').style.transform = `translate(${(vw - STAGE.w * s) / 2}px, ${(vh - STAGE.h * s) / 2}px) scale(${s})`;
+  }
+  fitStage();
+  window.addEventListener('resize', fitStage);
+
   const k = new URLSearchParams(location.search).get('k') || '';
   const decoder = ArenaWire.createDecoder();
   const ALERT_MS = 4000;
