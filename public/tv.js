@@ -42,6 +42,26 @@
     return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
   }
   const towersText = (n) => `${n} tour${n > 1 ? 's' : ''} détruite${n > 1 ? 's' : ''}`;
+
+  // 🂠 v3.0.4 : cartes restantes de chaque joueur, face cachée (le nombre seulement, jamais les cartes)
+  const handShown = { a: null, b: null };
+  function renderHand(slot, n) {
+    if (typeof n !== 'number' || handShown[slot] === n) return;
+    handShown[slot] = n;
+    const box = $(`hand-${slot}`);
+    const backs = document.createElement('span');
+    backs.className = 'backs';
+    for (let i = 0; i < n; i += 1) {
+      const b = document.createElement('i');
+      b.className = 'card-back';
+      backs.append(b);
+    }
+    const label = document.createElement('span');
+    label.className = 'hand-count';
+    label.textContent = n ? `${n} carte${n > 1 ? 's' : ''} restante${n > 1 ? 's' : ''}` : 'plus aucune carte';
+    box.replaceChildren(backs, label);
+  }
+
   function stopRenderer() {
     if (renderer) renderer.stop();
     renderer = null;
@@ -74,6 +94,10 @@
     $('name-b').textContent = names.B;
     $('towers-a').textContent = towersText(0);
     $('towers-b').textContent = towersText(0);
+    handShown.a = null;
+    handShown.b = null;
+    $('hand-a').replaceChildren();
+    $('hand-b').replaceChildren();
     $('x2').hidden = true;
     stopRenderer();
     renderer = ArenaBoard.createRenderer($('board'), { arena: s.arena, symbols: s.symbols, sprites: s.sprites, step: 200 });
@@ -91,6 +115,8 @@
     $('clock').textContent = clock(v.remainingMs);
     $('towers-a').textContent = towersText(v.players.A.towersDestroyed);
     $('towers-b').textContent = towersText(v.players.B.towersDestroyed);
+    renderHand('a', v.players.A.handCount);
+    renderHand('b', v.players.B.handCount);
     $('x2').hidden = !v.doubleElixir;
   });
 

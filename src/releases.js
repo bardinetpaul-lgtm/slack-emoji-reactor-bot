@@ -21,6 +21,7 @@ const RELEASES = [
     title: 'JP TV en plein écran',
     changes: [
       '📺 JP TV : le combat en direct s\'affiche maintenant en entier sur la TV du hall (la moitié de l\'écran était coupée).',
+      '🂠 JP TV : sous le nom de chaque joueur, ses cartes restantes s\'affichent face cachée, avec leur nombre. Le public voit ce qu\'il reste à poser, jamais quelles cartes.',
     ],
   },
   {

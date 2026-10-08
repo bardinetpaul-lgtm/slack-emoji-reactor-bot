@@ -19,6 +19,17 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: var(--ink)
 .dot { width: 22px; height: 22px; border-radius: 50%; display: inline-block; }
 .dot.blue { background: var(--blue); } .dot.orange { background: var(--orange); }
 .towers { font-size: 26px; opacity: .8; }
+/* 🂠 v3.0.4 : cartes restantes, face cachée */
+.tv-hand { display: flex; flex-direction: column; gap: 10px; }
+.side-b .tv-hand { align-items: flex-end; }
+.tv-hand .backs { display: flex; }
+.card-back {
+  display: inline-block; width: 44px; height: 60px; border-radius: 7px; border: 3px solid var(--cream);
+  background: repeating-linear-gradient(45deg, var(--pink) 0 6px, var(--i7) 6px 12px);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, .45);
+}
+.card-back + .card-back { margin-left: 6px; }
+.hand-count { font-size: 24px; font-weight: 600; opacity: .8; }
 .x2 { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); background: var(--pink); color: var(--ink); font-weight: 800; border-radius: 999px; padding: 4px 14px; font-size: 22px; }
 .tv-ended, .tv-idle { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; text-align: center; }
 .tv-ended h1, .tv-idle h1 { font-size: 96px; font-weight: 800; }
