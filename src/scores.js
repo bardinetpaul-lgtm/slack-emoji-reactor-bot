@@ -25,7 +25,12 @@ function loadScores() {
 }
 
 function saveScores(data) {
-  writeJsonAtomic(SCORES_PATH, data);
+  // erreur loggée, jamais levée : checkAndReset tourne dans un setInterval
+  try {
+    writeJsonAtomic(SCORES_PATH, data);
+  } catch (e) {
+    console.error('[scores] écriture:', e.message);
+  }
 }
 
 // ─────────────────────────────────────────────

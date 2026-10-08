@@ -76,6 +76,88 @@ check('corrompu : erreur loggée avec le fichier et la copie', logged.some((l) =
 check('nom de copie sans « : » (compatible Windows)', backups.length === 1 && !backups[0].includes(':'));
 
 // ─────────────────────────────────────────────
+// 2 bis. Chemins dangereux (fs simulé en panne)
+// ─────────────────────────────────────────────
+
+/** Remplace fs[name] le temps de fn (le module storage partage le même fs). */
+function withStub(name, impl, fn) {
+  const original = fs[name];
+  fs[name] = (...args) => impl(original, ...args);
+  try {
+    return fn();
+  } finally {
+    fs[name] = original;
+  }
+}
+const fsError = (code) => Object.assign(new Error(`${code}: simulé`), { code });
+
+// (a) rename en échec → cible intacte, pas de .tmp
+const SAFE = path.join(DATA, 'sur.json');
+writeJsonAtomic(SAFE, { garde: true });
+const safeBefore = fs.readFileSync(SAFE);
+let threw = false;
+withStub('renameSync', () => { throw fsError('EXDEV'); }, () => {
+  try { writeJsonAtomic(SAFE, { garde: false }); } catch { threw = true; }
+});
+check('rename en échec : erreur remontée', threw);
+check('rename en échec : cible intacte (octets identiques)', fs.readFileSync(SAFE).equals(safeBefore));
+check('rename en échec : aucun .tmp restant', leftovers(DATA, 'sur.json', '.tmp-').length === 0);
+
+// (b) EPERM deux fois puis succès (Windows)
+let calls = 0;
+withStub('renameSync', (orig, ...args) => {
+  calls += 1;
+  if (calls <= 2) throw fsError('EPERM');
+  return orig(...args);
+}, () => writeJsonAtomic(SAFE, { essai: 3 }));
+check('EPERM ×2 puis succès : écriture faite', readJson(SAFE, null).essai === 3 && calls === 3);
+check('EPERM ×2 puis succès : aucun .tmp restant', leftovers(DATA, 'sur.json', '.tmp-').length === 0);
+
+// (c) lecture impossible (EACCES) → fichier laissé, défaut, écriture REFUSÉE
+const LOCKED = path.join(DATA, 'verrou.json');
+writeJsonAtomic(LOCKED, { users: { U1: 1, U2: 2 } });
+const lockedBefore = fs.readFileSync(LOCKED);
+const denied = captureErrors(() => withStub('readFileSync', (orig, file, ...rest) => {
+  if (path.resolve(String(file)) === path.resolve(LOCKED)) throw fsError('EACCES');
+  return orig(file, ...rest);
+}, () => readJson(LOCKED, { users: {} })));
+check('EACCES : valeur par défaut renvoyée', Object.keys(denied.result.users).length === 0);
+check('EACCES : fichier laissé en place, sans copie', fs.existsSync(LOCKED) && leftovers(DATA, 'verrou.json', '.corrupt-').length === 0);
+check('EACCES : erreur loggée', denied.logged.some((l) => l.includes(LOCKED) && l.includes('BLOQUÉE')));
+let refused = null;
+try { writeJsonAtomic(LOCKED, { users: {} }); } catch (e) { refused = e; }
+check('EACCES : l\'écriture suivante est REFUSÉE', refused && /refus d'écrire/.test(refused.message));
+check('EACCES : cible intacte', fs.readFileSync(LOCKED).equals(lockedBefore));
+check('lecture réussie ensuite → contenu', readJson(LOCKED, null).users.U2 === 2);
+writeJsonAtomic(LOCKED, { users: { U1: 1, U2: 2, U3: 3 } });
+check('… et les écritures repartent', readJson(LOCKED, null).users.U3 === 3);
+
+// (d) mise de côté par rename impossible → copie
+const STUCK = path.join(DATA, 'coince.json');
+fs.writeFileSync(STUCK, badBytes);
+const copied = captureErrors(() => withStub('renameSync', () => { throw fsError('EPERM'); }, () => readJson(STUCK, { users: {} })));
+const stuckBackups = leftovers(DATA, 'coince.json', '.corrupt-');
+check('rename de côté impossible : copie *.corrupt-* créée', stuckBackups.length === 1);
+check('… avec les octets d\'origine', stuckBackups.length === 1 && fs.readFileSync(path.join(DATA, stuckBackups[0]), 'utf-8') === badBytes);
+check('… erreur loggée avec la copie', copied.logged.some((l) => l.includes(stuckBackups[0] || '§')));
+writeJsonAtomic(STUCK, { users: {} });
+check('… copie faite → écriture permise', readJson(STUCK, null) !== null);
+
+// (d bis) ni rename ni copie possibles → écriture bloquée
+const STUCK2 = path.join(DATA, 'coince2.json');
+fs.writeFileSync(STUCK2, badBytes);
+captureErrors(() => withStub('renameSync', () => { throw fsError('EPERM'); },
+  () => withStub('copyFileSync', () => { throw fsError('ENOSPC'); }, () => readJson(STUCK2, {}))));
+let refused2 = null;
+try { writeJsonAtomic(STUCK2, {}); } catch (e) { refused2 = e; }
+check('ni rename ni copie : écriture REFUSÉE, octets d\'origine gardés', refused2 && fs.readFileSync(STUCK2, 'utf-8') === badBytes);
+
+// BOM UTF-8 de tête (fichier édité à la main sous Windows)
+const BOM = path.join(DATA, 'bom.json');
+fs.writeFileSync(BOM, '﻿{"ok":true}', 'utf-8');
+check('BOM UTF-8 ignoré à la lecture', readJson(BOM, null)?.ok === true && leftovers(DATA, 'bom.json', '.corrupt-').length === 0);
+
+// ─────────────────────────────────────────────
 // 3. Bout en bout sur un vrai module : collections
 // ─────────────────────────────────────────────
 const COLLECTIONS_MODULE = path.join(TMP, 'src', 'collections.js');
