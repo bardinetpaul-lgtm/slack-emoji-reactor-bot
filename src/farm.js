@@ -8,8 +8,8 @@
 //    { history: { U123: [timestamps ms] }, penalties: { U123: fin_ms } }
 // ═══════════════════════════════════════════════════════════
 
-const fs = require('fs');
 const path = require('path');
+const { readJson, writeJsonAtomic } = require('./storage');
 
 const FARM_PATH = path.join(__dirname, '..', 'data', 'farm.json');
 const FARM_WINDOW_MS = 60 * 60 * 1000;   // fenêtre glissante : 1 heure
@@ -21,8 +21,7 @@ const FARM_PENALTY_MS = 60 * 60 * 1000;  // durée de la pénalité : 1 heure
 
 function load() {
   try {
-    if (!fs.existsSync(FARM_PATH)) return { history: {}, penalties: {} };
-    const data = JSON.parse(fs.readFileSync(FARM_PATH, 'utf-8'));
+    const data = readJson(FARM_PATH, null);
     return {
       history: data && typeof data.history === 'object' ? data.history : {},
       penalties: data && typeof data.penalties === 'object' ? data.penalties : {},
@@ -34,7 +33,7 @@ function load() {
 
 function save(data) {
   try {
-    fs.writeFileSync(FARM_PATH, JSON.stringify(data, null, 2), 'utf-8');
+    writeJsonAtomic(FARM_PATH, data);
   } catch (e) {
     console.error('[farm] écriture:', e.message);
   }

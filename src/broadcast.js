@@ -14,8 +14,8 @@
 //    { users: ["U123", "U456"] }
 // ═══════════════════════════════════════════════════════════
 
-const fs = require('fs');
 const path = require('path');
+const { readJson, writeJsonAtomic } = require('./storage');
 
 const SUBSCRIBERS_PATH = path.join(__dirname, '..', 'data', 'subscribers.json');
 
@@ -25,8 +25,7 @@ const SUBSCRIBERS_PATH = path.join(__dirname, '..', 'data', 'subscribers.json');
 
 function load() {
   try {
-    if (!fs.existsSync(SUBSCRIBERS_PATH)) return { users: [] };
-    const data = JSON.parse(fs.readFileSync(SUBSCRIBERS_PATH, 'utf-8'));
+    const data = readJson(SUBSCRIBERS_PATH, { users: [] });
     return Array.isArray(data.users) ? data : { users: [] };
   } catch {
     return { users: [] };
@@ -35,7 +34,7 @@ function load() {
 
 function save(data) {
   try {
-    fs.writeFileSync(SUBSCRIBERS_PATH, JSON.stringify(data, null, 2), 'utf-8');
+    writeJsonAtomic(SUBSCRIBERS_PATH, data);
   } catch (e) {
     console.error('[broadcast] écriture:', e.message);
   }

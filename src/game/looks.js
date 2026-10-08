@@ -25,6 +25,7 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const { readJson, writeJsonAtomic } = require('../storage');
 
 const LOOKS_PATH = path.join(__dirname, '..', '..', 'data', 'card-looks.json');
 const TRAITS = require('./card-traits.json');
@@ -53,7 +54,7 @@ let cache = null;
 function load() {
   if (cache) return cache;
   try {
-    cache = fs.existsSync(LOOKS_PATH) ? JSON.parse(fs.readFileSync(LOOKS_PATH, 'utf-8')) || {} : {};
+    cache = readJson(LOOKS_PATH, {}) || {}; // abîmé → mis de côté (.corrupt-*), jamais écrasé
   } catch (e) {
     console.error('[looks] card-looks.json illisible:', e.message);
     cache = {};
@@ -62,10 +63,7 @@ function load() {
 }
 
 function save(data) {
-  fs.mkdirSync(path.dirname(LOOKS_PATH), { recursive: true });
-  const tmp = `${LOOKS_PATH}.tmp`;
-  fs.writeFileSync(tmp, JSON.stringify(data, null, 1));
-  fs.renameSync(tmp, LOOKS_PATH);
+  writeJsonAtomic(LOOKS_PATH, data, 1);
   cache = data;
 }
 

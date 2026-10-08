@@ -21,6 +21,7 @@ const home = require('./home');
 const { createAdminActions, formatCredits, AUTHOR_REWARDS } = require('./admin');
 const settings = require('./settings');
 const farm = require('./farm');
+const boosterSpam = require('./boosterSpam');
 const weeklyGift = require('./weeklyGift');
 const { SPAM_CARDS } = require('./spamCards');
 const looks = require('./game/looks');
@@ -205,6 +206,19 @@ async function isBot(client, userId) {
     return userInfo.user.is_bot || false;
   } catch {
     return false;
+  }
+}
+
+/**
+ * 🔕 Prévient le réacteur, en message éphémère dans le canal (visible de lui seul) ;
+ * repli en DM si l'éphémère est impossible.
+ */
+async function notifyReactor(client, channelId, userId, text, logger) {
+  try {
+    await client.chat.postEphemeral({ channel: channelId, user: userId, text });
+  } catch (error) {
+    logger.warn(`ℹ️  Éphémère impossible (${error.data ? error.data.error : error.message}) → DM à <@${userId}>`);
+    await safeSendDM(client, userId, { text }, logger).catch((e) => logger.error('❌ DM de notification :', e.message));
   }
 }
 
@@ -458,23 +472,27 @@ app.event('reaction_added', async ({ event, client, logger }) => {
     // 📮 Liste de diffusion (OPT-IN) : l'auteur ne reçoit un Jeanpip que s'il
     //    s'est inscrit via /jeanpip. Sinon le Jeanpip n'atteint personne → il ne
     //    compte pas (ni crédit, ni score, ni compteur anti-farm).
-    //    Le réacteur reçoit quand même SON image.
     //    🚜 v3.0.2 : un auteur sous pénalité anti-farm ne reçoit rien non plus → même règle.
+    //    🔕 v3.0.3 : dans ces deux cas le réacteur ne reçoit RIEN non plus (avant : une
+    //    image qui n'entrait pas au classeur) ; il est prévenu, en éphémère dans le canal.
     const authorPenalized = Boolean(originalAuthorId) && getFarmPenaltyRemaining(originalAuthorId) > 0;
     const delivers = broadcast.isSubscribed(originalAuthorId) && !authorPenalized;
-    if (authorPenalized) {
-      logger.info(`🚜 <@${originalAuthorId}> est sous pénalité anti-farm → rien ne lui est envoyé, aucun JP$ pour <@${reactingUserId}>`);
-    } else if (!delivers) {
-      logger.info(`📮 <@${originalAuthorId}> n'est pas dans la liste de diffusion → rien ne lui est envoyé, aucun JP$ pour <@${reactingUserId}>`);
+    if (!delivers) {
+      const why = authorPenalized
+        ? `🚜 <@${originalAuthorId}> est en pénalité anti-farm (encore ${formatRemaining(getFarmPenaltyRemaining(originalAuthorId))}) : cette personne ne peut rien recevoir pour le moment. Ton Jeanpip n'est pas envoyé et tu ne reçois rien.`
+        : `📮 <@${originalAuthorId}> n'est pas dans la liste de diffusion Jeanpip : ton Jeanpip ne lui est pas envoyé et tu ne reçois rien. Cette personne peut s'inscrire avec \`/jeanpip\`.`;
+      logger.info(`${authorPenalized ? '🚜' : '📮'} <@${originalAuthorId}> ne reçoit pas de Jeanpip (${authorPenalized ? 'pénalité anti-farm' : 'hors liste de diffusion'}) → rien pour <@${reactingUserId}>, prévenu`);
+      await notifyReactor(client, channelId, reactingUserId, why, logger);
+      return;
     }
 
     // ✅ Bot présent + message d'autrui + destinataire inscrit → le Jeanpip compte.
 
     // 🚜 Anti-farm : plus de N Jeanpips en 1 h (réglable) → pénalité de 1 h.
     //    On ne compte que les Jeanpips réellement délivrés.
-    let farmBlocked = delivers && getFarmPenaltyRemaining(reactingUserId) > 0;
+    let farmBlocked = getFarmPenaltyRemaining(reactingUserId) > 0;
 
-    if (delivers && !farmBlocked && recordJeanpipForFarm(reactingUserId)) {
+    if (!farmBlocked && recordJeanpipForFarm(reactingUserId)) {
       farmBlocked = true;
       logger.warn(`🚜 ANTI-FARM : <@${reactingUserId}> dépasse ${farmMaxPerHour()} Jeanpips/h → pénalité 1 h`);
       await safeSendDM(client, reactingUserId, {
@@ -500,10 +518,9 @@ app.event('reaction_added', async ({ event, client, logger }) => {
       logger.info(`🚜 <@${reactingUserId}> sous pénalité anti-farm (${formatRemaining(remaining)} restantes) → ni JP$ ni envoi aux autres`);
     }
 
-    // 📊 Score / crédits : uniquement si le Jeanpip est réellement délivré
-    //    (destinataire inscrit) et hors pénalité anti-farm.
+    // 📊 Score / crédits : hors pénalité anti-farm (le destinataire est inscrit, vérifié plus haut).
     let justUnlocked = false;
-    if (delivers && !farmBlocked) {
+    if (!farmBlocked) {
       const result = scores.incrementScore(reactingUserId);
       justUnlocked = result.justUnlocked;
       logger.info(`📊 Score de <@${reactingUserId}> : ${result.score}`);
@@ -542,22 +559,17 @@ app.event('reaction_added', async ({ event, client, logger }) => {
 
     const mediaForReactor = await getRandomMedia();
 
-    // 🗂️ Ta propre image n'entre dans ta collection que si ton Jeanpip « compte »
-    //    (même règle que les crédits) → pas de farm de collection.
+    // 🗂️ Toute image reçue entre au classeur (v3.0.3). Sous pénalité anti-farm,
+    //    sendJeanpipDM n'envoie rien du tout.
     const sentToReactor = await sendJeanpipDM(client, reactingUserId, {
       text: `Hey @${reactorName} tu as réagi avec jean pip coucou !`,
       headerText: `Hey <@${reactingUserId}> tu as réagi avec jean pip coucou :${TARGET_EMOJI}:`,
       media: mediaForReactor,
-      collect: delivers && !farmBlocked,
     }, logger);
     if (sentToReactor) logger.info(`📨 DM envoyé au réacteur <@${reactingUserId}>`);
 
-    // 📮 Envoi à l'auteur : seulement s'il est inscrit à la liste de diffusion,
-    //    et si le réacteur n'est pas sous pénalité anti-farm.
-    //    (Le réacteur a quand même reçu SON image juste au-dessus.)
-    if (!delivers) {
-      logger.info(`📮 Aucun envoi à <@${originalAuthorId}> : ${authorPenalized ? 'sous pénalité anti-farm' : 'pas dans la liste de diffusion'}`);
-    } else if (farmBlocked) {
+    // 📮 Envoi à l'auteur (inscrit, vérifié plus haut) si le réacteur n'est pas sous pénalité.
+    if (farmBlocked) {
       logger.info(`🚜 Envoi à l'auteur bloqué (anti-farm) pour <@${reactingUserId}>`);
     } else if (originalAuthorId && originalAuthorId !== reactingUserId) {
       const mediaForAuthor = await getRandomMedia();
@@ -1058,6 +1070,10 @@ app.command('/jeanpip-booster', async ({ command, ack, client, logger }) => {
 // 🛒 Action : clic sur un bouton d'achat de booster
 //    action_id = buy_booster_<type> · value = <type>
 // ─────────────────────────────────────────────
+const parisClock = new Intl.DateTimeFormat('fr-FR', { timeZone: 'Europe/Paris', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+/** Heure de Paris « 9h42 ». */
+const parisTime = (ms) => parisClock.format(new Date(ms)).replace(':', 'h');
+
 app.action(/^buy_booster_/, async ({ ack, body, action, client, logger }) => {
   await ack();
 
@@ -1069,6 +1085,30 @@ app.action(/^buy_booster_/, async ({ ack, body, action, client, logger }) => {
     if (!booster) {
       logger.warn(`⚠️ Type de booster inconnu : ${type}`);
       return;
+    }
+
+    // 🚦 v3.0.3 : booster à stock du jour (Octobre Rose) → anti-spam (src/boosterSpam.js) :
+    //    un clic traité toutes les 3 s ; une rafale bloque le bouton 2 min, puis 5, 10…
+    if (booster.dailyStock) {
+      const verdict = boosterSpam.click(userId, Date.now());
+      if (verdict.action === 'ignore') {
+        logger.info(`🚦 Clic booster ${type} ignoré (${verdict.reason}) : <@${userId}>`);
+        return;
+      }
+      if (verdict.action === 'lock') {
+        const until = parisTime(verdict.until);
+        const text = `🚫 Clics en rafale sur le Booster ${booster.label} : ton bouton est bloqué ${verdict.minutes} min.`;
+        logger.warn(`🚦 SPAM booster ${type} : <@${userId}> bloqué ${verdict.minutes} min (jusqu'à ${until})`);
+        sendDM(client, userId, {
+          text,
+          blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `🚫 *Doucement !* Tu as cliqué en rafale sur le Booster ${booster.emoji} ${booster.label}.\n\nTon bouton est *bloqué ${verdict.minutes} min*, jusqu'à *${until}*. Si tu recommences, ce sera *${verdict.nextMinutes} min*, et ainsi de suite.\n\n_Un seul clic suffit : le premier arrivé est servi. Aucun JP$ n'a été débité._` } }],
+        }).catch((e) => logger.error('❌ DM anti-spam booster :', e.message));
+        refreshHomeIfSeen(client, userId, logger);
+        // ⏰ À la fin du blocage, l'Accueil réaffiche le bouton
+        const timer = setTimeout(() => refreshHomeIfSeen(client, userId, logger), verdict.until - Date.now() + 1000);
+        if (typeof timer.unref === 'function') timer.unref();
+        return;
+      }
     }
 
     // 🎀 Booster saisonnier : hors saison, stock du jour pas encore arrivé

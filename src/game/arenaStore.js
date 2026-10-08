@@ -16,8 +16,8 @@
 //      tvOptOut: { U123: true },   // 📺 « Ne pas me diffuser sur JP TV » (v2.3)
 // ═══════════════════════════════════════════════════════════
 
-const fs = require('fs');
 const path = require('path');
+const { readJson, writeJsonAtomic } = require('../storage');
 
 const ARENA_PATH = path.join(__dirname, '..', '..', 'data', 'arena.json');
 
@@ -32,8 +32,8 @@ const RARITY_RANK = { common: 0, rare: 1, epic: 2, rose: 2, legendary: 3 };
 function load() {
   const empty = { decks: {}, stats: {}, rewards: {}, settled: {}, history: [], tutorial: {}, streaks: {}, tvOptOut: {} };
   try {
-    if (!fs.existsSync(ARENA_PATH)) return empty;
-    const data = JSON.parse(fs.readFileSync(ARENA_PATH, 'utf-8')) || {};
+    const data = readJson(ARENA_PATH, null);
+    if (!data) return empty;
     for (const key of Object.keys(empty)) {
       if (!data[key] || typeof data[key] !== 'object') data[key] = empty[key];
     }
@@ -45,7 +45,7 @@ function load() {
 
 function save(data) {
   try {
-    fs.writeFileSync(ARENA_PATH, JSON.stringify(data, null, 2), 'utf-8');
+    writeJsonAtomic(ARENA_PATH, data);
   } catch (e) {
     console.error('[arena] écriture:', e.message);
   }

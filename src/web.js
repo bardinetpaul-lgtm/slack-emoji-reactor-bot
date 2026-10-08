@@ -37,6 +37,7 @@ const statsWeb = require('./stats/web');
 const tvWeb = require('./game/tvWeb');
 const collections = require('./collections');
 const { getAllMedia } = require('./media');
+const { writeFileAtomic } = require('./storage');
 
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 const SECRET_PATH = path.join(__dirname, '..', 'data', 'web-secret');
@@ -84,8 +85,8 @@ function getSecret() {
   }
   secret = crypto.randomBytes(32).toString('hex');
   try {
-    fs.mkdirSync(path.dirname(SECRET_PATH), { recursive: true });
-    fs.writeFileSync(SECRET_PATH, secret, { encoding: 'utf-8', mode: 0o600 });
+    // atomique : un secret tronqué invaliderait tous les liens signés
+    writeFileAtomic(SECRET_PATH, secret, { encoding: 'utf-8', mode: 0o600 });
     restrictSecretFile(); // `mode` ne s'applique qu'à la création
   } catch (e) {
     console.error('[web] écriture du secret:', e.message);

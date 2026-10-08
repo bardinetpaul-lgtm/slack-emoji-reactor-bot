@@ -36,6 +36,7 @@ process.env.SLACK_APP_TOKEN = 'xapp-fake';
 
 const realSetTimeout = global.setTimeout;
 const posted = [];
+const ephemerals = [];
 const authorOf = {};   // ts du message → auteur
 const fakeClient = {
   conversations: {
@@ -43,6 +44,7 @@ const fakeClient = {
     history: async ({ latest }) => ({ messages: [{ user: authorOf[latest] }] }),
   },
   chat: {
+    postEphemeral: async (m) => { ephemerals.push(m); return { ok: true }; },
     postMessage: async (m) => {
       posted.push(m);
       return { ok: true, channel: m.channel, ts: String(1000 + posted.length) };
@@ -133,13 +135,49 @@ const wait = (ms) => new Promise((r) => realSetTimeout(r, ms));
     assert.strictEqual(dmsTo(out, 'U_AUTEUR').length, 0);
   });
 
-  await test(`sous pénalité : il ne reçoit plus les Jeanpips des autres`, async () => {
+  await test(`sous pénalité : il ne reçoit plus les Jeanpips des autres ; l'autre ne reçoit rien et est prévenu`, async () => {
     const credits = require(path.join(TMP, 'src', 'credits.js'));
     const before = credits.getBalance('U_AUTRE');
+    const eph = ephemerals.length;
     const out = await react('U_AUTRE', 'U_FARMER');
     assert.strictEqual(dmsTo(out, 'U_FARMER').length, 0, 'le bridé ne doit rien recevoir');
-    assert.strictEqual(dmsTo(out, 'U_AUTRE').length, 1, 'l\'autre reçoit quand même son image');
+    assert.strictEqual(dmsTo(out, 'U_AUTRE').length, 0, 'v3.0.3 : l\'autre ne reçoit rien non plus');
     assert.strictEqual(credits.getBalance('U_AUTRE'), before, 'Jeanpip non délivré → aucun JP$');
+    const note = ephemerals.slice(eph).find((m) => m.user === 'U_AUTRE' && m.channel === 'C1');
+    assert.ok(note && /pénalité anti-farm/.test(note.text), 'notification éphémère « pénalité »');
+  });
+
+  await test(`auteur hors liste de diffusion : le réacteur ne reçoit rien, est prévenu, aucun JP$`, async () => {
+    const credits = require(path.join(TMP, 'src', 'credits.js'));
+    const collections = require(path.join(TMP, 'src', 'collections.js'));
+    const before = credits.getBalance('U_AUTRE');
+    const cards = collections.getCollection('U_AUTRE').reduce((s, c) => s + c.count, 0);
+    const eph = ephemerals.length;
+    const out = await react('U_AUTRE', 'U_PAS_INSCRIT');
+    assert.strictEqual(out.length, 0, 'aucun DM image');
+    assert.strictEqual(credits.getBalance('U_AUTRE'), before);
+    assert.strictEqual(collections.getCollection('U_AUTRE').reduce((s, c) => s + c.count, 0), cards);
+    const note = ephemerals.slice(eph).find((m) => m.user === 'U_AUTRE');
+    assert.ok(note && /liste de diffusion/.test(note.text) && note.text.includes('<@U_PAS_INSCRIT>'), 'notification « pas dans la liste de diffusion »');
+  });
+
+  await test(`notification : repli en DM si l'éphémère échoue`, async () => {
+    const realEph = fakeClient.chat.postEphemeral;
+    fakeClient.chat.postEphemeral = async () => { throw new Error('channel_not_found'); };
+    const out = await react('U_AUTRE', 'U_PAS_INSCRIT');
+    fakeClient.chat.postEphemeral = realEph;
+    const dm = dmsTo(out, 'U_AUTRE');
+    assert.strictEqual(dm.length, 1);
+    assert.match(dm[0].text, /liste de diffusion/);
+  });
+
+  await test(`une image reçue entre toujours au classeur`, async () => {
+    const collections = require(path.join(TMP, 'src', 'collections.js'));
+    const cards = () => collections.getCollection('U_AUTRE').reduce((s, c) => s + c.count, 0);
+    const before = cards();
+    const out = await react('U_AUTRE', 'U_AUTEUR');
+    assert.strictEqual(dmsTo(out, 'U_AUTRE').length, 1);
+    assert.strictEqual(cards(), before + 1);
   });
 
   await test(`sous pénalité : la carte n'entre pas dans sa collection`, async () => {

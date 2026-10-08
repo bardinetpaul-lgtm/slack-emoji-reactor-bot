@@ -164,7 +164,20 @@ const at = (iso) => { NOW = RealDate.parse(iso); };
   await buy('UA');
   check(posted.at(-1).text.includes('acheté') && credits.getBalance('UA') === 135, 'UA achète (200 → 135)');
   check(boosters.stockLeft(rose) === 1, 'stock 1/2');
-  // 🙅 1 par personne et par jour : UA ne peut pas prendre le 2e du jour
+  // 🚦 v3.0.3 : clics en rafale (spam) → erreur + bouton bloqué 2 min, puis 5 min…
+  const beforeSpam = posted.length;
+  NOW += 4000;   // > 3 s après son achat : le 1er clic de la rafale est traité
+  for (let i = 0; i < 5; i += 1) await buy('UA');
+  const spamDMs = posted.slice(beforeSpam);
+  check(spamDMs.length === 2 && credits.getBalance('UA') === 135 && boosters.stockLeft(rose) === 1, `rafale de 5 clics : 1 réponse normale + 1 erreur, rien débité (${spamDMs.length} DM)`);
+  check(spamDMs[1] && /bloqué/i.test(spamDMs[1].text) && /2 min/.test(JSON.stringify(spamDMs[1].blocks)) && /5 min/.test(JSON.stringify(spamDMs[1].blocks)), 'DM d\'erreur : bouton bloqué 2 min, prochaine fois 5 min');
+  check(/Bloqué jusqu'à/.test(JSON.stringify(published.at(-1))) && !JSON.stringify(published.at(-1)).includes('buy_booster_octobre_rose'), 'Accueil : bouton Octobre Rose remplacé par « Bloqué jusqu\'à … »');
+  const duringLock = posted.length;
+  NOW += 60000;
+  await buy('UA');
+  check(posted.length === duringLock, 'pendant le blocage : clic ignoré, aucun DM');
+  // 🙅 1 par personne et par jour : UA ne peut pas prendre le 2e du jour (après le blocage)
+  NOW += 70000;
   await buy('UA');
   check(posted.at(-1).text.includes('déjà eu ton Booster') && credits.getBalance('UA') === 135 && boosters.stockLeft(rose) === 1, 'UA refusé pour le 2e du jour : rien débité, stock intact');
   check(boosters.purchaseBlock(rose, Date.now(), 'UA') === 'user_limit' && boosters.purchaseBlock(rose, Date.now(), 'UB') === null, 'limite par personne : UA bloqué, UB libre');

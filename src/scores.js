@@ -5,8 +5,8 @@
 //  Semaine : Dimanche 20h → Dimanche 20h
 // ═══════════════════════════════════════════════════════════
 
-const fs = require('fs');
 const path = require('path');
+const { readJson, writeJsonAtomic } = require('./storage');
 
 const SCORES_PATH = path.join(__dirname, '..', 'data', 'scores.json');
 const ATTACK_THRESHOLD = 12; // Nombre de jeanpips pour débloquer l'attaque
@@ -17,17 +17,20 @@ const ATTACK_THRESHOLD = 12; // Nombre de jeanpips pour débloquer l'attaque
 
 function loadScores() {
   try {
-    if (!fs.existsSync(SCORES_PATH)) {
-      return { week_start: getLastSundayAt20h().toISOString(), users: {} };
-    }
-    return JSON.parse(fs.readFileSync(SCORES_PATH, 'utf-8'));
+    const data = readJson(SCORES_PATH, null);
+    return data || { week_start: getLastSundayAt20h().toISOString(), users: {} };
   } catch {
     return { week_start: getLastSundayAt20h().toISOString(), users: {} };
   }
 }
 
 function saveScores(data) {
-  fs.writeFileSync(SCORES_PATH, JSON.stringify(data, null, 2), 'utf-8');
+  // erreur loggée, jamais levée : checkAndReset tourne dans un setInterval
+  try {
+    writeJsonAtomic(SCORES_PATH, data);
+  } catch (e) {
+    console.error('[scores] écriture:', e.message);
+  }
 }
 
 // ─────────────────────────────────────────────
@@ -171,10 +174,8 @@ function getScore(userId) {
 const STATS_PATH = path.join(__dirname, '..', 'data', 'jeanpip-stats.json');
 
 function recordHit(userId) {
-  let data;
-  try {
-    data = JSON.parse(fs.readFileSync(STATS_PATH, 'utf-8'));
-  } catch {
+  let data = readJson(STATS_PATH, null);
+  if (!data || typeof data !== 'object') {
     data = { week_start: getLastSundayAt20h().toISOString(), allTime: {}, week: {} };
   }
   // Reset hebdo de la vue "semaine" uniquement (aligné dimanche 20h, comme le jeu).
@@ -188,7 +189,7 @@ function recordHit(userId) {
   data.allTime[userId] = (data.allTime[userId] || 0) + 1;
   data.week[userId] = (data.week[userId] || 0) + 1;
   data.updated = new Date().toISOString();
-  try { fs.writeFileSync(STATS_PATH, JSON.stringify(data, null, 2), 'utf-8'); }
+  try { writeJsonAtomic(STATS_PATH, data); }
   catch (e) { console.error('[jeanpip-stats] écriture:', e.message); }
 }
 

@@ -24,6 +24,7 @@ const { getAllMedia, getRemovedMedia } = require('./media');
 const { SPAM_CARDS } = require('./spamCards');
 const { ROSE_CARDS } = require('./octobreRose');
 const { decode, shrink } = require('./imageResize');
+const { writeFileAtomic } = require('./storage');
 
 const CACHE_DIR = path.join(__dirname, '..', 'data', 'card-cache');
 const MAX_BYTES = 15 * 1024 * 1024;
@@ -91,7 +92,7 @@ function readCache(fileId) {
 function writeCache(fileId, mime, buffer) {
   fs.mkdirSync(CACHE_DIR, { recursive: true });
   const file = path.join(CACHE_DIR, `${fileId}.${EXT_BY_MIME[mime]}`);
-  fs.writeFileSync(file, buffer);
+  writeFileAtomic(file, buffer); // une image tronquée serait servie à vie (le cache = « le fichier existe »)
   return { file, mime };
 }
 
@@ -188,7 +189,7 @@ function makeThumb(fileId, image) {
   if (buffer.length >= fs.statSync(image.file).size) return image; // déjà petite
   fs.mkdirSync(THUMB_DIR, { recursive: true });
   const file = path.join(THUMB_DIR, `${fileId}.jpg`);
-  fs.writeFileSync(file, buffer);
+  writeFileAtomic(file, buffer);
   return { file, mime: 'image/jpeg' };
 }
 

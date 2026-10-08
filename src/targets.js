@@ -8,8 +8,8 @@
 //  Les cibles du .env sont toujours actives (non supprimables en live).
 // ═══════════════════════════════════════════════════════════
 
-const fs = require('fs');
 const path = require('path');
+const { readJson, writeJsonAtomic } = require('./storage');
 
 const TARGETS_PATH = path.join(__dirname, '..', 'data', 'auto-targets.json');
 
@@ -20,8 +20,7 @@ const ENV_TARGETS = process.env.TARGET_USER_IDS
 
 function loadDynamic() {
   try {
-    if (!fs.existsSync(TARGETS_PATH)) return [];
-    const data = JSON.parse(fs.readFileSync(TARGETS_PATH, 'utf-8'));
+    const data = readJson(TARGETS_PATH, { targets: [] });
     return Array.isArray(data.targets) ? data.targets : [];
   } catch {
     return [];
@@ -29,7 +28,7 @@ function loadDynamic() {
 }
 
 function saveDynamic(targets) {
-  fs.writeFileSync(TARGETS_PATH, JSON.stringify({ targets }, null, 2), 'utf-8');
+  writeJsonAtomic(TARGETS_PATH, { targets });
 }
 
 /**

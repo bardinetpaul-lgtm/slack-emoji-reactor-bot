@@ -1,6 +1,6 @@
 {
   "name": "slack-emoji-reactor-bot",
-  "version": "3.0.2",
+  "version": "3.0.3",
   "description": "Bot Slack qui envoie des images/vidéos aléatoires en DM quand quelqu'un réagit avec un emoji spécifique",
   "main": "src/app.js",
   "scripts": {

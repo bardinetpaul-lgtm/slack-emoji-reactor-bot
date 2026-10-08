@@ -18,6 +18,7 @@
 const fs = require('fs');
 const path = require('path');
 const { getDb } = require('./db');
+const { writeJsonAtomic } = require('./storage');
 
 const CREDITS_PATH = path.join(__dirname, '..', 'data', 'credits.json');
 const MARKER_PATH = path.join(__dirname, '..', 'data', 'credits.json.imported');
@@ -81,7 +82,7 @@ function ensureImported() {
         count += 1;
       }
     })();
-    fs.writeFileSync(MARKER_PATH, JSON.stringify({ at, users: count, total }, null, 2), 'utf-8');
+    writeJsonAtomic(MARKER_PATH, { at, users: count, total });
     console.log(`💰 credits.json importé dans SQLite : ${count} solde(s), total ${total} JP$`);
   }
   imported = true;

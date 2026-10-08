@@ -33,6 +33,7 @@ const path = require('path');
 const { WebClient } = require('@slack/web-api');
 
 const collections = require('../src/collections');
+const storage = require('../src/storage');
 
 const DATA_DIR = path.join(__dirname, '..', 'data');
 const COLLECTIONS_PATH = path.join(DATA_DIR, 'collections.json');
@@ -337,11 +338,11 @@ async function main() {
     collections.addCards(userId, [clean], at);
   }
 
-  const data = readJson('collections.json', { users: {} });
+  const data = storage.readJson(COLLECTIONS_PATH, { users: {} }); // abîmé → mis de côté, jamais écrasé
   const record = { at: new Date().toISOString(), since: SINCE.toISOString(), until: until.toISOString(), cards: plan.length };
   if (JEANPIPS) data.jeanpipBackfills = [...(data.jeanpipBackfills || []), record];
   else data.backfill = record;
-  fs.writeFileSync(COLLECTIONS_PATH, JSON.stringify(data, null, 2), 'utf-8');
+  storage.writeJsonAtomic(COLLECTIONS_PATH, data);
   console.log(`✅ ${plan.length} carte(s) ajoutée(s) à data/collections.json`);
 }
 

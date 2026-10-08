@@ -5,8 +5,8 @@
 //    { creditsPerJeanpip: 0.5, farmMaxPerHour: 10 }
 // ═══════════════════════════════════════════════════════════
 
-const fs = require('fs');
 const path = require('path');
+const { readJson, writeJsonAtomic } = require('./storage');
 
 const SETTINGS_PATH = path.join(__dirname, '..', 'data', 'settings.json');
 
@@ -22,8 +22,7 @@ const FARM_MAX_PER_HOUR_MAX = 100;
 
 function load() {
   try {
-    if (!fs.existsSync(SETTINGS_PATH)) return {};
-    const data = JSON.parse(fs.readFileSync(SETTINGS_PATH, 'utf-8'));
+    const data = readJson(SETTINGS_PATH, {});
     return data && typeof data === 'object' ? data : {};
   } catch {
     return {};
@@ -31,7 +30,7 @@ function load() {
 }
 
 function save(data) {
-  fs.writeFileSync(SETTINGS_PATH, JSON.stringify(data, null, 2), 'utf-8');
+  writeJsonAtomic(SETTINGS_PATH, data);
 }
 
 /** Valeur valide = multiple de 0,5 dans [MIN, MAX]. */
