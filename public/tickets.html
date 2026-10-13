@@ -27,12 +27,14 @@
       <img class="ticket-bg" id="ticket-bg" src="assets/tickets/essai.png" alt="" draggable="false">
       <div class="badge-price" id="price-box"><small>PRIX</small><b id="price">…</b></div>
       <div class="badge-brand">JEANPIP<br><span>JEUX</span></div>
+      <div id="decor" aria-hidden="true"></div>
       <div id="cells"></div>
       <div id="legend"></div>
       <div class="score-slot score-us" id="score-us"></div>
       <div class="score-slot score-them" id="score-them"></div>
       <div class="result-strip" id="result-strip">……………………</div>
       <div class="ticket-veil" id="veil" hidden>
+        <p class="veil-title">🎟️ Achète un ticket pour gratter</p>
         <button class="buy-btn big" id="veil-buy" type="button">Acheter un ticket</button>
         <p class="veil-msg" id="veil-msg"></p>
       </div>
@@ -43,6 +45,12 @@
       <button class="buy-btn" id="buy" type="button" hidden>Rejouer</button>
       <p class="msg" id="msg" role="status"></p>
     </div>
+
+    <ol class="howto">
+      <li><b>Achète un ticket</b> <span id="howto-price">(5 JP$)</span> : il est débité de ton solde.</li>
+      <li><b>Gratte les 9 ballons</b> et le score, au doigt ou à la souris (ou « Tout gratter »).</li>
+      <li><b>3 symboles identiques = le gain</b> affiché dans la légende. La 🏆 Coupe donne une carte légendaire !</li>
+    </ol>
   </main>
 
   <!-- 🏆 Révélation de la légendaire -->

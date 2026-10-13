@@ -178,6 +178,33 @@
 
   const layers = [];
 
+  // 🎨 Décor du ticket quand l'image du design n'est pas (encore) là
+  const DECOR = [
+    ['d-kicker', 'TICKET À GRATTER', [120, 60, 544, 40]],
+    ['d-title', 'ESSAI !', [100, 100, 584, 125]],
+    ['d-edition', 'JEANPIP EDITION', [150, 228, 484, 40]],
+    ['d-heading', '3 SYMBOLES IDENTIQUES = LE GAIN', [20, 946, 560, 36]],
+  ];
+  const POSTS_ART = '<svg viewBox="0 0 100 100"><path fill="none" stroke="#fff" stroke-width="4" d="M30 4v92M70 4v92M30 62h40"/><ellipse fill="none" stroke="#fff" stroke-width="3" cx="50" cy="36" rx="12" ry="7" transform="rotate(-30 50 36)"/></svg>';
+
+  function buildDecor() {
+    const decor = $('decor');
+    for (const [cls, text, box] of DECOR) decor.appendChild(place(div(`decor-zone ${cls}`, text), ...box));
+    const art = place(div('decor-zone d-art'), 240, 280, 304, 290);
+    art.innerHTML = POSTS_ART;   // SVG statique
+    decor.appendChild(art);
+    const { boxes, w } = LAYOUT.legend;
+    for (const [symbol, x] of Object.entries(boxes)) decor.appendChild(place(icon('decor-zone d-legend-box', symbol), x, 993, w, 82));
+    const score = place(div('decor-zone d-score'), 592, 938, 173, 167);
+    const title = Object.assign(document.createElement('b'), { textContent: 'SCORE' });
+    const us = div('d-score-label', 'Votre score');
+    const them = div('d-score-label', 'Score adverse');
+    us.style.marginTop = '8%';
+    them.style.marginTop = '22%';
+    score.append(title, us, them);
+    decor.appendChild(score);
+  }
+
   function buildStatic() {
     place($('price-box'), ...LAYOUT.price);
     place($('ticket').querySelector('.badge-brand'), ...LAYOUT.brand);
@@ -196,6 +223,29 @@
       const isJackpot = prize.symbol === 'posts';
       const label = prize.kind === 'legendary' ? 'LÉGENDAIRE' : `${fmt(prize.amount)} JP$`;
       legend.appendChild(place(div(`legend-amount${prize.kind === 'legendary' ? ' legendary' : ''}${isJackpot ? ' jackpot' : ''}`, label), x + 4, y, w - 8, h));
+    }
+  }
+
+  /** Ticket « en vitrine » avant l'achat : ballons et score argentés, pas encore grattables. */
+  function renderBlank() {
+    layers.length = 0;
+    const cells = $('cells');
+    cells.innerHTML = '';
+    for (let i = 0; i < 9; i++) {
+      const cx = COLS[i % 3];
+      const cy = ROWS[Math.floor(i / 3)];
+      const { w, h } = LAYOUT.ball;
+      const crop = [cx - w / 2, cy - h / 2, w, h];
+      const cell = place(div('cell locked'), ...crop);
+      cells.appendChild(cell);
+      cells.appendChild(place(div('name-box'), cx - LAYOUT.name.w / 2, cy + LAYOUT.name.dy - LAYOUT.name.h / 2, LAYOUT.name.w, LAYOUT.name.h));
+      scratchLayer(cell, { crop, ellipse: true, onDone: () => {} });
+    }
+    for (const id of ['score-us', 'score-them']) {
+      const slot = $(id);
+      slot.className = `score-slot ${id} locked`;
+      slot.textContent = '';
+      scratchLayer(slot, { onDone: () => {} });
     }
   }
 
@@ -336,15 +386,18 @@
     $('buy').disabled = !canBuy;
     $('veil-buy').textContent = `Acheter un ticket (${fmt(data.price)} JP$)`;
     $('veil-buy').disabled = !canBuy;
-    $('veil-msg').textContent = BLOCK_TEXT[data.block] || 'Gratte 9 ballons : 3 symboles identiques = le gain !';
+    $('veil-msg').textContent = BLOCK_TEXT[data.block] || '3 symboles identiques sous les ballons = le gain !';
+    $('howto-price').textContent = `(${fmt(data.price)} JP$)`;
 
     if (!data.ticket && !ticket) {
       if (keepTicket) {
         $('buy').hidden = false;
         if (data.block) setMsg(BLOCK_TEXT[data.block] || '', true);
       } else {
+        renderBlank();
         $('veil').hidden = false;
         $('buy').hidden = true;
+        setMsg('');
       }
     }
   }
@@ -445,7 +498,11 @@
       else { img.onload = resolve; img.onerror = resolve; }
     });
     bgImage = img.naturalWidth ? img : null;
-    if (!bgImage) img.remove();   // pas encore d'image : fond sombre + couches argentées
+    if (!bgImage) {   // pas encore d'image : ticket dessiné en CSS
+      img.remove();
+      $('ticket').classList.add('no-art');
+      buildDecor();
+    }
     try {
       applyState(await call(api()));
     } catch {
