@@ -13,6 +13,8 @@ const scores = require('./scores');
 const credits = require('./credits');
 const boosters = require('./boosters');
 const boosterSpam = require('./boosterSpam');
+const scratch = require('./scratch');
+const scratchTickets = require('./scratchTickets');
 
 const spamLockClock = new Intl.DateTimeFormat('fr-FR', { timeZone: 'Europe/Paris', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
 /** Heure de fin d'un blocage anti-spam, à l'heure de Paris (« 9h42 »). */
@@ -68,6 +70,7 @@ function attackMode(userId, isAdmin) {
  * @param {Array<{id, fixed}>} [ctx.autoTargets] - cibles auto-react (admins)
  * @param {string|null} [ctx.collectionUrl] - lien du classeur web (null si page web désactivée)
  * @param {string|null} [ctx.statsUrl] - lien du dashboard /stats (admins)
+ * @param {string|null} [ctx.ticketsUrl] - lien du Kiosque à tickets à gratter (null si page web désactivée)
  * @param {string|null} [ctx.deckUrl] - lien « Mon deck » de l'Arène (null si page web désactivée)
  * @param {object} [ctx.arena] - état Arène du joueur (src/arenaSlack.js homeState) : bloc « ⚔️ Arène »
  */
@@ -159,6 +162,9 @@ ${seasonal.emoji} *Booster ${seasonal.label}* : 1 ou 2 cartes exclusives qu'on n
     }],
   });
   blocks.push({ type: 'divider' });
+
+  // 🎟️ Tickets à gratter « ESSAI ! » (page web)
+  if (ctx.ticketsUrl) blocks.push(...buildTicketsBlocks(userId, ctx.ticketsUrl), { type: 'divider' });
 
   // 📒 Classeur Panini (page web, bureaux uniquement)
   if (ctx.collectionUrl) {
@@ -266,6 +272,7 @@ function buildAdminBlocks(autoTargets, statsUrl = null) {
         button('🎪 Ajouter une cible', 'admin_target_add_open'),
         button('⚙️ JP$ par Jeanpip', 'admin_credit_value_open'),
         button('🚜 Limite anti-farm', 'admin_farm_limit_open'),
+        button('🎟️ Tickets à gratter', 'admin_tickets_open'),
       ],
     },
     { type: 'context', elements: [{ type: 'mrkdwn', text: `⚙️ Réglages actuels : *1 Jeanpip envoyé = ${formatCredits(settings.getCreditsPerJeanpip())} JP$* · 🚜 *anti-farm : ${settings.getFarmMaxPerHour()} Jeanpips/h max*` }] },
@@ -631,6 +638,42 @@ function buildCreditValueModal() {
   ]);
 }
 
+/** 🎟️ Bloc « Tickets ESSAI ! » de l'Accueil : règle en une phrase + compteur du jour + lien. */
+function buildTicketsBlocks(userId, url) {
+  const price = settings.getTicketPrice();
+  const limit = settings.getTicketDailyLimit();
+  const used = scratchTickets.boughtToday(userId);
+  const pending = scratchTickets.pendingTicket(userId);
+  const jackpot = scratch.prizeTable(price).reduce((max, p) => Math.max(max, p.amount || 0), 0);
+  const status = pending
+    ? '🎟️ *Tu as un ticket pas encore gratté !*'
+    : used >= limit
+      ? `✅ *${used}/${limit} aujourd'hui* : reviens demain 😉`
+      : `_${used}/${limit} ticket${used > 1 ? 's' : ''} aujourd'hui._`;
+  return [section(
+    `🏉 *Tickets à gratter ESSAI !* — ${formatCredits(price)} JP$ le ticket, 9 ballons à gratter : *3 symboles identiques = le lot*. 🏆 Coupe = *carte légendaire*, 🥅 Poteaux = *${formatCredits(jackpot)} JP$* !
+${status}`,
+    { ...button(pending ? '🎟️ Gratter mon ticket' : '🎟️ Jouer', 'open_tickets_web', { style: 'primary' }), url },
+  )];
+}
+
+/** 🎟️ Modale « Tickets à gratter » (prix + limite par jour, valeurs actuelles pré-remplies). */
+function buildTicketsModal() {
+  const numberInput = (blockId, label, min, max, value, hint) => ({
+    type: 'input',
+    block_id: blockId,
+    label: { type: 'plain_text', text: label },
+    element: { type: 'number_input', action_id: 'value', is_decimal_allowed: false, min_value: String(min), max_value: String(max), initial_value: String(value) },
+    hint: { type: 'plain_text', text: hint },
+  });
+  return modal('admin_tickets_submit', 'Tickets à gratter', 'Enregistrer', [
+    numberInput('price', "Prix d'un ticket (JP$)", settings.TICKET_PRICE_MIN, settings.TICKET_PRICE_MAX, settings.getTicketPrice(),
+      `Entier de ${settings.TICKET_PRICE_MIN} à ${settings.TICKET_PRICE_MAX}. Les lots JP$ suivent le prix (×1 à ×40) et la chance de légendaire = prix ÷ 300 : la rentabilité ne change pas.`),
+    numberInput('limit', 'Tickets max par jour et par joueur', settings.TICKET_DAILY_LIMIT_MIN, settings.TICKET_DAILY_LIMIT_MAX, settings.getTicketDailyLimit(),
+      `Entier de ${settings.TICKET_DAILY_LIMIT_MIN} à ${settings.TICKET_DAILY_LIMIT_MAX}. Jour de Paris, effet immédiat.`),
+  ]);
+}
+
 /** 🚜 Modale « Limite anti-farm » (valeur actuelle pré-remplie). */
 function buildFarmLimitModal() {
   return modal('admin_farm_limit_submit', 'Limite anti-farm', 'Enregistrer', [
@@ -654,6 +697,7 @@ function buildFarmLimitModal() {
 module.exports = {
   buildHomeView,
   buildFarmLimitModal,
+  buildTicketsModal,
   buildCreditValueModal,
   buildAttackModal,
   buildWeeklyGiftModal,

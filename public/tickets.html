@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="theme-color" content="#d7262b">
+  <title>Tickets ESSAI ! · Jeanpip</title>
+  <!-- Chemins relatifs : la page est servie sur …/tickets (derrière un préfixe de proxy) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;600;800&display=swap">
+  <link rel="stylesheet" href="tickets.css?v=__ASSET_VERSION__">
+</head>
+<body>
+  <div class="awning" aria-hidden="true"></div>
+  <header class="topbar">
+    <div class="brand"><i class="losange">🎟️</i>JEANPIP <span>KIOSQUE</span></div>
+    <div class="wallet">
+      <div class="balance"><b id="balance">…</b> JP$</div>
+      <div class="today" id="today"></div>
+    </div>
+    <a class="pill-btn" href="slack://open">Slack</a>
+  </header>
+
+  <main class="stage">
+    <div class="ticket" id="ticket" aria-label="Ticket à gratter ESSAI !">
+      <img class="ticket-bg" id="ticket-bg" src="assets/tickets/essai.jpg" alt="" draggable="false">
+      <div class="badge-price" id="price-box"><small>PRIX</small><b id="price">…</b></div>
+      <div class="badge-brand">JEANPIP<br><span>JEUX</span></div>
+      <div id="decor" aria-hidden="true"></div>
+      <div id="cells"></div>
+      <div id="legend"></div>
+      <div class="score-slot score-us" id="score-us"></div>
+      <div class="score-slot score-them" id="score-them"></div>
+      <div class="result-strip" id="result-strip">……………………</div>
+      <div class="ticket-veil" id="veil" hidden>
+        <p class="veil-title">🎟️ Achète un ticket pour gratter</p>
+        <button class="buy-btn big" id="veil-buy" type="button">Acheter un ticket</button>
+        <p class="veil-msg" id="veil-msg"></p>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button class="ghost-btn" id="reveal-all" type="button" hidden>Tout gratter</button>
+      <button class="buy-btn" id="buy" type="button" hidden>Rejouer</button>
+      <p class="msg" id="msg" role="status"></p>
+    </div>
+
+    <ol class="howto">
+      <li><b>Achète un ticket</b> <span id="howto-price">(5 JP$)</span> : il est débité de ton solde.</li>
+      <li><b>Gratte les 9 ballons</b> et le score, au doigt ou à la souris (ou « Tout gratter »).</li>
+      <li><b>3 symboles identiques = le gain</b> affiché dans la légende. La 🏆 Coupe donne une carte légendaire !</li>
+    </ol>
+  </main>
+
+  <!-- 🏆 Révélation de la légendaire -->
+  <div class="overlay" id="card-overlay" hidden>
+    <div class="legend-card">
+      <div class="legend-title">🏆 CARTE LÉGENDAIRE !</div>
+      <div class="legend-img"><img id="card-img" alt=""></div>
+      <div class="legend-name" id="card-name"></div>
+      <div class="legend-count" id="card-count"></div>
+      <button class="buy-btn" id="card-close" type="button">Génial !</button>
+    </div>
+  </div>
+  <canvas class="confetti" id="confetti" aria-hidden="true"></canvas>
+
+  <script src="tickets.js?v=__ASSET_VERSION__"></script>
+</body>
+</html>

@@ -16,6 +16,15 @@
 
 const RELEASES = [
   {
+    version: '3.1.0',
+    date: '2026-10-13',
+    title: 'Tickets à gratter ESSAI !',
+    changes: [
+      '🏉 Nouveau : les tickets à gratter ESSAI ! Bouton « 🎟️ Jouer » dans l\'Accueil. 5 JP$ le ticket, 9 ballons à gratter au doigt ou à la souris : 3 symboles identiques = le gain. Le Sifflet rembourse ta mise, les Poteaux rapportent 200 JP$ et la Coupe 🏆 te donne une carte légendaire !',
+      '🎟️ 10 tickets par jour et par personne. Ton gain est sur ton compte dès l\'achat : si tu fermes la page, tu retrouves ton ticket à gratter en revenant.',
+    ],
+  },
+  {
     version: '3.0.4',
     date: '2026-10-08',
     title: 'JP TV en plein écran',

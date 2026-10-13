@@ -1,0 +1,244 @@
+/* ═══════════════════════════════════════════════════════════
+   🎟️ Kiosque des tickets à gratter « ESSAI ! »
+   Le ticket = l'image de Paul (assets/tickets/essai.jpg), les zones
+   (ballons, score, prix, légende) sont posées par-dessus en % (tickets.js).
+   ═══════════════════════════════════════════════════════════ */
+
+:root {
+  --bg: #fdf1dc;
+  --ink: #2b1c12;
+  --muted: #7a6450;
+  --shop: #b8141a;
+  --red: #d7262b;
+  --gold: #c9a24a;
+  --paper: #f7f5f0;
+  --line: #1b1d22;
+  --win: #ffd23f;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+  background:
+    radial-gradient(ellipse at 50% 18%, #fffaf0 0%, #fff5e400 60%),
+    repeating-linear-gradient(135deg, #f7e3c0 0 2px, transparent 2px 22px),
+    linear-gradient(#fdf1dc, #f6dfb8);
+  background-attachment: fixed;
+  color: var(--ink);
+  font-family: Inter, system-ui, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ── Auvent rayé + enseigne du kiosque ─────── */
+.awning {
+  position: relative; height: 46px;
+  background: repeating-linear-gradient(90deg, var(--red) 0 44px, #fff 44px 88px);
+  box-shadow: inset 0 -6px 10px #0000001f;
+}
+.awning::after {   /* bord festonné */
+  content: ''; position: absolute; left: 0; right: 0; top: 100%; height: 16px;
+  background:
+    radial-gradient(circle at 22px 0, var(--red) 21px, transparent 22px) 0 0 / 88px 16px repeat-x,
+    radial-gradient(circle at 66px 0, #fff 21px, transparent 22px) 0 0 / 88px 16px repeat-x;
+  filter: drop-shadow(0 4px 3px #0000002a);
+}
+.topbar {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  max-width: 560px; margin: 26px auto 16px; padding: 10px 14px;
+  background: #fff; border-radius: 16px; box-shadow: 0 6px 18px #7a46121f, 0 0 0 1px #00000010;
+}
+.brand { display: flex; align-items: center; gap: 6px; font-family: 'Bebas Neue', sans-serif; font-size: 26px; letter-spacing: 1px; color: var(--shop); }
+.brand span { background: var(--shop); color: #fff; font-size: 15px; padding: 2px 7px 0; border-radius: 6px; letter-spacing: 1.5px; }
+.losange { font-style: normal; font-size: 20px; }
+.wallet { text-align: center; line-height: 1.15; }
+.balance { font-size: 16px; font-weight: 600; }
+.balance b { font-family: 'Bebas Neue', sans-serif; font-size: 30px; color: #1f8a3b; }
+.today { font-size: 12px; color: var(--muted); font-weight: 600; }
+.pill-btn {
+  color: var(--ink); text-decoration: none; font-size: 13px; font-weight: 700;
+  border: 1.5px solid #2b1c1233; border-radius: 999px; padding: 6px 12px; background: #fff;
+}
+
+/* ── Le ticket ─────────────────────────────── */
+.stage { display: flex; flex-direction: column; align-items: center; padding: 0 16px 24px; }
+.ticket {
+  position: relative;
+  width: min(100%, 520px, calc((100dvh - 230px) * 784 / 1168));
+  min-width: 280px;
+  aspect-ratio: 784 / 1168;
+  border-radius: 14px; overflow: hidden;
+  background: linear-gradient(#141a26, #05070b);
+  box-shadow: 0 0 0 6px #fff, 0 0 0 7px #0000001a, 0 26px 50px #6b3b0f55;
+  user-select: none; -webkit-user-select: none; touch-action: none;
+  container-type: inline-size;
+}
+.ticket-bg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
+
+/* Case PRIX + badge à la place du logo du design */
+.badge-price, .badge-brand {
+  position: absolute; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  background: var(--paper); color: #111; border: 2px solid #111; border-radius: 9px;
+  font-family: 'Bebas Neue', sans-serif; line-height: .95; text-align: center;
+}
+.badge-price small { font-size: 3.4cqw; }
+.badge-price b { font-size: 5.6cqw; color: var(--red); }
+.badge-brand { font-size: 4cqw; color: #1d3f8f; }
+.badge-brand span { font-size: 2.6cqw; color: var(--red); letter-spacing: 1px; }
+
+/* Ballon : symbole dessous (ovale ivoire) + couche argentée (canvas) */
+.cell { position: absolute; }
+.cell .under {
+  position: absolute; inset: 4% 3%; border-radius: 50%;
+  background: radial-gradient(ellipse at 40% 35%, #fff, #e9e4d8);
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: inset 0 0 0 2px #0002;
+}
+.cell .under svg { height: 78%; width: auto; }
+.cell canvas, .score-slot canvas { position: absolute; inset: 0; width: 100%; height: 100%; cursor: grab; }
+.cell canvas.gone, .score-slot canvas.gone { transition: opacity .35s ease; opacity: 0; pointer-events: none; }
+.cell.pair .under { animation: pulse 1s ease-in-out infinite; }
+.cell.triple .under {
+  background: radial-gradient(ellipse at 40% 35%, #fffbe0, var(--win));
+  box-shadow: 0 0 0 3px #fff, 0 0 20px 8px #ffd23fdd;
+  animation: triple .9s cubic-bezier(.2, 1.8, .4, 1) both, glow 1.4s ease-in-out .9s infinite;
+}
+.legend-amount.hit { animation: glow 1.4s ease-in-out infinite; transform: scale(1.15); box-shadow: 0 0 0 2px #fff, 0 0 14px 4px #ffd23f; }
+.result-strip.teaser { color: #111; background: var(--win); box-shadow: 0 0 0 3px #fff, 0 0 24px #ffd23f; animation: glow 1.4s ease-in-out infinite; }
+.cell.win .under { background: radial-gradient(ellipse at 40% 35%, #fffbe0, var(--win)); box-shadow: 0 0 0 3px #fff, 0 0 18px 6px #ffd23fcc; animation: none; }
+.cell.dim { opacity: .55; transition: opacity .4s; }
+
+.name-box {
+  position: absolute; display: flex; align-items: center; justify-content: center;
+  font-family: 'Bebas Neue', sans-serif; font-size: 2.1cqw; color: #111; letter-spacing: .2px; white-space: nowrap; overflow: hidden;
+  opacity: 0; transition: opacity .3s;
+}
+.name-box.on { opacity: 1; }
+
+/* Légende : montants sous chaque symbole */
+.legend-amount {
+  position: absolute; display: flex; align-items: center; justify-content: center;
+  background: #111; color: #fff; border-radius: 999px; white-space: nowrap;
+  font-family: 'Bebas Neue', sans-serif; font-size: 2.9cqw; letter-spacing: .3px;
+}
+.legend-amount.legendary { background: var(--gold); color: #111; font-size: 2.4cqw; }
+.legend-amount.jackpot { background: var(--red); }
+
+/* Score */
+.score-slot {
+  position: absolute; display: flex; align-items: center; justify-content: center;
+  font-family: 'Bebas Neue', sans-serif; font-size: 4.6cqw; color: #111; border-radius: 5px; overflow: hidden;
+}
+.score-slot.won { color: #0a7a2f; }
+.score-slot.lost { color: var(--red); }
+
+/* Bandeau du résultat */
+.result-strip {
+  position: absolute; display: flex; align-items: center; justify-content: center; text-align: center;
+  font-family: 'Bebas Neue', sans-serif; font-size: 5cqw; color: #555; letter-spacing: 1px;
+  background: var(--paper); border-radius: 8px;
+}
+.result-strip.win { color: #0a7a2f; background: #fff8d6; box-shadow: 0 0 0 3px var(--win), 0 0 24px #ffd23f99; }
+.result-strip.big { color: #fff; background: var(--red); box-shadow: 0 0 0 3px var(--win), 0 0 30px #ffd23f; }
+.result-strip.lose { color: var(--red); }
+
+/* Voile « Acheter » quand aucun ticket n'est en cours */
+.ticket-veil {
+  position: absolute; left: 12%; right: 12%; top: 26%; height: 22%;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2.2cqw;
+  padding: 3cqw; border-radius: 16px; text-align: center;
+  background: #000000c4; backdrop-filter: blur(2px); box-shadow: 0 0 0 2px #ffffff22;
+}
+.veil-title { margin: 0; font: 6cqw 'Bebas Neue', sans-serif; letter-spacing: .5px; color: #fff; }
+.ticket-veil[hidden], [hidden] { display: none !important; }
+.veil-msg { margin: 0; font-weight: 600; color: #ddd; }
+
+/* ── Ticket dessiné (en attendant / à défaut de l'image du design) ── */
+.ticket.no-art {
+  background:
+    repeating-linear-gradient(90deg, #ffffff06 0 2px, transparent 2px 13%),
+    radial-gradient(ellipse at 50% 38%, #24324b 0%, #0d1320 55%, #05070b 100%);
+}
+.decor-zone { position: absolute; display: flex; align-items: center; justify-content: center; text-align: center; }
+.d-kicker { font: 4.2cqw 'Bebas Neue', sans-serif; letter-spacing: 3px; color: #fff; }
+.d-title { font: 20cqw/0.9 'Bebas Neue', sans-serif; color: var(--red); letter-spacing: 1px; text-shadow: 0 4px 0 #6d0d10, 0 10px 30px #000; }
+.d-edition { font: 5.2cqw 'Bebas Neue', sans-serif; letter-spacing: 6px; color: var(--gold); }
+.d-art svg { width: 100%; height: 100%; opacity: .16; }
+.d-heading { font: 4.4cqw 'Bebas Neue', sans-serif; color: #fff; letter-spacing: .5px; }
+.d-legend-box { background: var(--paper); border: 2px solid #111; border-radius: 8px; }
+.d-legend-box svg { position: absolute; left: 15%; top: 6%; width: 70%; height: 62%; }
+.d-score { flex-direction: column; justify-content: flex-start; background: var(--paper); border: 2px solid #111; border-radius: 9px; overflow: hidden; color: #111; }
+.d-score b { width: 100%; background: #13254d; color: #fff; font: 4.4cqw 'Bebas Neue', sans-serif; padding: .6cqw 0; }
+.d-score-label { font-size: 2.1cqw; font-weight: 800; color: #13254d; }
+.no-art .name-box { opacity: 1; background: var(--paper); border-radius: 6px; box-shadow: 0 0 0 1px #0004; color: transparent; }
+.no-art .name-box.on { color: #111; }
+.no-art .score-slot { background: #fff; box-shadow: inset 0 0 0 1px #0003; }
+.no-art .result-strip { box-shadow: 0 0 0 2px #111; }
+.no-art .badge-brand { display: none; }
+.locked canvas { pointer-events: none; cursor: default; }
+
+/* Comment jouer */
+.howto {
+  width: min(100%, 520px); margin: 18px 0 0; padding: 14px 16px; list-style: none; counter-reset: step;
+  background: #fff; border-radius: 16px; box-shadow: 0 6px 18px #7a46121f, 0 0 0 1px #00000010;
+  color: var(--ink); font-size: 14px; line-height: 1.45;
+}
+.howto li { position: relative; padding-left: 36px; counter-increment: step; }
+.howto li::before {
+  content: counter(step); position: absolute; left: 0; top: 0; width: 26px; height: 26px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--red); color: #fff; font: 17px 'Bebas Neue', sans-serif;
+}
+.howto li + li { margin-top: 10px; }
+.howto b { color: var(--shop); }
+
+/* ── Boutons ───────────────────────────────── */
+.actions { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 10px; margin-top: 14px; min-height: 48px; }
+.buy-btn, .ghost-btn {
+  font: 800 16px Inter, sans-serif; border-radius: 999px; padding: 12px 22px; cursor: pointer; border: 0;
+}
+.buy-btn { background: var(--red); color: #fff; box-shadow: 0 6px 20px #d7262b66; }
+.buy-btn.big { font-size: 19px; padding: 15px 28px; }
+.buy-btn:disabled { background: #555; box-shadow: none; cursor: not-allowed; }
+.buy-btn:not(:disabled):hover { filter: brightness(1.1); }
+.ghost-btn { background: #fff; color: var(--ink); border: 1.5px solid #2b1c1240; box-shadow: 0 4px 12px #7a46121a; }
+.msg { width: 100%; margin: 4px 0 0; text-align: center; color: var(--muted); font-size: 14px; min-height: 1.2em; }
+
+/* ── Gain qui s'envole vers le solde ───────── */
+.fly {
+  position: fixed; z-index: 30; pointer-events: none;
+  font: 800 30px 'Bebas Neue', sans-serif; color: #1f8a3b; text-shadow: 0 0 6px #fff, 0 2px 6px #fff;
+  transition: transform 1s cubic-bezier(.4, -0.3, .6, 1), opacity 1s;
+}
+
+/* ── Légendaire ────────────────────────────── */
+.overlay {
+  position: fixed; inset: 0; z-index: 20; display: flex; align-items: center; justify-content: center;
+  background: #000d; padding: 16px;
+}
+.overlay[hidden] { display: none; }
+.legend-card {
+  width: min(340px, 100%); text-align: center; padding: 18px;
+  border-radius: 18px; background: linear-gradient(160deg, #3a2a05, #120d02);
+  box-shadow: 0 0 0 3px #ffc83d, 0 0 60px #ffc83d88;
+  animation: pop .6s cubic-bezier(.2, 1.6, .4, 1);
+}
+.legend-title { font: 30px 'Bebas Neue', sans-serif; color: #ffc83d; letter-spacing: 1px; }
+.legend-img { margin: 12px 0; aspect-ratio: 3 / 4; border-radius: 12px; overflow: hidden; background: #000; }
+.legend-img img { width: 100%; height: 100%; object-fit: cover; }
+.legend-name { font-weight: 800; }
+.legend-count { color: var(--muted); font-size: 13px; margin: 4px 0 14px; }
+.confetti { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 25; }
+
+@keyframes triple { 0% { transform: scale(1); } 40% { transform: scale(1.3) rotate(-6deg); } 100% { transform: scale(1.12); } }
+@keyframes glow { 0%, 100% { filter: brightness(1); } 50% { filter: brightness(1.25); } }
+@keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.07); box-shadow: 0 0 0 3px var(--win); } }
+@keyframes pop { from { transform: scale(.6); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .cell.pair .under, .cell.triple .under, .legend-amount.hit, .result-strip.teaser, .legend-card { animation: none; }
+  .fly, .cell canvas.gone, .score-slot canvas.gone { transition: none; }
+}
+
+/* Encart d'achat : tailles relatives au ticket (lisible du téléphone au bureau) */
+.ticket-veil .buy-btn.big { font-size: clamp(13px, 4.4cqw, 19px); padding: 2.2cqw 4.5cqw; white-space: nowrap; }
+.ticket-veil .veil-msg { font-size: clamp(10px, 2.6cqw, 14px); }

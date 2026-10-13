@@ -340,6 +340,7 @@ function buildHomeFor(userId) {
     collectionUrl: web.buildCollectionUrl(userId),
     statsUrl: isAdmin ? web.buildStatsUrl(userId) : null,
     deckUrl: web.buildDeckUrl(userId),
+    ticketsUrl: web.buildTicketsUrl(userId),
     arena: arenaSlack.homeState(userId, ARENA_LINKS),
   });
 }
@@ -1341,6 +1342,11 @@ app.action('open_deck_web', async ({ ack }) => {
   await ack();
 });
 
+// 🎟️ Bouton-lien « Tickets ESSAI ! » de l'Accueil : la page s'ouvre dans le navigateur
+app.action('open_tickets_web', async ({ ack }) => {
+  await ack();
+});
+
 // ─────────────────────────────────────────────
 // 📮 Slash command : /jeanpip
 //    Gère son inscription à la liste de diffusion (opt-in)
@@ -1624,6 +1630,7 @@ const ADMIN_MODALS = {
   admin_target_add_open: home.buildAddTargetModal,
   admin_credit_value_open: home.buildCreditValueModal,
   admin_farm_limit_open: home.buildFarmLimitModal,
+  admin_tickets_open: home.buildTicketsModal,
 };
 
 for (const [actionId, buildModal] of Object.entries(ADMIN_MODALS)) {
@@ -1836,6 +1843,36 @@ app.view('admin_farm_limit_submit', async ({ ack, body, view, client, logger }) 
     for (const userId of homeViewers) await refreshHome(client, userId, logger);
   } catch (error) {
     logger.error('❌ Erreur dans admin_farm_limit_submit:', error);
+  }
+});
+
+// 🎟️ Modale « Tickets à gratter » (prix + limite par jour, effet immédiat)
+app.view('admin_tickets_submit', async ({ ack, body, view, client, logger }) => {
+  const adminId = body.user.id;
+  if (!isAdminUser(adminId, logger, 'admin_tickets_submit')) return ack(fieldError('price', 'Réservé aux admins.'));
+
+  const read = (blockId) => {
+    const raw = (view.state.values[blockId].value.value || '').trim();
+    return /^\d+$/.test(raw) ? parseInt(raw, 10) : NaN;
+  };
+  const result = settings.setTicketSettings({ price: read('price'), limit: read('limit') });
+  if (!result.ok) {
+    if (result.error !== 'invalide') return ack(fieldError('price', `Erreur d'écriture : ${result.detail}`));
+    return ack(fieldError(result.field, result.field === 'price'
+      ? `Nombre entier entre ${settings.TICKET_PRICE_MIN} et ${settings.TICKET_PRICE_MAX} attendu.`
+      : `Nombre entier entre ${settings.TICKET_DAILY_LIMIT_MIN} et ${settings.TICKET_DAILY_LIMIT_MAX} attendu.`));
+  }
+
+  await ack();
+  logger.info(`🎟️ <@${adminId}> a réglé les tickets à ${result.price} JP$, ${result.limit}/jour (avant : ${result.previous.price} JP$, ${result.previous.limit}/jour)`);
+  try {
+    await sendAdminResult(client, adminId, {
+      text: `🎟️ *Tickets à gratter : ${result.price} JP$ le ticket, ${result.limit} par jour et par joueur.*
+Avant : ${result.previous.price} JP$, ${result.previous.limit} par jour. Effet immédiat ; les lots suivent le prix.`,
+    }, logger);
+    for (const userId of homeViewers) await refreshHome(client, userId, logger);
+  } catch (error) {
+    logger.error('❌ Erreur dans admin_tickets_submit:', error);
   }
 });
 
