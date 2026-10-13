@@ -3,9 +3,12 @@
 //
 //  buy() et markScratched() sont ENTIÈREMENT SYNCHRONES (aucun await) :
 //  Node étant mono-thread, deux clics simultanés (double-clic, 2 onglets)
-//  ne peuvent pas s'entremêler. Le lot est tiré ET VERSÉ à l'achat :
-//  fermer l'onglet ou redémarrer le bot avant la fin du grattage ne
-//  fait rien perdre. Le grattage n'est qu'une révélation.
+//  ne peuvent pas s'entremêler.
+//  Le lot (et la carte légendaire) est TIRÉ et enregistré à l'achat — le
+//  grattage ne peut rien changer — mais VERSÉ seulement quand le ticket est
+//  entièrement gratté (v3.1.1) : le solde, l'Accueil et le classeur ne
+//  dévoilent plus le résultat avant le grattage. Ticket pas fini (onglet
+//  fermé, redémarrage) → il attend, et bloque l'achat du suivant.
 //
 //  DB = data/scratch.json
 //    { tickets: { <id>: { owner, price, createdAt, grid: [9 symboles], score: { us, them },
@@ -67,7 +70,7 @@ function purchaseBlock(userId, now = Date.now(), data = loadStore()) {
 }
 
 /**
- * Achète un ticket : débit, tirage, lot versé, ticket enregistré.
+ * Achète un ticket : débit, tirage, ticket enregistré (lot pas encore versé).
  * @returns {{ status: 'bought', ticket } | { status: 'blocked', reason, ticket? }}
  */
 function buy(userId, now = Date.now(), rand = Math.random) {
@@ -91,35 +94,27 @@ function buy(userId, now = Date.now(), rand = Math.random) {
     outcome,
   };
 
-  // 💰 Lot versé tout de suite (avant toute animation)
-  if (outcome.kind === 'jp') {
-    credits.addCredit(userId, outcome.amount, { source: 'scratch', item: 'win', ref: id });
-  } else if (outcome.kind === 'legendary') {
+  // 🏆 La carte légendaire est choisie dès l'achat (ajoutée au classeur au grattage)
+  if (outcome.kind === 'legendary') {
     const card = drawCardOfRarity('legendary');
     ticket.card = { url: card.url, title: card.title, rarity: card.rarity, type: card.type };
-    [ticket.count] = collections.addCards(userId, [card]);
   }
 
   data.tickets[id] = ticket;
   try {
     saveStore(data);
   } catch (e) {
-    console.error('[scratch] écriture:', e.message);   // lot déjà versé : le ticket manquera juste à l'historique
+    console.error('[scratch] écriture:', e.message);
+    credits.addCredit(userId, price, { source: 'scratch', item: 'refund', ref: id });   // ticket pas enregistré → remboursé
+    return { status: 'blocked', reason: 'error' };
   }
-  events.record('scratch_ticket', userId, {
-    ticketId: id,
-    price,
-    outcome: outcome.kind,
-    symbol: outcome.symbol,
-    amount: outcome.amount,
-    card: ticket.card ? { url: ticket.card.url, title: ticket.card.title, rarity: ticket.card.rarity } : null,
-  }, { dedup: `scratch_ticket:${id}` });
-
   return { status: 'bought', ticket: { id, ...ticket } };
 }
 
 /**
- * Marque un ticket comme gratté (une seule fois).
+ * Ticket entièrement gratté → le lot est versé (une seule fois).
+ * Le ticket est marqué gratté et sauvegardé AVANT le versement : un échec
+ * d'écriture ne peut jamais payer deux fois.
  * @returns {{ status: 'not_found'|'forbidden'|'scratched'|'already', ticket? }}
  */
 function markScratched(id, userId, now = Date.now()) {
@@ -130,6 +125,24 @@ function markScratched(id, userId, now = Date.now()) {
   if (ticket.scratchedAt) return { status: 'already', ticket: { id, ...ticket } };
   ticket.scratchedAt = new Date(now).toISOString();
   saveStore(data);
+
+  // 💰 Versement du lot
+  const { outcome } = ticket;
+  if (outcome.kind === 'jp') {
+    credits.addCredit(userId, outcome.amount, { source: 'scratch', item: 'win', ref: id });
+  } else if (outcome.kind === 'legendary' && ticket.card) {
+    [ticket.count] = collections.addCards(userId, [ticket.card]);
+    try { saveStore(data); } catch (e) { console.error('[scratch] écriture:', e.message); }   // nb d'exemplaires (affichage)
+  }
+  events.record('scratch_ticket', userId, {
+    ticketId: id,
+    price: ticket.price,
+    outcome: outcome.kind,
+    symbol: outcome.symbol,
+    amount: outcome.amount,
+    card: ticket.card ? { url: ticket.card.url, title: ticket.card.title, rarity: ticket.card.rarity } : null,
+  }, { at: ticket.scratchedAt, dedup: `scratch_ticket:${id}` });
+
   return { status: 'scratched', ticket: { id, ...ticket } };
 }
 

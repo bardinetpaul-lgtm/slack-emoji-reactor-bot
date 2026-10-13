@@ -16,6 +16,14 @@
 
 const RELEASES = [
   {
+    version: '3.1.1',
+    date: '2026-10-13',
+    title: 'Le suspense du grattage',
+    changes: [
+      '🎟️ Tickets ESSAI ! : ton solde ne bouge plus avant que tu aies gratté. Le gain (JP$ ou carte légendaire) arrive quand tout le ticket est découvert. Si tu fermes la page avant la fin, ton ticket t\'attend.',
+    ],
+  },
+  {
     version: '3.1.0',
     date: '2026-10-13',
     title: 'Tickets à gratter ESSAI !',

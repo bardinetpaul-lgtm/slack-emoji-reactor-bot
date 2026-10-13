@@ -147,12 +147,12 @@ const count = (grid, s) => grid.filter((x) => x === s).length;
     assert.strictEqual(credits.getBalance('U_POOR'), 0);
   });
 
-  await test('achat gagnant (mise remboursée) : débit puis lot versé tout de suite', () => {
+  await test('achat gagnant : mise débitée, lot PAS encore versé (pas de spoiler sur le solde)', () => {
     credits.addCredit('U_A', 100, { source: 'test' });
     const r = tickets.buy('U_A', T0, alwaysWin('jp'));
     assert.strictEqual(r.status, 'bought');
     assert.strictEqual(r.ticket.outcome.amount, 5);
-    assert.strictEqual(credits.getBalance('U_A'), 100);
+    assert.strictEqual(credits.getBalance('U_A'), 95);
     assert.strictEqual(tickets.boughtToday('U_A', T0), 1);
   });
 
@@ -165,20 +165,26 @@ const count = (grid, s) => grid.filter((x) => x === s).length;
   await test('grattage : une seule fois, et seulement par le propriétaire', () => {
     const id = tickets.pendingTicket('U_A').id;
     assert.strictEqual(tickets.markScratched(id, 'U_B').status, 'forbidden');
+    assert.strictEqual(credits.getBalance('U_A'), 95, 'rien versé par un autre joueur');
     assert.strictEqual(tickets.markScratched(id, 'U_A', T0).status, 'scratched');
+    assert.strictEqual(credits.getBalance('U_A'), 100, 'lot versé au grattage');
     assert.strictEqual(tickets.markScratched(id, 'U_A', T0).status, 'already');
+    assert.strictEqual(credits.getBalance('U_A'), 100, 'jamais versé deux fois');
     assert.strictEqual(tickets.markScratched('t_inconnu', 'U_A').status, 'not_found');
     assert.strictEqual(tickets.pendingTicket('U_A'), null);
   });
 
-  await test('légendaire : la carte arrive dans la collection à l\'achat', () => {
-    const before = collections.getCollection('U_A').reduce((s, c) => s + c.count, 0);
+  await test('légendaire : carte choisie à l\'achat, dans le classeur au grattage', () => {
+    const total = () => collections.getCollection('U_A').reduce((s, c) => s + c.count, 0);
+    const before = total();
     const r = tickets.buy('U_A', T0, alwaysWin('legendary'));
     assert.strictEqual(r.ticket.outcome.kind, 'legendary');
     assert.strictEqual(r.ticket.card.rarity, 'legendary');
-    assert.strictEqual(collections.getCollection('U_A').reduce((s, c) => s + c.count, 0), before + 1);
+    assert.strictEqual(total(), before, 'pas encore dans le classeur avant le grattage');
+    const done = tickets.markScratched(r.ticket.id, 'U_A', T0);
+    assert.strictEqual(done.ticket.count, 1);
+    assert.strictEqual(total(), before + 1);
     assert.strictEqual(credits.getBalance('U_A'), 95);
-    tickets.markScratched(r.ticket.id, 'U_A', T0);
   });
 
   await test('limite du jour (10 par défaut), puis ça repart le lendemain', () => {
@@ -249,6 +255,7 @@ const count = (grid, s) => grid.filter((x) => x === s).length;
 
     const s1 = await (await api('/buy', t, 'POST')).json();
     assert.strictEqual(s1.bought, true);
+    assert.strictEqual(s1.balance, 15, 'solde = mise débitée, sans le lot');
     assert.strictEqual(s1.ticket.grid.length, 9);
     assert.strictEqual(s1.ticket.result, undefined, 'lot pas envoyé avant le grattage');
     assert.strictEqual(s1.block, 'pending');
@@ -262,6 +269,7 @@ const count = (grid, s) => grid.filter((x) => x === s).length;
 
     const s2 = await (await api(`/${s1.ticket.id}/scratched`, t, 'POST')).json();
     assert.ok(s2.result && ['legendary', 'jp', 'lose'].includes(s2.result.kind));
+    assert.strictEqual(s2.balance, 15 + s2.result.amount, 'lot versé au grattage');
     assert.strictEqual(s2.ticket, null);
     assert.strictEqual(s2.boughtToday, 1);
   });

@@ -7,7 +7,7 @@
 //    POST /api/tickets/buy?t=            → achète un ticket (lot tiré et versé)
 //    POST /api/tickets/<id>/scratched?t= → grattage fini → le lot à montrer
 //
-//  Le lot n'est envoyé à la page qu'une fois le ticket gratté.
+//  Le lot n'est envoyé à la page (et versé) qu'une fois le ticket gratté.
 // ═══════════════════════════════════════════════════════════
 
 const crypto = require('crypto');
@@ -115,7 +115,7 @@ async function route(req, res, url) {
     const result = scratchTickets.buy(userId);
     if (result.status === 'bought') {
       const t = result.ticket;
-      ctx.logger.info(`🎟️ <@${userId}> achète un ticket (${t.price} JP$) → ${t.outcome.kind}${t.outcome.amount ? ` ${t.outcome.amount} JP$` : ''}${t.card ? ` ${t.card.title}` : ''}`);
+      ctx.logger.info(`🎟️ <@${userId}> achète un ticket (${t.price} JP$) → ${t.outcome.kind}${t.outcome.amount ? ` ${t.outcome.amount} JP$` : ''}${t.card ? ` ${t.card.title}` : ''} (versé au grattage)`);
       notify(userId);
     }
     ctx.sendJson(res, 200, { ...state(userId), bought: result.status === 'bought', reason: result.reason || null });
@@ -128,6 +128,7 @@ async function route(req, res, url) {
       ctx.sendJson(res, 404, { ok: false, reason: result.status });
       return true;
     }
+    if (result.status === 'scratched') notify(userId);   // 🏠 Accueil : nouveau solde
     ctx.sendJson(res, 200, { ...state(userId), result: publicResult(result.ticket) });
     return true;
   }
