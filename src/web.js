@@ -16,6 +16,7 @@
 //    …/arena/…, …/api/arena/…, /deck, /api/deck → Arène (src/game/arenaWeb.js)
 //    /stats, /api/stats/…             → Dashboard admin (src/stats/web.js)
 //    /tv/arena, /api/tv/…             → 📺 JP TV : Arène en direct (src/game/tvWeb.js)
+//    /tickets, /api/tickets/…         → 🎟️ Tickets à gratter (src/scratchWeb.js)
 //    GET  /<fichier>                  → statiques de public/
 //
 //  Désactivé si WEB_PUBLIC_URL est vide (ouverture Slack uniquement).
@@ -35,6 +36,7 @@ const arenaWeb = require('./game/arenaWeb');
 const arenaMatches = require('./game/matches');
 const statsWeb = require('./stats/web');
 const tvWeb = require('./game/tvWeb');
+const scratchWeb = require('./scratchWeb');
 const collections = require('./collections');
 const { getAllMedia } = require('./media');
 const { writeFileAtomic } = require('./storage');
@@ -382,6 +384,7 @@ function createHandler(deps) {
       if (req.method === 'GET' && (m = /^\/api\/card-thumb\/([A-Z0-9]+)$/.exec(pathname))) {
         return await handleCardImage(res, m[1], deps, { thumb: true });
       }
+      if (await scratchWeb.route(req, res, url)) return undefined;
       if (await tvWeb.route(req, res, url)) return undefined;
       if (await statsWeb.route(req, res, url)) return undefined;
       if (await arenaWeb.route(req, res, url)) return undefined;
@@ -413,6 +416,7 @@ function startWebServer({ client, logger = console, port = WEB_PORT, host = '127
   configureArena({ client, logger });
   configureStats({ client, logger });
   configureTv({ client, logger });
+  configureTickets({ logger, onChange: onOpened });
   arenaMatches.start();   // boucle 10 Hz des combats (idempotent)
   const server = http.createServer(createHandler({ client, logger, onOpened }));
   server.on('error', (err) => logger.error('[web] serveur:', err.message));
@@ -450,6 +454,18 @@ function configureTv({ client = null, logger = console } = {}) {
 }
 configureTv();
 
+// 🎟️ Tickets à gratter : mêmes secret, réponses et pages ; onChange = rafraîchir l'Accueil
+function configureTickets({ logger = console, onChange = null } = {}) {
+  scratchWeb.configure({ publicUrl: WEB_PUBLIC_URL, getSecret, send, sendJson, servePage, logger, onChange });
+}
+configureTickets();
+
+/** Lien personnel du Kiosque à tickets (null si la page web est désactivée). */
+function buildTicketsUrl(userId) {
+  if (!isEnabled()) return null;
+  return scratchWeb.buildTicketsUrl(userId);
+}
+
 /** Liens JP TV { page, api } (null si la page web est désactivée). */
 function buildTvUrls() {
   if (!isEnabled()) return null;
@@ -462,4 +478,4 @@ function buildStatsUrl(userId) {
   return statsWeb.buildStatsUrl(userId);
 }
 
-module.exports = { startWebServer, buildOpenUrl, buildCollectionUrl, buildDeckUrl, buildArenaUrl, buildStatsUrl, buildTvUrls, isEnabled, signToken, verifyToken };
+module.exports = { startWebServer, buildOpenUrl, buildTicketsUrl, buildCollectionUrl, buildDeckUrl, buildArenaUrl, buildStatsUrl, buildTvUrls, isEnabled, signToken, verifyToken };

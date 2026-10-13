@@ -1,0 +1,171 @@
+/* ═══════════════════════════════════════════════════════════
+   🎟️ Kiosque des tickets à gratter « ESSAI ! »
+   Le ticket = l'image de Paul (assets/tickets/essai.png), les zones
+   (ballons, score, prix, légende) sont posées par-dessus en % (tickets.js).
+   ═══════════════════════════════════════════════════════════ */
+
+:root {
+  --bg: #07090f;
+  --ink: #f4f1ea;
+  --muted: #9aa3b5;
+  --red: #d7262b;
+  --gold: #c9a24a;
+  --paper: #f7f5f0;
+  --line: #1b1d22;
+  --win: #ffd23f;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+  background: radial-gradient(ellipse at 50% 0%, #1a2233 0%, var(--bg) 70%);
+  color: var(--ink);
+  font-family: Inter, system-ui, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ── Barre du haut ─────────────────────────── */
+.topbar {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 10px 16px; max-width: 760px; margin: 0 auto;
+}
+.brand { font-family: 'Bebas Neue', sans-serif; font-size: 26px; letter-spacing: 1px; }
+.brand span { color: var(--gold); font-size: 16px; margin-left: 4px; }
+.wallet { text-align: center; line-height: 1.15; }
+.balance { font-size: 18px; }
+.balance b { font-family: 'Bebas Neue', sans-serif; font-size: 28px; color: var(--win); }
+.today { font-size: 12px; color: var(--muted); }
+.pill-btn {
+  color: var(--ink); text-decoration: none; font-size: 13px; font-weight: 600;
+  border: 1px solid #ffffff33; border-radius: 999px; padding: 6px 12px;
+}
+
+/* ── Le ticket ─────────────────────────────── */
+.stage { display: flex; flex-direction: column; align-items: center; padding: 0 16px 24px; }
+.ticket {
+  position: relative;
+  width: min(100%, 520px, calc((100dvh - 150px) * 784 / 1168));
+  min-width: 280px;
+  aspect-ratio: 784 / 1168;
+  border-radius: 14px; overflow: hidden;
+  background: linear-gradient(#141a26, #05070b);
+  box-shadow: 0 24px 60px #000c, 0 0 0 1px #ffffff14;
+  user-select: none; -webkit-user-select: none; touch-action: none;
+  container-type: inline-size;
+}
+.ticket-bg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
+
+/* Case PRIX + badge à la place du logo du design */
+.badge-price, .badge-brand {
+  position: absolute; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  background: var(--paper); color: #111; border: 2px solid #111; border-radius: 9px;
+  font-family: 'Bebas Neue', sans-serif; line-height: .95; text-align: center;
+}
+.badge-price small { font-size: 3.4cqw; }
+.badge-price b { font-size: 5.6cqw; color: var(--red); }
+.badge-brand { font-size: 4cqw; color: #1d3f8f; }
+.badge-brand span { font-size: 2.6cqw; color: var(--red); letter-spacing: 1px; }
+
+/* Ballon : symbole dessous (ovale ivoire) + couche argentée (canvas) */
+.cell { position: absolute; }
+.cell .under {
+  position: absolute; inset: 4% 3%; border-radius: 50%;
+  background: radial-gradient(ellipse at 40% 35%, #fff, #e9e4d8);
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: inset 0 0 0 2px #0002;
+}
+.cell .under svg { height: 78%; width: auto; }
+.cell canvas, .score-slot canvas { position: absolute; inset: 0; width: 100%; height: 100%; cursor: grab; }
+.cell canvas.gone, .score-slot canvas.gone { transition: opacity .35s ease; opacity: 0; pointer-events: none; }
+.cell.pair .under { animation: pulse 1s ease-in-out infinite; }
+.cell.win .under { background: radial-gradient(ellipse at 40% 35%, #fffbe0, var(--win)); box-shadow: 0 0 0 3px #fff, 0 0 18px 6px #ffd23fcc; animation: none; }
+.cell.dim { opacity: .55; transition: opacity .4s; }
+
+.name-box {
+  position: absolute; display: flex; align-items: center; justify-content: center;
+  font-family: 'Bebas Neue', sans-serif; font-size: 3.3cqw; color: #111; letter-spacing: .5px;
+  opacity: 0; transition: opacity .3s;
+}
+.name-box.on { opacity: 1; }
+
+/* Légende : montants sous chaque symbole */
+.legend-amount {
+  position: absolute; display: flex; align-items: center; justify-content: center;
+  background: #111; color: #fff; border-radius: 999px; white-space: nowrap;
+  font-family: 'Bebas Neue', sans-serif; font-size: 2.9cqw; letter-spacing: .3px;
+}
+.legend-amount.legendary { background: var(--gold); color: #111; font-size: 2.4cqw; }
+.legend-amount.jackpot { background: var(--red); }
+
+/* Score */
+.score-slot {
+  position: absolute; display: flex; align-items: center; justify-content: center;
+  font-family: 'Bebas Neue', sans-serif; font-size: 4.6cqw; color: #111; border-radius: 5px; overflow: hidden;
+}
+.score-slot.won { color: #0a7a2f; }
+.score-slot.lost { color: var(--red); }
+
+/* Bandeau du résultat */
+.result-strip {
+  position: absolute; display: flex; align-items: center; justify-content: center; text-align: center;
+  font-family: 'Bebas Neue', sans-serif; font-size: 5cqw; color: #555; letter-spacing: 1px;
+  background: var(--paper); border-radius: 8px;
+}
+.result-strip.win { color: #0a7a2f; background: #fff8d6; box-shadow: 0 0 0 3px var(--win), 0 0 24px #ffd23f99; }
+.result-strip.big { color: #fff; background: var(--red); box-shadow: 0 0 0 3px var(--win), 0 0 30px #ffd23f; }
+.result-strip.lose { color: var(--red); }
+
+/* Voile « Acheter » quand aucun ticket n'est en cours */
+.ticket-veil {
+  position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: flex-end;
+  gap: 10px; padding-bottom: 46%;
+  background: linear-gradient(transparent 30%, #000a 55%, #000c);
+}
+.ticket-veil[hidden], [hidden] { display: none !important; }
+.veil-msg { margin: 0 16px; text-align: center; font-weight: 600; text-shadow: 0 1px 3px #000; }
+
+/* ── Boutons ───────────────────────────────── */
+.actions { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 10px; margin-top: 14px; min-height: 48px; }
+.buy-btn, .ghost-btn {
+  font: 800 16px Inter, sans-serif; border-radius: 999px; padding: 12px 22px; cursor: pointer; border: 0;
+}
+.buy-btn { background: var(--red); color: #fff; box-shadow: 0 6px 20px #d7262b66; }
+.buy-btn.big { font-size: 19px; padding: 15px 28px; }
+.buy-btn:disabled { background: #555; box-shadow: none; cursor: not-allowed; }
+.buy-btn:not(:disabled):hover { filter: brightness(1.1); }
+.ghost-btn { background: transparent; color: var(--ink); border: 1px solid #ffffff55; }
+.msg { width: 100%; margin: 4px 0 0; text-align: center; color: var(--muted); font-size: 14px; min-height: 1.2em; }
+
+/* ── Gain qui s'envole vers le solde ───────── */
+.fly {
+  position: fixed; z-index: 30; pointer-events: none;
+  font: 800 28px 'Bebas Neue', sans-serif; color: var(--win); text-shadow: 0 2px 8px #000;
+  transition: transform 1s cubic-bezier(.4, -0.3, .6, 1), opacity 1s;
+}
+
+/* ── Légendaire ────────────────────────────── */
+.overlay {
+  position: fixed; inset: 0; z-index: 20; display: flex; align-items: center; justify-content: center;
+  background: #000d; padding: 16px;
+}
+.overlay[hidden] { display: none; }
+.legend-card {
+  width: min(340px, 100%); text-align: center; padding: 18px;
+  border-radius: 18px; background: linear-gradient(160deg, #3a2a05, #120d02);
+  box-shadow: 0 0 0 3px #ffc83d, 0 0 60px #ffc83d88;
+  animation: pop .6s cubic-bezier(.2, 1.6, .4, 1);
+}
+.legend-title { font: 30px 'Bebas Neue', sans-serif; color: #ffc83d; letter-spacing: 1px; }
+.legend-img { margin: 12px 0; aspect-ratio: 3 / 4; border-radius: 12px; overflow: hidden; background: #000; }
+.legend-img img { width: 100%; height: 100%; object-fit: cover; }
+.legend-name { font-weight: 800; }
+.legend-count { color: var(--muted); font-size: 13px; margin: 4px 0 14px; }
+.confetti { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 25; }
+
+@keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.07); box-shadow: 0 0 0 3px var(--win); } }
+@keyframes pop { from { transform: scale(.6); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .cell.pair .under, .legend-card { animation: none; }
+  .fly, .cell canvas.gone, .score-slot canvas.gone { transition: none; }
+}
