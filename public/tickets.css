@@ -1,13 +1,14 @@
 /* ═══════════════════════════════════════════════════════════
    🎟️ Kiosque des tickets à gratter « ESSAI ! »
-   Le ticket = l'image de Paul (assets/tickets/essai.png), les zones
+   Le ticket = l'image de Paul (assets/tickets/essai.jpg), les zones
    (ballons, score, prix, légende) sont posées par-dessus en % (tickets.js).
    ═══════════════════════════════════════════════════════════ */
 
 :root {
-  --bg: #07090f;
-  --ink: #f4f1ea;
-  --muted: #9aa3b5;
+  --bg: #fdf1dc;
+  --ink: #2b1c12;
+  --muted: #7a6450;
+  --shop: #b8141a;
   --red: #d7262b;
   --gold: #c9a24a;
   --paper: #f7f5f0;
@@ -18,38 +19,56 @@
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; }
 body {
-  background: radial-gradient(ellipse at 50% 0%, #1a2233 0%, var(--bg) 70%);
+  background:
+    radial-gradient(ellipse at 50% 18%, #fffaf0 0%, #fff5e400 60%),
+    repeating-linear-gradient(135deg, #f7e3c0 0 2px, transparent 2px 22px),
+    linear-gradient(#fdf1dc, #f6dfb8);
+  background-attachment: fixed;
   color: var(--ink);
   font-family: Inter, system-ui, sans-serif;
   -webkit-tap-highlight-color: transparent;
 }
 
-/* ── Barre du haut ─────────────────────────── */
+/* ── Auvent rayé + enseigne du kiosque ─────── */
+.awning {
+  position: relative; height: 46px;
+  background: repeating-linear-gradient(90deg, var(--red) 0 44px, #fff 44px 88px);
+  box-shadow: inset 0 -6px 10px #0000001f;
+}
+.awning::after {   /* bord festonné */
+  content: ''; position: absolute; left: 0; right: 0; top: 100%; height: 16px;
+  background:
+    radial-gradient(circle at 22px 0, var(--red) 21px, transparent 22px) 0 0 / 88px 16px repeat-x,
+    radial-gradient(circle at 66px 0, #fff 21px, transparent 22px) 0 0 / 88px 16px repeat-x;
+  filter: drop-shadow(0 4px 3px #0000002a);
+}
 .topbar {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
-  padding: 10px 16px; max-width: 760px; margin: 0 auto;
+  max-width: 560px; margin: 26px auto 16px; padding: 10px 14px;
+  background: #fff; border-radius: 16px; box-shadow: 0 6px 18px #7a46121f, 0 0 0 1px #00000010;
 }
-.brand { font-family: 'Bebas Neue', sans-serif; font-size: 26px; letter-spacing: 1px; }
-.brand span { color: var(--gold); font-size: 16px; margin-left: 4px; }
+.brand { display: flex; align-items: center; gap: 6px; font-family: 'Bebas Neue', sans-serif; font-size: 26px; letter-spacing: 1px; color: var(--shop); }
+.brand span { background: var(--shop); color: #fff; font-size: 15px; padding: 2px 7px 0; border-radius: 6px; letter-spacing: 1.5px; }
+.losange { font-style: normal; font-size: 20px; }
 .wallet { text-align: center; line-height: 1.15; }
-.balance { font-size: 18px; }
-.balance b { font-family: 'Bebas Neue', sans-serif; font-size: 28px; color: var(--win); }
-.today { font-size: 12px; color: var(--muted); }
+.balance { font-size: 16px; font-weight: 600; }
+.balance b { font-family: 'Bebas Neue', sans-serif; font-size: 30px; color: #1f8a3b; }
+.today { font-size: 12px; color: var(--muted); font-weight: 600; }
 .pill-btn {
-  color: var(--ink); text-decoration: none; font-size: 13px; font-weight: 600;
-  border: 1px solid #ffffff33; border-radius: 999px; padding: 6px 12px;
+  color: var(--ink); text-decoration: none; font-size: 13px; font-weight: 700;
+  border: 1.5px solid #2b1c1233; border-radius: 999px; padding: 6px 12px; background: #fff;
 }
 
 /* ── Le ticket ─────────────────────────────── */
 .stage { display: flex; flex-direction: column; align-items: center; padding: 0 16px 24px; }
 .ticket {
   position: relative;
-  width: min(100%, 520px, calc((100dvh - 150px) * 784 / 1168));
+  width: min(100%, 520px, calc((100dvh - 230px) * 784 / 1168));
   min-width: 280px;
   aspect-ratio: 784 / 1168;
   border-radius: 14px; overflow: hidden;
   background: linear-gradient(#141a26, #05070b);
-  box-shadow: 0 24px 60px #000c, 0 0 0 1px #ffffff14;
+  box-shadow: 0 0 0 6px #fff, 0 0 0 7px #0000001a, 0 26px 50px #6b3b0f55;
   user-select: none; -webkit-user-select: none; touch-action: none;
   container-type: inline-size;
 }
@@ -122,9 +141,9 @@ body {
   padding: 3cqw; border-radius: 16px; text-align: center;
   background: #000000c4; backdrop-filter: blur(2px); box-shadow: 0 0 0 2px #ffffff22;
 }
-.veil-title { margin: 0; font: 6cqw 'Bebas Neue', sans-serif; letter-spacing: .5px; }
+.veil-title { margin: 0; font: 6cqw 'Bebas Neue', sans-serif; letter-spacing: .5px; color: #fff; }
 .ticket-veil[hidden], [hidden] { display: none !important; }
-.veil-msg { margin: 0; font-size: max(12px, 2.8cqw); font-weight: 600; color: #ddd; }
+.veil-msg { margin: 0; font-weight: 600; color: #ddd; }
 
 /* ── Ticket dessiné (en attendant / à défaut de l'image du design) ── */
 .ticket.no-art {
@@ -152,12 +171,18 @@ body {
 
 /* Comment jouer */
 .howto {
-  width: min(100%, 520px); margin: 14px 0 0; padding: 14px 16px 14px 36px;
-  background: #ffffff0d; border: 1px solid #ffffff1a; border-radius: 14px;
-  color: #d8dce4; font-size: 14px; line-height: 1.5;
+  width: min(100%, 520px); margin: 18px 0 0; padding: 14px 16px; list-style: none; counter-reset: step;
+  background: #fff; border-radius: 16px; box-shadow: 0 6px 18px #7a46121f, 0 0 0 1px #00000010;
+  color: var(--ink); font-size: 14px; line-height: 1.45;
 }
-.howto li + li { margin-top: 4px; }
-.howto b { color: #fff; }
+.howto li { position: relative; padding-left: 36px; counter-increment: step; }
+.howto li::before {
+  content: counter(step); position: absolute; left: 0; top: 0; width: 26px; height: 26px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--red); color: #fff; font: 17px 'Bebas Neue', sans-serif;
+}
+.howto li + li { margin-top: 10px; }
+.howto b { color: var(--shop); }
 
 /* ── Boutons ───────────────────────────────── */
 .actions { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 10px; margin-top: 14px; min-height: 48px; }
@@ -168,13 +193,13 @@ body {
 .buy-btn.big { font-size: 19px; padding: 15px 28px; }
 .buy-btn:disabled { background: #555; box-shadow: none; cursor: not-allowed; }
 .buy-btn:not(:disabled):hover { filter: brightness(1.1); }
-.ghost-btn { background: transparent; color: var(--ink); border: 1px solid #ffffff55; }
+.ghost-btn { background: #fff; color: var(--ink); border: 1.5px solid #2b1c1240; box-shadow: 0 4px 12px #7a46121a; }
 .msg { width: 100%; margin: 4px 0 0; text-align: center; color: var(--muted); font-size: 14px; min-height: 1.2em; }
 
 /* ── Gain qui s'envole vers le solde ───────── */
 .fly {
   position: fixed; z-index: 30; pointer-events: none;
-  font: 800 28px 'Bebas Neue', sans-serif; color: var(--win); text-shadow: 0 2px 8px #000;
+  font: 800 30px 'Bebas Neue', sans-serif; color: #1f8a3b; text-shadow: 0 0 6px #fff, 0 2px 6px #fff;
   transition: transform 1s cubic-bezier(.4, -0.3, .6, 1), opacity 1s;
 }
 
@@ -204,3 +229,7 @@ body {
   .cell.pair .under, .legend-card { animation: none; }
   .fly, .cell canvas.gone, .score-slot canvas.gone { transition: none; }
 }
+
+/* Encart d'achat : tailles relatives au ticket (lisible du téléphone au bureau) */
+.ticket-veil .buy-btn.big { font-size: clamp(13px, 4.4cqw, 19px); padding: 2.2cqw 4.5cqw; white-space: nowrap; }
+.ticket-veil .veil-msg { font-size: clamp(10px, 2.6cqw, 14px); }
