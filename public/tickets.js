@@ -222,7 +222,9 @@
       if (x === undefined) continue;
       const isJackpot = prize.symbol === 'posts';
       const label = prize.kind === 'legendary' ? 'LÉGENDAIRE' : `${fmt(prize.amount)} JP$`;
-      legend.appendChild(place(div(`legend-amount${prize.kind === 'legendary' ? ' legendary' : ''}${isJackpot ? ' jackpot' : ''}`, label), x + 4, y, w - 8, h));
+      const pill = place(div(`legend-amount${prize.kind === 'legendary' ? ' legendary' : ''}${isJackpot ? ' jackpot' : ''}`, label), x + 4, y, w - 8, h);
+      pill.dataset.symbol = prize.symbol;
+      legend.appendChild(pill);
     }
   }
 
@@ -295,7 +297,22 @@
     const shown = [...document.querySelectorAll('.cell')].filter((c, i) => revealed.has(`c${i}`));
     const bySymbol = {};
     for (const c of shown) (bySymbol[c.dataset.symbol] = bySymbol[c.dataset.symbol] || []).push(c);
-    for (const c of shown) c.classList.toggle('pair', bySymbol[c.dataset.symbol].length === 2 && c.dataset.symbol !== 'card');
+    for (const c of shown) {
+      const n = bySymbol[c.dataset.symbol].length;
+      c.classList.toggle('pair', n === 2 && c.dataset.symbol !== 'card');
+      c.classList.toggle('triple', n >= 3);
+    }
+    // 🎉 3 identiques : on le montre tout de suite (légende + bandeau), sans attendre la fin du grattage
+    const trio = Object.keys(bySymbol).find((s) => bySymbol[s].length >= 3);
+    if (trio && !document.querySelector(`.legend-amount.hit[data-symbol="${trio}"]`)) {
+      const pill = document.querySelector(`.legend-amount[data-symbol="${trio}"]`);
+      if (pill) pill.classList.add('hit');
+      const prize = state.prizes.find((p) => p.symbol === trio);
+      const strip = $('result-strip');
+      strip.className = 'result-strip teaser';
+      strip.textContent = prize && prize.kind === 'legendary' ? '3 COUPES : CARTE LÉGENDAIRE !' : `3 IDENTIQUES : ${prize ? fmt(prize.amount) : ''} JP$ !`;
+      if (!reduced && prize && (prize.kind === 'legendary' || prize.symbol === 'posts')) confetti(80);
+    }
   }
 
   // ─────────────────────────────────────────────

@@ -97,6 +97,13 @@ body {
 .cell canvas, .score-slot canvas { position: absolute; inset: 0; width: 100%; height: 100%; cursor: grab; }
 .cell canvas.gone, .score-slot canvas.gone { transition: opacity .35s ease; opacity: 0; pointer-events: none; }
 .cell.pair .under { animation: pulse 1s ease-in-out infinite; }
+.cell.triple .under {
+  background: radial-gradient(ellipse at 40% 35%, #fffbe0, var(--win));
+  box-shadow: 0 0 0 3px #fff, 0 0 20px 8px #ffd23fdd;
+  animation: triple .9s cubic-bezier(.2, 1.8, .4, 1) both, glow 1.4s ease-in-out .9s infinite;
+}
+.legend-amount.hit { animation: glow 1.4s ease-in-out infinite; transform: scale(1.15); box-shadow: 0 0 0 2px #fff, 0 0 14px 4px #ffd23f; }
+.result-strip.teaser { color: #111; background: var(--win); box-shadow: 0 0 0 3px #fff, 0 0 24px #ffd23f; animation: glow 1.4s ease-in-out infinite; }
 .cell.win .under { background: radial-gradient(ellipse at 40% 35%, #fffbe0, var(--win)); box-shadow: 0 0 0 3px #fff, 0 0 18px 6px #ffd23fcc; animation: none; }
 .cell.dim { opacity: .55; transition: opacity .4s; }
 
@@ -222,11 +229,13 @@ body {
 .legend-count { color: var(--muted); font-size: 13px; margin: 4px 0 14px; }
 .confetti { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 25; }
 
+@keyframes triple { 0% { transform: scale(1); } 40% { transform: scale(1.3) rotate(-6deg); } 100% { transform: scale(1.12); } }
+@keyframes glow { 0%, 100% { filter: brightness(1); } 50% { filter: brightness(1.25); } }
 @keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.07); box-shadow: 0 0 0 3px var(--win); } }
 @keyframes pop { from { transform: scale(.6); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 
 @media (prefers-reduced-motion: reduce) {
-  .cell.pair .under, .legend-card { animation: none; }
+  .cell.pair .under, .cell.triple .under, .legend-amount.hit, .result-strip.teaser, .legend-card { animation: none; }
   .fly, .cell canvas.gone, .score-slot canvas.gone { transition: none; }
 }
 
