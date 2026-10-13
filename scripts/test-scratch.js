@@ -65,14 +65,14 @@ const count = (grid, s) => grid.filter((x) => x === s).length;
 (async () => {
   console.log('\n🧪 Tickets à gratter — logique\n');
 
-  await test('lots = multiples du prix, légendaire = prix ÷ 200', () => {
+  await test('lots = multiples du prix, légendaire = prix ÷ 300', () => {
     const t5 = scratch.prizeTable(5);
     assert.deepStrictEqual(t5.map((p) => p.amount || 0), [0, 200, 50, 20, 10, 5]);
     assert.strictEqual(t5[0].kind, 'legendary');
-    assert.strictEqual(t5[0].chance, 1 / 40);
+    assert.ok(Math.abs(t5[0].chance - 1 / 60) < 1e-12);
     assert.deepStrictEqual(scratch.prizeTable(10).map((p) => p.amount || 0), [0, 400, 100, 40, 20, 10]);
-    assert.strictEqual(scratch.legendaryChance(100), 0.5);
-    assert.strictEqual(scratch.legendaryChance(200), 0.5, 'plafond 50 %');
+    assert.strictEqual(scratch.legendaryChance(150), 0.5);
+    assert.strictEqual(scratch.legendaryChance(300), 0.5, 'plafond 50 %');
   });
 
   await test('chaque grille montre son lot, et jamais 3 identiques quand on perd', () => {
@@ -88,7 +88,7 @@ const count = (grid, s) => grid.filter((x) => x === s).length;
     }
   });
 
-  await test('simulation 1 million de tickets : retour JP$ ≈ 64 %, légendaire ≈ 1/40, gagnant ≈ 1/2,8', () => {
+  await test('simulation 1 million de tickets : retour JP$ ≈ 64 %, légendaire ≈ 1/60, gagnant ≈ 1/2,8', () => {
     const rand = seeded(7);
     const N = 1e6;
     let paid = 0; let legendary = 0; let wins = 0; let refunds = 0;
@@ -101,8 +101,8 @@ const count = (grid, s) => grid.filter((x) => x === s).length;
     }
     const rtp = paid / (5 * N);
     assert.ok(Math.abs(rtp - 0.64) < 0.01, `retour JP$ ${(rtp * 100).toFixed(1)} %`);
-    assert.ok(Math.abs(legendary / N - 0.025) < 0.001, `légendaire ${(legendary / N * 100).toFixed(2)} %`);
-    assert.ok(Math.abs(N / wins - 2.8) < 0.1, `1 gagnant sur ${(N / wins).toFixed(2)}`);
+    assert.ok(Math.abs(legendary / N - 1 / 60) < 0.001, `légendaire ${(legendary / N * 100).toFixed(2)} %`);
+    assert.ok(Math.abs(N / wins - 2.84) < 0.1, `1 gagnant sur ${(N / wins).toFixed(2)}`);
     assert.ok(Math.abs(refunds / N - 0.22) < 0.005, `mise remboursée ${(refunds / N * 100).toFixed(1)} %`);
     console.log(`     → retour JP$ ${(rtp * 100).toFixed(1)} %, légendaire 1/${(N / legendary).toFixed(1)}, 1 gagnant sur ${(N / wins).toFixed(2)}`);
   });

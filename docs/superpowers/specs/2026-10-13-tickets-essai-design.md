@@ -19,7 +19,7 @@ et reste **rentable pour le jeu** : à force d'en faire, on perd plus qu'on ne g
 
 | Symbole | Lot | Chance |
 |---|---|---|
-| 🏆 Coupe | Carte légendaire | prix ÷ 200 (1/40 à 5 JP$), plafond 50 % |
+| 🏆 Coupe | Carte légendaire | prix ÷ 300 (1/60 à 5 JP$), plafond 50 % |
 | 🥅 Poteaux | ×40 la mise (gros lot) | 0,2 % |
 | 🏉 Ballon ovale | ×10 | 0,8 % |
 | 👕 Maillot | ×4 | 2,5 % |
@@ -28,8 +28,9 @@ et reste **rentable pour le jeu** : à force d'en faire, on perd plus qu'on ne g
 | 🟨 Carton jaune | perdant (remplissage) | — |
 
 - Lots JP$ = multiples du prix, arrondis au demi-JP$ → l'équilibre ne bouge pas si le prix change.
-- Retour JP$ ≈ 64 % de la mise ; ~1 ticket sur 2,8 gagnant ; ~200 JP$ dépensés par légendaire
-  (≈ 70 JP$ net). La limite quotidienne plafonne la fuite (≤ 1 légendaire / 4 jours en moyenne).
+- Retour JP$ ≈ 64 % de la mise ; ~1 ticket sur 2,8 gagnant ; ~300 JP$ dépensés par légendaire
+  (≈ 108 JP$ net). Un joueur à 10 tickets/jour : ~5 légendaires et ~−540 JP$ par mois
+  (1/40 jugé trop généreux par Paul : 7,5/mois).
 - Grilles perdantes : jamais 3 identiques, souvent une paire (parfois 2 🛡️ : « presque ! »).
 
 ## Architecture
@@ -61,5 +62,5 @@ Version CSS/emoji rugby (pelouse, craie, maillot rayé) en attendant le design d
 ## Tests
 
 `scripts/test-scratch.js` : grilles cohérentes avec le lot, jamais de triple perdant,
-lots selon le prix, simulation (RTP ≈ 64 %, légendaire ≈ 1/40), achat (limite, solde,
+lots selon le prix, simulation (RTP ≈ 64 %, légendaire ≈ 1/60), achat (limite, solde,
 pénalité, ticket en attente, double grattage), routes web (jeton invalide, parcours complet).

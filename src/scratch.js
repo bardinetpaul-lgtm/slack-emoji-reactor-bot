@@ -8,7 +8,8 @@
 //  Équilibre (validé par Paul le 13/10) :
 //    • lots JP$ = multiples de la mise → le prix (réglable par un admin)
 //      ne change pas la rentabilité ;
-//    • légendaire = prix ÷ 200 (1/40 à 5 JP$) → ~200 JP$ dépensés par légendaire ;
+//    • légendaire = prix ÷ 300 (1/60 à 5 JP$) → ~300 JP$ dépensés par légendaire,
+//      ~5 par mois pour qui joue ses 10 tickets chaque jour (Paul, 13/10) ;
 //    • retour JP$ ≈ 64 % de la mise, ~1 ticket sur 2,8 gagnant.
 //  Aucun accès disque ici : testable seul (scripts/test-scratch.js).
 // ═══════════════════════════════════════════════════════════
@@ -36,7 +37,7 @@ const JP_PRIZES = [
   { symbol: 'whistle', multiplier: 1, chance: 0.22 },
 ];
 const LEGENDARY_SYMBOL = 'trophy';
-const LEGENDARY_JP_PER_CARD = 200;   // JP$ dépensés en moyenne par légendaire
+const LEGENDARY_JP_PER_CARD = 300;   // JP$ dépensés en moyenne par légendaire
 const LEGENDARY_MAX_CHANCE = 0.5;
 
 /** Chance de légendaire pour un ticket à ce prix. */

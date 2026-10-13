@@ -668,7 +668,7 @@ function buildTicketsModal() {
   });
   return modal('admin_tickets_submit', 'Tickets à gratter', 'Enregistrer', [
     numberInput('price', "Prix d'un ticket (JP$)", settings.TICKET_PRICE_MIN, settings.TICKET_PRICE_MAX, settings.getTicketPrice(),
-      `Entier de ${settings.TICKET_PRICE_MIN} à ${settings.TICKET_PRICE_MAX}. Les lots JP$ suivent le prix (×1 à ×40) et la chance de légendaire = prix ÷ 200 : la rentabilité ne change pas.`),
+      `Entier de ${settings.TICKET_PRICE_MIN} à ${settings.TICKET_PRICE_MAX}. Les lots JP$ suivent le prix (×1 à ×40) et la chance de légendaire = prix ÷ 300 : la rentabilité ne change pas.`),
     numberInput('limit', 'Tickets max par jour et par joueur', settings.TICKET_DAILY_LIMIT_MIN, settings.TICKET_DAILY_LIMIT_MAX, settings.getTicketDailyLimit(),
       `Entier de ${settings.TICKET_DAILY_LIMIT_MIN} à ${settings.TICKET_DAILY_LIMIT_MAX}. Jour de Paris, effet immédiat.`),
   ]);
