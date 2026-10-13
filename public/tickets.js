@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════
 //  🎟️ Kiosque des tickets à gratter « ESSAI ! »
-//  Le lot est tiré et versé par le serveur à l'achat : ici on ne fait
-//  que le révéler. Grattage = <canvas> par zone (souris / doigt),
+//  Le lot est tiré par le serveur à l'achat et versé quand le ticket est
+//  entièrement gratté : ici on ne fait que le révéler. Grattage = <canvas> par zone (souris / doigt),
 //  une zone grattée à ~55 % se découvre entièrement.
 // ═══════════════════════════════════════════════════════════
 (() => {
@@ -329,7 +329,7 @@
       showResult(data.result);
       applyState(data, { keepTicket: true });
     } catch {
-      setMsg('Connexion perdue : recharge la page, ton gain est déjà sur ton compte.');
+      setMsg('Connexion perdue : recharge la page pour finir ton ticket.');
     } finally {
       busy = false;
     }
@@ -386,6 +386,7 @@
     penalty: '🚜 Pénalité anti-farm en cours : pas de ticket pour l\'instant.',
     limit: '✅ Tu as joué tous tes tickets du jour. Reviens demain !',
     balance: '💸 Pas assez de JP$ pour un ticket.',
+    error: '⚠️ Souci technique : ton ticket a été remboursé, réessaie.',
   };
 
   function applyState(data, { keepTicket = false } = {}) {
