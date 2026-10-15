@@ -160,7 +160,7 @@ const at = (iso) => { NOW = RealDate.parse(iso); };
   credits.setBalance('UA', 200);
   credits.setBalance('UB', 200);
   credits.setBalance('UC', 200);
-  const buy = (u) => find('buy_booster_octobre_rose')({ ack, body: { user: { id: u } }, action: { value: 'octobre_rose' }, client: fakeClient, logger });
+  const buy = (u) => find('buy_booster_octobre_rose')({ ack, body: { user: { id: u }, view: { type: 'home' } }, action: { value: 'octobre_rose' }, client: fakeClient, logger });
   await buy('UA');
   check(posted.at(-1).text.includes('acheté') && credits.getBalance('UA') === 135, 'UA achète (200 → 135)');
   check(boosters.stockLeft(rose) === 1, 'stock 1/2');
@@ -244,8 +244,8 @@ const at = (iso) => { NOW = RealDate.parse(iso); };
   at('2026-10-12T09:00:00Z');
 
   // ── Accueil ──
-  const home = JSON.stringify(published.at(-1) || {});
-  check(/Octobre Rose \((65|80)\)/.test(home), 'onglet Accueil : bouton Octobre Rose');
+  const home = JSON.stringify(req('home.js').buildHomeView('U_HOME', { isAdmin: false, attackPrice: 50, creditsPerJeanpipLabel: '0,5', targetEmoji: 'jeanpip', farmRemainingMs: 0, farmQuota: { used: 0, max: 10, nextFreeMs: 0 }, formatRemaining: String }));
+  check(/Octobre Rose \((65|80)\)/.test(home), 'onglet Accueil : bouton Octobre Rose (stock du jour arrivé, pas épuisé)');
 
   // ── Classeur ──
   const roseCard = octobreRose.ROSE_CARDS[2];

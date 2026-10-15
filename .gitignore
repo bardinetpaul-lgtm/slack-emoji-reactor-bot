@@ -30,6 +30,7 @@ data/weekly-gift.json
 data/farm.json
 data/arena.json
 data/bugs.json
+data/booster-bans.json
 data/web-secret
 data/card-cache/
 data/card-looks.json

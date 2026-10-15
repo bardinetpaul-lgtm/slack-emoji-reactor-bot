@@ -59,5 +59,33 @@ const tomorrow = Date.parse('2026-10-13T07:00:00Z');
 const next = burst('U1', tomorrow, 5);
 check('le lendemain : compteur remis à zéro (1re rafale = 2 min)', next.action === 'lock' && next.minutes === 2);
 
+// 🤖 v3.2 : clic automatique = 6 clics d'affilée à intervalles identiques (±0,125 s)
+/** Clics aux décalages `offsets` (s) après `start` → verdicts. */
+const series = (user, start, offsets) => offsets.map((o) => spam.click(user, start + Math.round(o * 1000)));
+
+// Cas réel du 15/10 (U02URAGLMHT) : un clic toutes les ~6,0 s, relevé dans les logs
+const real = [0, 5.978, 11.998, 18.023, 23.978, 29.968];
+let v = series('UBOT', Date.parse('2026-10-15T07:32:50.980Z'), real);
+check('5 premiers clics réguliers : traités normalement', v.slice(0, 5).every((x) => x.action === 'process'));
+check('6e clic à 6,0 s d\'écart : clic automatique → bloqué 2 min', v[5].action === 'lock' && v[5].reason === 'bot' && v[5].minutes === 2);
+check('… avec les 5 écarts pour l\'alerte admin', Array.isArray(v[5].gaps) && v[5].gaps.length === 5 && v[5].gaps.every((g) => Math.abs(g - 6000) < 100));
+
+// Un humain qui clique en boucle : écarts irréguliers (relevés le 15/10 avant le script)
+v = series('UHUM', Date.parse('2026-10-15T07:21:33Z'), [0, 19.1, 39.6, 62.4, 103.7, 142.4, 160.9, 189, 221.8]);
+check('humain qui clique en boucle (18 à 41 s d\'écart) : jamais pris pour un bot', v.every((x) => x.action === 'process'));
+v = series('UHUM2', Date.parse('2026-10-15T07:30:00Z'), [0, 4.1, 8.4, 12.2, 16.9, 20.8, 25.3, 29.1]);
+check('humain rapide et appliqué (~4 s, ±0,5 s) : jamais pris pour un bot', v.every((x) => x.action !== 'lock'));
+v = series('UFAST', Date.parse('2026-10-15T07:30:00Z'), [0, 1.5, 3.0, 4.5, 6.0, 7.5]);
+check('rythme trop rapide pour la règle de cadence (1,5 s) : ce n\'est pas elle qui sanctionne', v.every((x) => x.reason !== 'bot'));
+v = series('USLOW', Date.parse('2026-10-15T07:00:00Z'), [0, 70, 140, 210, 280, 350]);
+check('clics à 70 s pile : hors règle (une personne qui repasse de temps en temps)', v.every((x) => x.action === 'process'));
+
+// Un bot qui ralentit après le blocage est repris : la série repart de zéro
+const after = spam.lockedUntil('UBOT', Date.parse('2026-10-15T07:34:00Z'));
+v = series('UBOT', after + S, [0, 6, 12, 18, 24, 30]);
+check('récidive du bot après le blocage : 5 min', v[5].action === 'lock' && v[5].reason === 'bot' && v[5].minutes === 5);
+v = series('UBOT', v[5].until - 2 * MIN, [0, 6, 12, 18, 24, 30]);
+check('pendant le blocage suivant : clics ignorés, pas de nouvelle série', v.every((x) => x.action === 'ignore'));
+
 console.log(failures ? `\n❌ ${failures} échec(s)` : '\n✅ Tout est bon');
 process.exit(failures ? 1 : 0);

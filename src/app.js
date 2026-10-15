@@ -22,6 +22,8 @@ const { createAdminActions, formatCredits, AUTHOR_REWARDS } = require('./admin')
 const settings = require('./settings');
 const farm = require('./farm');
 const boosterSpam = require('./boosterSpam');
+const boosterBans = require('./boosterBans');
+const octobreRose = require('./octobreRose');
 const weeklyGift = require('./weeklyGift');
 const { SPAM_CARDS } = require('./spamCards');
 const looks = require('./game/looks');
@@ -360,6 +362,20 @@ async function refreshHome(client, userId, logger) {
 function refreshHomeIfSeen(client, userId, logger) {
   if (userId && homeViewers.has(userId)) return refreshHome(client, userId, logger);
   return Promise.resolve();
+}
+
+/**
+ * 🙈 v3.2 : republie TOUS les Accueils ouverts (+ `alsoUserId`), en parallèle et
+ * dans un ordre mélangé : à l'arrivée du stock Octobre Rose, personne ne voit le
+ * bouton d'achat avant les autres parce qu'il est en tête de liste.
+ */
+async function refreshAllHomes(client, logger, alsoUserId = null) {
+  const users = [...new Set([...homeViewers, ...(alsoUserId ? [alsoUserId] : [])])];
+  for (let i = users.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [users[i], users[j]] = [users[j], users[i]];
+  }
+  await Promise.all(users.map((u) => refreshHome(client, u, logger)));
 }
 
 // ─────────────────────────────────────────────
@@ -1039,7 +1055,11 @@ app.command('/jeanpip-booster', async ({ command, ack, client, logger }) => {
   try {
     const balance = credits.getBalance(userId);
 
-    const buttons = boosters.listBoosters().map((b) => ({
+    // 🙈 v3.2 : pas de booster à stock (Octobre Rose) ici : un DM reste cliquable des
+    //    jours entiers, son bouton n'apparaît que dans l'Accueil, quand il est achetable.
+    const shop = boosters.listBoosters().filter((b) => !b.dailyStock);
+    const seasonal = boosters.listBoosters().find((b) => b.dailyStock);
+    const buttons = shop.map((b) => ({
       type: 'button',
       text: { type: 'plain_text', text: boosters.buttonLabel(b) },
       action_id: `buy_booster_${b.type}`,
@@ -1058,7 +1078,8 @@ app.command('/jeanpip-booster', async ({ command, ack, client, logger }) => {
           },
         },
         { type: 'actions', elements: buttons },
-        { type: 'context', elements: [{ type: 'mrkdwn', text: boosters.listBoosters().map((b) => `${b.emoji} ${b.label} · ${b.price} JP$${b.dailyStock ? ` · ${b.dailyStock}/jour pour tout le monde${b.dailyPerUser ? `, ${b.dailyPerUser} par personne` : ''}${boosters.stockLeft(b) === 0 ? ` (épuisé aujourd'hui, retour demain entre 9h et 10h)` : ''}` : ''}`).join('   ') }] },
+        { type: 'context', elements: [{ type: 'mrkdwn', text: shop.map((b) => `${b.emoji} ${b.label} · ${b.price} JP$`).join('   ') }] },
+        ...(seasonal ? [{ type: 'context', elements: [{ type: 'mrkdwn', text: `${seasonal.emoji} *Booster ${seasonal.label}* (${seasonal.price} JP$) : uniquement dans l'onglet *Accueil* du bot. Son bouton y apparaît à l'arrivée des boosters du jour, ${octobreRose.DROP_WINDOW.text}.` }] }] : []),
       ],
     }, logger);
     logger.info(`🎁 /jeanpip-booster : boutique envoyée à <@${userId}> (solde ${balance})`);
@@ -1075,6 +1096,88 @@ const parisClock = new Intl.DateTimeFormat('fr-FR', { timeZone: 'Europe/Paris', 
 /** Heure de Paris « 9h42 ». */
 const parisTime = (ms) => parisClock.format(new Date(ms)).replace(':', 'h');
 
+/**
+ * 📨 DM « booster prêt à ouvrir » (achat ou cadeau admin) : boutons d'ouverture
+ * Slack / animée. `headline` = 1re ligne en mrkdwn. Mémorise le message (ouverture web).
+ */
+async function sendBoosterDM(client, userId, id, booster, headline) {
+  // 🎬 Ouverture animée (page web, bureaux uniquement) si configurée,
+  //    sinon seulement l'ouverture dans Slack.
+  const openUrl = web.buildOpenUrl(id, userId);
+  const openButtons = [];
+  if (openUrl) {
+    openButtons.push({
+      type: 'button',
+      style: 'primary',
+      text: { type: 'plain_text', text: '🎬 Ouverture animée' },
+      action_id: 'open_booster_web',
+      url: openUrl,
+    });
+  }
+  openButtons.push({
+    type: 'button',
+    ...(openUrl ? {} : { style: 'primary' }),
+    text: { type: 'plain_text', text: openUrl ? '💬 Ouvrir dans Slack' : '🎁 Ouvrir le booster' },
+    action_id: 'open_booster',
+    value: id,
+  });
+
+  const blocks = [
+    {
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: `${headline}\n\nClique pour révéler tes 8 cartes 👇`,
+      },
+    },
+    { type: 'actions', elements: openButtons },
+  ];
+  if (openUrl) {
+    blocks.push({
+      type: 'context',
+      elements: [{ type: 'mrkdwn', text: "🎬 _L'ouverture animée ne marche que depuis le bureau de Lorient ou d'Asnières. En télétravail, ouvre-le dans Slack._" }],
+    });
+  }
+
+  const sent = await sendDM(client, userId, { text: plain(headline), blocks });
+  boosters.setMessageRef(id, sent.channel, sent.ts);
+}
+
+// 🙈 v3.2 : le bouton du booster à stock est caché tant que le stock du jour n'est
+//    pas arrivé. Vérifié toutes les 2 s ; à l'arrivée, tous les Accueils ouverts
+//    sont republiés d'un coup. Au démarrage, la journée en cours compte comme vue.
+const BOOSTER_DROP_CHECK_MS = 2000;
+let lastDropDay = (() => {
+  const now = Date.now();
+  const seasonal = boosters.listBoosters(now).find((b) => b.dailyStock);
+  return seasonal && octobreRose.hasDropped(now) ? octobreRose.parisDay(now) : null;
+})();
+
+async function checkBoosterDrop(client, logger) {
+  const now = Date.now();
+  const day = octobreRose.parisDay(now);
+  if (lastDropDay === day || !octobreRose.hasDropped(now)) return;
+  lastDropDay = day;
+  const seasonal = boosters.listBoosters(now).find((b) => b.dailyStock);
+  const block = seasonal ? boosters.purchaseBlock(seasonal, now) : 'closed';
+  if (block === 'closed' || block === 'weekend') return;
+  logger.info(`🎀 Stock du jour arrivé (${seasonal.label}) : ${homeViewers.size} Accueil(s) republié(s)`);
+  await refreshAllHomes(client, logger);
+}
+
+/** 🤖 v3.2 : DM aux admins quand l'anti-spam repère des clics automatiques. */
+function alertAdminsAutoClick(client, userId, booster, verdict, logger) {
+  const gaps = verdict.gaps.map((g) => `${(g / 1000).toFixed(2)} s`).join(' · ');
+  const text = `🤖 *Clics automatiques détectés* : <@${userId}> sur le Booster ${booster.emoji} ${booster.label}.\n\n`
+    + `Écarts entre ses ${verdict.gaps.length + 1} derniers clics : ${gaps}\n`
+    + `Bouton bloqué *${verdict.minutes} min* (jusqu'à ${parisTime(verdict.until)}).\n\n`
+    + `_Pour aller plus loin : panneau 👑 Admin → 🚫 Sanction booster._`;
+  for (const adminId of JEANPIP_ADMINS) {
+    safeSendDM(client, adminId, { text: plain(text), blocks: [{ type: 'section', text: { type: 'mrkdwn', text } }] }, logger)
+      .catch((e) => logger.error('❌ Alerte admin clics automatiques :', e.message));
+  }
+}
+
 app.action(/^buy_booster_/, async ({ ack, body, action, client, logger }) => {
   await ack();
 
@@ -1088,22 +1191,41 @@ app.action(/^buy_booster_/, async ({ ack, body, action, client, logger }) => {
       return;
     }
 
+    // 🙈 v3.2 : booster à stock = depuis l'Accueil seulement (un vieux DM boutique
+    //    garde son bouton, toujours cliquable, même quand l'Accueil le cache)
+    if (booster.dailyStock && !(body.view && body.view.type === 'home')) {
+      const text = `${booster.emoji} *Le Booster ${booster.label} s'achète uniquement depuis l'onglet Accueil du bot.* Son bouton y apparaît à l'arrivée des boosters du jour, ${octobreRose.DROP_WINDOW.text}.`;
+      sendDM(client, userId, { text: plain(text), blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `${text}\n\n_Aucun JP$ n'a été débité._` } }] })
+        .catch((e) => logger.error('❌ DM booster hors Accueil :', e.message));
+      logger.info(`🚫 Achat refusé (hors Accueil) : <@${userId}> ${type}`);
+      return;
+    }
+
     // 🚦 v3.0.3 : booster à stock du jour (Octobre Rose) → anti-spam (src/boosterSpam.js) :
     //    un clic traité toutes les 3 s ; une rafale bloque le bouton 2 min, puis 5, 10…
     if (booster.dailyStock) {
       const verdict = boosterSpam.click(userId, Date.now());
+      // 🔎 v3.2 : chaque clic est gardé en base (les logs systemd tournent en quelques jours)
+      const block = verdict.action === 'process' ? boosters.purchaseBlock(booster, Date.now(), userId) : null;
+      events.record('booster_click', userId, { boosterType: type, verdict: verdict.action, reason: verdict.reason || block || null });
       if (verdict.action === 'ignore') {
         logger.info(`🚦 Clic booster ${type} ignoré (${verdict.reason}) : <@${userId}>`);
         return;
       }
       if (verdict.action === 'lock') {
         const until = parisTime(verdict.until);
-        const text = `🚫 Clics en rafale sur le Booster ${booster.label} : ton bouton est bloqué ${verdict.minutes} min.`;
-        logger.warn(`🚦 SPAM booster ${type} : <@${userId}> bloqué ${verdict.minutes} min (jusqu'à ${until})`);
+        const bot = verdict.reason === 'bot';
+        const text = bot
+          ? `🤖 Clics automatiques détectés sur le Booster ${booster.label} : ton bouton est bloqué ${verdict.minutes} min.`
+          : `🚫 Clics en rafale sur le Booster ${booster.label} : ton bouton est bloqué ${verdict.minutes} min.`;
+        logger.warn(`🚦 ${bot ? 'CLIC AUTOMATIQUE' : 'SPAM'} booster ${type} : <@${userId}> bloqué ${verdict.minutes} min (jusqu'à ${until})${bot ? ` · écarts ${verdict.gaps.map((g) => (g / 1000).toFixed(2)).join(' / ')} s` : ''}`);
         sendDM(client, userId, {
           text,
-          blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `🚫 *Doucement !* Tu as cliqué en rafale sur le Booster ${booster.emoji} ${booster.label}.\n\nTon bouton est *bloqué ${verdict.minutes} min*, jusqu'à *${until}*. Si tu recommences, ce sera *${verdict.nextMinutes} min*, et ainsi de suite.\n\n_Un seul clic suffit : le premier arrivé est servi. Aucun JP$ n'a été débité._` } }],
+          blocks: [{ type: 'section', text: { type: 'mrkdwn', text: bot
+            ? `🤖 *Clics automatiques détectés* sur le Booster ${booster.emoji} ${booster.label} : tes clics arrivent à intervalles parfaitement réguliers, ce qu'une main ne fait pas.\n\nTon bouton est *bloqué ${verdict.minutes} min*, jusqu'à *${until}*, et les admins sont prévenus. Les auto-clickers et scripts sont interdits : ils peuvent coûter une interdiction de booster.\n\n_Aucun JP$ n'a été débité._`
+            : `🚫 *Doucement !* Tu as cliqué en rafale sur le Booster ${booster.emoji} ${booster.label}.\n\nTon bouton est *bloqué ${verdict.minutes} min*, jusqu'à *${until}*. Si tu recommences, ce sera *${verdict.nextMinutes} min*, et ainsi de suite.\n\n_Un seul clic suffit : le premier arrivé est servi. Aucun JP$ n'a été débité._` } }],
         }).catch((e) => logger.error('❌ DM anti-spam booster :', e.message));
+        if (bot) alertAdminsAutoClick(client, userId, booster, verdict, logger);
         refreshHomeIfSeen(client, userId, logger);
         // ⏰ À la fin du blocage, l'Accueil réaffiche le bouton
         const timer = setTimeout(() => refreshHomeIfSeen(client, userId, logger), verdict.until - Date.now() + 1000);
@@ -1118,7 +1240,10 @@ app.action(/^buy_booster_/, async ({ ack, body, action, client, logger }) => {
     //    simultanés ne peuvent pas dépasser le stock.
     const blocked = boosters.purchaseBlock(booster, Date.now(), userId);
     if (blocked) {
-      const why = blocked === 'weekend'
+      const ban = blocked === 'banned' ? boosterBans.activeBan(userId, booster.type) : null;
+      const why = ban
+        ? `🚫 *Tu ne peux pas acheter de Booster ${booster.emoji} ${booster.label} jusqu'au ${home.banEndText(ban.until)}* (sanction d'un admin${ban.reason ? ` : ${ban.reason}` : ''}).`
+        : blocked === 'weekend'
         ? `🏖️ *Pas de Booster ${booster.emoji} ${booster.label} le week-end !* ${boosters.restockText()}`
         : blocked === 'user_limit'
         ? `🎀 *Tu as déjà eu ton Booster ${booster.emoji} ${booster.label} aujourd'hui !* C'est ${booster.dailyPerUser} par personne et par jour, pour en laisser aux autres. Reviens ${boosters.restockText().includes('lundi') ? 'lundi' : 'demain'} 😉`
@@ -1163,51 +1288,11 @@ _Aucun JP$ n'a été débité._` } }] })
     events.record('booster_bought', userId, { boosterId: id, boosterType: type, price: booster.price }, { dedup: `booster_created:${id}` });
     const balance = credits.getBalance(userId);
 
-    // 🎬 Ouverture animée (page web, bureaux uniquement) si configurée,
-    //    sinon seulement l'ouverture dans Slack.
-    const openUrl = web.buildOpenUrl(id, userId);
-    const openButtons = [];
-    if (openUrl) {
-      openButtons.push({
-        type: 'button',
-        style: 'primary',
-        text: { type: 'plain_text', text: '🎬 Ouverture animée' },
-        action_id: 'open_booster_web',
-        url: openUrl,
-      });
-    }
-    openButtons.push({
-      type: 'button',
-      ...(openUrl ? {} : { style: 'primary' }),
-      text: { type: 'plain_text', text: openUrl ? '💬 Ouvrir dans Slack' : '🎁 Ouvrir le booster' },
-      action_id: 'open_booster',
-      value: id,
-    });
-
-    const blocks = [
-      {
-        type: 'section',
-        text: {
-          type: 'mrkdwn',
-          text: `${booster.emoji} *Booster ${booster.label} acheté !* 🎉\n\n💰 Nouveau solde : *${balance}* JP$\n\nClique pour révéler tes 8 cartes 👇`,
-        },
-      },
-      { type: 'actions', elements: openButtons },
-    ];
-    if (openUrl) {
-      blocks.push({
-        type: 'context',
-        elements: [{ type: 'mrkdwn', text: "🎬 _L'ouverture animée ne marche que depuis le bureau de Lorient ou d'Asnières. En télétravail, ouvre-le dans Slack._" }],
-      });
-    }
-
-    const sent = await sendDM(client, userId, {
-      text: `${booster.emoji} Booster ${booster.label} acheté !`,
-      blocks,
-    });
-    boosters.setMessageRef(id, sent.channel, sent.ts);
+    await sendBoosterDM(client, userId, id, booster, `${booster.emoji} *Booster ${booster.label} acheté !* 🎉\n\n💰 Nouveau solde : *${balance}* JP$`);
     logger.info(`🛒 <@${userId}> a acheté un booster ${booster.type} (id ${id}, solde ${balance})`);
-    await refreshHome(client, userId, logger);
+    // 🙈 v3.2 : dernier booster du jour parti → les Accueils ouverts perdent le bouton
+    if (booster.dailyStock && boosters.stockLeft(booster) === 0) await refreshAllHomes(client, logger, userId);
+    else await refreshHome(client, userId, logger);
   } catch (error) {
     logger.error('❌ Erreur dans buy_booster:', error);
   }
@@ -1625,6 +1710,8 @@ const ADMIN_MODALS = {
   admin_credits_open: home.buildCreditsModal,
   admin_addmedia_open: home.buildAddMediaModal,
   admin_give_card_open: home.buildGiveCardModal,
+  admin_give_booster_open: home.buildGiveBoosterModal,
+  admin_booster_ban_open: home.buildBoosterBanModal,
   admin_card_type_open: home.buildCardTypeModal,
   admin_removemedia_open: home.buildRemoveMediaModal,
   admin_target_add_open: home.buildAddTargetModal,
@@ -1769,6 +1856,80 @@ app.view('admin_give_card_submit', async ({ ack, body, view, client, logger }) =
     await sendAdminResult(client, adminId, { text: `🃏 *Carte donnée à <@${targetId}>*\n${what} (${RARITIES[rarity].label}) — la personne en possède maintenant *${total}* et a été notifiée.` }, logger);
   } catch (error) {
     logger.error('❌ Erreur dans admin_give_card_submit:', error);
+  }
+});
+
+// 🎁 Modale « Offrir un booster » (v3.2) : hors stock du jour, hors limite par personne, rien débité
+app.view('admin_give_booster_submit', async ({ ack, body, view, client, logger }) => {
+  const adminId = body.user.id;
+  if (!isAdminUser(adminId, logger, 'admin_give_booster_submit')) return ack(fieldError('user', 'Réservé aux admins.'));
+
+  const values = view.state.values;
+  const targetId = values.user.value.selected_user;
+  const type = values.booster.value.selected_option && values.booster.value.selected_option.value;
+  const count = Number(values.count.value.value);
+  const booster = boosters.getBooster(type);
+  if (!targetId) return ack(fieldError('user', 'Choisis une personne.'));
+  if (await isBot(client, targetId)) return ack(fieldError('user', 'Impossible d\'offrir un booster à un bot.'));
+  if (!booster) return ack(fieldError('booster', 'Choisis un booster.'));
+  if (!Number.isInteger(count) || count < 1 || count > home.GIVE_BOOSTER_MAX) return ack(fieldError('count', `Entre 1 et ${home.GIVE_BOOSTER_MAX} boosters.`));
+  await ack();
+
+  try {
+    const what = `${booster.emoji} Booster ${booster.label}`;
+    for (let i = 0; i < count; i += 1) {
+      const id = boosters.createPending(targetId, type, { granted: true });
+      events.record('booster_granted', targetId, { boosterId: id, boosterType: type, reason: 'admin', by: adminId }, { dedup: `booster_created:${id}` });
+      await sendBoosterDM(client, targetId, id, booster, `🎁 *Un admin t'offre un ${what} !*${count > 1 ? ` (${i + 1}/${count})` : ''}`);
+    }
+    logger.info(`🎁 <@${adminId}> a offert ${count} booster(s) ${type} à <@${targetId}>`);
+    await sendAdminResult(client, adminId, { text: `🎁 *${count > 1 ? `${count} ${what}` : what} offert${count > 1 ? 's' : ''} à <@${targetId}>*\nLa personne les trouve dans ses Messages, prêts à ouvrir. Rien n'a été débité${booster.dailyStock ? ', et le stock du jour n\'est pas touché' : ''}.` }, logger);
+    await refreshHomeIfSeen(client, targetId, logger);
+  } catch (error) {
+    logger.error('❌ Erreur dans admin_give_booster_submit:', error);
+  }
+});
+
+// 🚫 Modale « Sanction booster » (v3.2) : interdire un booster N jours (0 = lever)
+app.view('admin_booster_ban_submit', async ({ ack, body, view, client, logger }) => {
+  const adminId = body.user.id;
+  if (!isAdminUser(adminId, logger, 'admin_booster_ban_submit')) return ack(fieldError('user', 'Réservé aux admins.'));
+
+  const values = view.state.values;
+  const targetId = values.user.value.selected_user;
+  const type = values.booster.value.selected_option && values.booster.value.selected_option.value;
+  const days = Number(values.days.value.value);
+  const reason = ((values.reason && values.reason.value.value) || '').trim();
+  const notify = ((values.notify && values.notify.value.selected_options) || []).some((o) => o.value === 'dm');
+  const booster = boosters.getBooster(type);
+  if (!targetId) return ack(fieldError('user', 'Choisis une personne.'));
+  if (!booster) return ack(fieldError('booster', 'Choisis un booster.'));
+  if (!Number.isInteger(days) || days < 0 || days > boosterBans.MAX_DAYS) return ack(fieldError('days', `Entre 0 et ${boosterBans.MAX_DAYS} jours.`));
+  if (days === 0 && !boosterBans.activeBan(targetId, type)) return ack(fieldError('days', 'Aucune sanction en cours sur ce booster pour cette personne.'));
+  await ack();
+
+  try {
+    const what = `${booster.emoji} Booster ${booster.label}`;
+    let adminText;
+    let playerText;
+    if (days === 0) {
+      boosterBans.lift(targetId, type);
+      logger.info(`🚫 <@${adminId}> a levé la sanction ${type} de <@${targetId}>`);
+      adminText = `✅ *Sanction levée* : <@${targetId}> peut de nouveau acheter le ${what}.`;
+      playerText = `✅ *Ta sanction est levée* : tu peux de nouveau acheter le ${what}.`;
+    } else {
+      const ban = boosterBans.ban(targetId, type, days, { by: adminId, reason });
+      const until = home.banEndText(ban.until);
+      logger.info(`🚫 <@${adminId}> a interdit ${type} à <@${targetId}> pendant ${days} j (jusqu'au ${until})${reason ? ` : ${reason}` : ''}`);
+      adminText = `🚫 *Sanction enregistrée* : <@${targetId}> ne peut plus acheter le ${what} jusqu'au *${until}* (${days} jour${days > 1 ? 's' : ''})${reason ? `\nRaison : ${reason}` : ''}\n${notify ? 'La personne a été prévenue par DM.' : '_La personne n\'a pas été prévenue._'}`;
+      playerText = `🚫 *Tu ne peux plus acheter le ${what} jusqu'au ${until}.*${reason ? `\nRaison : ${reason}` : ''}\n\n_Décision d'un admin. Tes boosters déjà en main et ceux gagnés en Arène ne sont pas touchés._`;
+    }
+    if (notify) await safeSendDM(client, targetId, { text: plain(playerText), blocks: [{ type: 'section', text: { type: 'mrkdwn', text: playerText } }] }, logger);
+    await sendAdminResult(client, adminId, { text: adminText }, logger);
+    await refreshHomeIfSeen(client, targetId, logger);
+    await refreshHomeIfSeen(client, adminId, logger);   // liste « Sanctions en cours » du panneau admin
+  } catch (error) {
+    logger.error('❌ Erreur dans admin_booster_ban_submit:', error);
   }
 });
 
@@ -2055,6 +2216,11 @@ function createCardLook(client, media, logger) {
     .catch((error) => console.error('❌ JP$ du vendredi :', error.message));
   weeklyGiftTick();
   setInterval(weeklyGiftTick, 5 * 60 * 1000);
+
+  // 🙈 v3.2 : arrivée du stock du jour → le bouton d'achat apparaît dans tous les Accueils ouverts
+  const dropTick = () => checkBoosterDrop(app.client, console)
+    .catch((error) => console.error('❌ Arrivée du stock :', error.message));
+  setInterval(dropTick, BOOSTER_DROP_CHECK_MS);
 
   // 🚜 Pénalités anti-farm en cours avant le redémarrage → reprogrammer la notif de fin
   for (const { userId, remainingMs } of farm.listPenalties()) {
