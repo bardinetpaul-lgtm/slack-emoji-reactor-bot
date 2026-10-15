@@ -16,6 +16,16 @@
 
 const RELEASES = [
   {
+    version: '3.2.0',
+    date: '2026-10-15',
+    title: 'Octobre Rose sans triche',
+    changes: [
+      '🎀 Booster Octobre Rose : le bouton d\'achat n\'apparaît dans l\'Accueil qu\'à l\'arrivée des boosters du jour (entre 9h et 10h). Il apparaît pour tout le monde en même temps, puis disparaît quand il n\'y en a plus ou quand tu as eu le tien. Plus besoin de cliquer en boucle !',
+      '🎀 Le Booster Octobre Rose s\'achète uniquement depuis l\'onglet Accueil, plus depuis la boutique `/jeanpip-booster`.',
+      '🤖 Les auto-clickers et scripts sont détectés : des clics à intervalles parfaitement réguliers bloquent le bouton, et les admins sont prévenus. Tricher peut coûter une interdiction d\'acheter le booster.',
+    ],
+  },
+  {
     version: '3.1.1',
     date: '2026-10-13',
     title: 'Le suspense du grattage',

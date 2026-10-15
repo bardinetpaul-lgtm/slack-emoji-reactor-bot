@@ -19,6 +19,10 @@ const scratchTickets = require('./scratchTickets');
 const spamLockClock = new Intl.DateTimeFormat('fr-FR', { timeZone: 'Europe/Paris', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
 /** Heure de fin d'un blocage anti-spam, à l'heure de Paris (« 9h42 »). */
 const spamLockTime = (ms) => spamLockClock.format(new Date(ms)).replace(':', 'h');
+const banDayFmt = new Intl.DateTimeFormat('fr-FR', { timeZone: 'Europe/Paris', weekday: 'long', day: 'numeric', month: 'long' });
+/** Fin d'une sanction booster : « jeudi 22 octobre à 9h36 ». */
+const banEndText = (ms) => `${banDayFmt.format(new Date(ms))} à ${spamLockTime(ms)}`;
+const boosterBans = require('./boosterBans');
 const broadcast = require('./broadcast');
 const { RARITIES, getAllMedia, listCustomMedia, mediaNumber } = require('./media');
 const { ARCHETYPES, getCardStats, getOverride } = require('./game/cards');
@@ -125,31 +129,34 @@ function buildHomeView(userId, ctx) {
   blocks.push({ type: 'divider' });
 
   // 🎁 Boosters
-  const seasonal = boosters.listBoosters().find((b) => b.dailyStock);
+  const now = Date.now();
+  const seasonal = boosters.listBoosters(now).find((b) => b.dailyStock);
   // 🚦 v3.0.3 : bouton du booster à stock bloqué après des clics en rafale (src/boosterSpam.js)
-  const spamLock = seasonal ? boosterSpam.lockedUntil(userId) : 0;
+  const spamLock = seasonal ? boosterSpam.lockedUntil(userId, now) : 0;
+  // 🙈 v3.2 : le bouton du booster à stock n'apparaît QUE quand il est achetable
+  //    (stock arrivé, pas épuisé, pas déjà eu le sien, pas bloqué ni sanctionné)
+  const seasonalBlock = seasonal ? boosters.purchaseBlock(seasonal, now, userId) : null;
+  const ban = seasonalBlock === 'banned' ? boosterBans.activeBan(userId, seasonal.type, now) : null;
+  const seasonalStatus = {
+    banned: ban && `🚫 *Booster interdit jusqu'au ${banEndText(ban.until)}* (sanction d'un admin${ban.reason ? ` : ${ban.reason}` : ''}).`,
+    weekend: `🏖️ *Pas de booster le week-end.* ${boosters.restockText(now)}`,
+    user_limit: `✅ *Tu as déjà eu le tien aujourd'hui.* Reviens ${boosters.restockText(now).includes('lundi') ? 'lundi' : 'demain'} 😉`,
+    sold_out: seasonal && `😢 *Épuisé pour aujourd'hui* : les ${seasonal.dailyStock} boosters du jour sont partis. ${boosters.restockText(now)}`,
+    not_yet: `⏳ ${boosters.DROP_TEXT} *Le bouton d'achat apparaîtra ici à leur arrivée.*`,
+  }[seasonalBlock] || '';
   blocks.push(section(`🎁 *Boosters* — 8 cartes chacun, plus il est cher, plus les cartes rares sont probables.${seasonal
     ? `
-${seasonal.emoji} *Booster ${seasonal.label}* : 1 ou 2 cartes exclusives qu'on ne trouve nulle part ailleurs, et 30 % de chances d'une légendaire. Seulement *${seasonal.dailyStock} par jour pour tout le monde*${seasonal.weekdaysOnly ? ', *du lundi au vendredi*' : ''}${seasonal.dailyPerUser ? `, *${seasonal.dailyPerUser} par personne*` : ''} !${boosters.purchaseBlock(seasonal) === 'weekend'
-      ? `
-🏖️ *Pas de booster le week-end.* ${boosters.restockText()}`
-      : seasonal.dailyPerUser && boosters.boughtToday(seasonal, userId) >= seasonal.dailyPerUser
-      ? `
-✅ *Tu as déjà eu le tien aujourd'hui.* Reviens ${boosters.restockText().includes('lundi') ? 'lundi' : 'demain'} 😉`
-      : boosters.stockLeft(seasonal) === 0
-      ? `
-😢 *Épuisé pour aujourd'hui* : les ${seasonal.dailyStock} boosters du jour sont partis. ${boosters.restockText()}`
-      : boosters.purchaseBlock(seasonal) === 'not_yet' ? `
-⏳ ${boosters.DROP_TEXT}` : ''}${spamLock ? `
+${seasonal.emoji} *Booster ${seasonal.label}* : 1 ou 2 cartes exclusives qu'on ne trouve nulle part ailleurs, et 30 % de chances d'une légendaire. Seulement *${seasonal.dailyStock} par jour pour tout le monde*${seasonal.weekdaysOnly ? ', *du lundi au vendredi*' : ''}${seasonal.dailyPerUser ? `, *${seasonal.dailyPerUser} par personne*` : ''} !${seasonalStatus ? `
+${seasonalStatus}` : ''}${spamLock ? `
 🚫 *Bloqué jusqu'à ${spamLockTime(spamLock)}* : tu as cliqué en rafale sur ce booster. Un seul clic suffit 😉` : ''}`
     : ''}`));
   blocks.push({
     type: 'actions',
     block_id: 'home_boosters',
-    elements: boosters.listBoosters().filter((b) => !(spamLock && b.type === seasonal.type)).map((b) => button(
-      boosters.buttonLabel(b),
+    elements: boosters.listBoosters(now).filter((b) => !(seasonal && b.type === seasonal.type && (seasonalBlock || spamLock))).map((b) => button(
+      boosters.buttonLabel(b, now),
       `buy_booster_${b.type}`,
-      { value: b.type, ...(balance >= b.price && !boosters.purchaseBlock(b, Date.now(), userId) ? { style: 'primary' } : {}) },
+      { value: b.type, ...(balance >= b.price && !boosters.purchaseBlock(b, now, userId) ? { style: 'primary' } : {}) },
     )),
   });
   blocks.push({
@@ -267,6 +274,8 @@ function buildAdminBlocks(autoTargets, statsUrl = null) {
         button('💳 JP$ ±', 'admin_credits_open'),
         button('🖼️ Ajouter un média', 'admin_addmedia_open'),
         button('🃏 Donner une carte', 'admin_give_card_open'),
+        button('🎁 Offrir un booster', 'admin_give_booster_open'),
+        button('🚫 Sanction booster', 'admin_booster_ban_open'),
         button('⚔️ Type de carte', 'admin_card_type_open'),
         button('🗑️ Retirer un média', 'admin_removemedia_open'),
         button('🎪 Ajouter une cible', 'admin_target_add_open'),
@@ -276,8 +285,17 @@ function buildAdminBlocks(autoTargets, statsUrl = null) {
       ],
     },
     { type: 'context', elements: [{ type: 'mrkdwn', text: `⚙️ Réglages actuels : *1 Jeanpip envoyé = ${formatCredits(settings.getCreditsPerJeanpip())} JP$* · 🚜 *anti-farm : ${settings.getFarmMaxPerHour()} Jeanpips/h max*` }] },
-    section(`🎪 *Cibles auto-react (${autoTargets.length})*${autoTargets.length ? '' : '\n_Aucune cible auto-react configurée._'}`),
   ];
+
+  // 🚫 v3.2 : sanctions boosters en cours
+  const bans = boosterBans.listActive();
+  if (bans.length) {
+    blocks.push(section(`🚫 *Sanctions boosters en cours (${bans.length})*\n${bans.map((b) => {
+      const def = boosters.BOOSTERS[b.type];
+      return `• <@${b.userId}> : ${def ? `${def.emoji} ${def.label}` : b.type} jusqu'au ${banEndText(b.until)}${b.reason ? ` _(${b.reason})_` : ''}`;
+    }).join('\n')}\n_Pour lever une sanction : 🚫 Sanction booster avec 0 jour._`));
+  }
+  blocks.push(section(`🎪 *Cibles auto-react (${autoTargets.length})*${autoTargets.length ? '' : '\n_Aucune cible auto-react configurée._'}`));
 
   for (const t of autoTargets.slice(0, MAX_TARGETS_SHOWN)) {
     blocks.push(t.fixed
@@ -566,6 +584,71 @@ function buildGiveCardModal() {
   ]);
 }
 
+const GIVE_BOOSTER_MAX = 5;
+
+/** Menu « Booster » des modales admin (tous les types du catalogue, saisonnier compris). */
+function boosterSelect(initialType = null) {
+  const options = Object.values(boosters.BOOSTERS).map((b) => ({
+    text: { type: 'plain_text', text: `${b.emoji} ${b.label}`, emoji: true },
+    value: b.type,
+  }));
+  const initial = options.find((o) => o.value === initialType);
+  return {
+    type: 'input',
+    block_id: 'booster',
+    label: { type: 'plain_text', text: 'Booster' },
+    element: { type: 'static_select', action_id: 'value', placeholder: { type: 'plain_text', text: 'Choisis un booster' }, options, ...(initial ? { initial_option: initial } : {}) },
+  };
+}
+
+/** 🎁 Modale « Offrir un booster » (v3.2) : hors stock du jour et hors limite par personne. */
+function buildGiveBoosterModal() {
+  return modal('admin_give_booster_submit', 'Offrir un booster', '🎁 Offrir', [
+    section('🎁 *Offrir un booster* — il arrive dans les Messages de la personne, prêt à ouvrir. Rien n\'est débité.'),
+    userInput('À qui ?'),
+    boosterSelect(),
+    {
+      type: 'input',
+      block_id: 'count',
+      label: { type: 'plain_text', text: 'Combien ?' },
+      element: { type: 'number_input', action_id: 'value', is_decimal_allowed: false, min_value: '1', max_value: String(GIVE_BOOSTER_MAX), initial_value: '1' },
+    },
+    { type: 'context', elements: [{ type: 'mrkdwn', text: '_Un Octobre Rose offert ne prend pas de place dans le stock du jour et ne compte pas dans la limite d\'un par personne. Ça marche aussi hors saison et le week-end._' }] },
+  ]);
+}
+
+const NOTIFY_OPTION = { text: { type: 'plain_text', text: 'Prévenir la personne par DM' }, value: 'dm' };
+
+/** 🚫 Modale « Sanction booster » (v3.2) : interdit d'acheter un booster pendant N jours (0 = lever). */
+function buildBoosterBanModal() {
+  return modal('admin_booster_ban_submit', 'Sanction booster', 'Valider', [
+    section('🚫 *Interdire un booster à un joueur* — le bouton disparaît de son Accueil et ses clics sont refusés. Ses boosters déjà en main et ceux gagnés en Arène ne sont pas touchés.'),
+    userInput('Qui ?'),
+    boosterSelect('octobre_rose'),
+    {
+      type: 'input',
+      block_id: 'days',
+      label: { type: 'plain_text', text: 'Durée (jours)' },
+      element: { type: 'number_input', action_id: 'value', is_decimal_allowed: false, min_value: '0', max_value: String(boosterBans.MAX_DAYS), initial_value: '7' },
+      hint: { type: 'plain_text', text: 'À partir de maintenant. 0 = lever la sanction en cours.' },
+    },
+    {
+      type: 'input',
+      block_id: 'reason',
+      optional: true,
+      label: { type: 'plain_text', text: 'Raison (montrée au joueur)' },
+      element: { type: 'plain_text_input', action_id: 'value', max_length: 150, placeholder: { type: 'plain_text', text: 'ex. clics automatiques' } },
+    },
+    {
+      type: 'input',
+      block_id: 'notify',
+      optional: true,
+      label: { type: 'plain_text', text: 'Prévenir' },
+      element: { type: 'checkboxes', action_id: 'value', options: [NOTIFY_OPTION], initial_options: [NOTIFY_OPTION] },
+    },
+  ]);
+}
+
 /** Retrouve la carte choisie dans la modale (URL, ou « #rang »). */
 function cardFromValue(value) {
   const all = getAllMedia();
@@ -710,6 +793,10 @@ module.exports = {
   buildCardTypeModal,
   buildGiveCardModal,
   GIVE_CARD_MAX,
+  buildGiveBoosterModal,
+  GIVE_BOOSTER_MAX,
+  buildBoosterBanModal,
+  banEndText,
   cardFromValue,
   attackMode,
 };

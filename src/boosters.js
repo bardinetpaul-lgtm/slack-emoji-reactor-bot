@@ -16,7 +16,7 @@
 //  (avec price + slots) suffit à créer un nouveau type de booster.
 //
 //  DB des boosters en attente = data/boosters.json
-//    { boosters: { <id>: { owner, type, opened, createdAt,
+//    { boosters: { <id>: { owner, type, opened, createdAt, granted?,
 //        openedAt?, openedVia? ('slack'|'web'), cards?, counts?,
 //        message?: { channel, ts } } } }
 // ═══════════════════════════════════════════════════════════
@@ -26,6 +26,7 @@ const { readJson, writeJsonAtomic } = require('./storage');
 
 const { drawCardOfRarity } = require('./media');
 const octobreRose = require('./octobreRose');
+const boosterBans = require('./boosterBans');
 
 // ─────────────────────────────────────────────
 // 🎨 Helpers de construction du catalogue
@@ -171,6 +172,9 @@ function isOnSale(booster, now = Date.now()) {
   return octobreRose.inSeason(now) && octobreRose.isReady();
 }
 
+/** Acheté aujourd'hui (Paris) : les boosters offerts (`granted`, v3.2) ne prennent pas de place. */
+const boughtOn = (b, type, today) => b.type === type && !b.granted && b.createdAt && octobreRose.parisDay(b.createdAt) === today;
+
 /**
  * Boosters encore disponibles aujourd'hui (stock partagé par tous),
  * ou null si le booster n'a pas de stock quotidien.
@@ -179,27 +183,26 @@ function stockLeft(booster, now = Date.now()) {
   booster = rulesOf(booster, now);
   if (!booster.dailyStock) return null;
   const today = octobreRose.parisDay(now);
-  const sold = Object.values(loadStore().boosters)
-    .filter((b) => b.type === booster.type && b.createdAt && octobreRose.parisDay(b.createdAt) === today).length;
+  const sold = Object.values(loadStore().boosters).filter((b) => boughtOn(b, booster.type, today)).length;
   return Math.max(0, booster.dailyStock - sold);
 }
 
 /** Boosters de ce type déjà achetés aujourd'hui (jour de Paris) par ce joueur. */
 function boughtToday(booster, userId, now = Date.now()) {
   const today = octobreRose.parisDay(now);
-  return Object.values(loadStore().boosters)
-    .filter((b) => b.type === booster.type && b.owner === userId && b.createdAt && octobreRose.parisDay(b.createdAt) === today).length;
+  return Object.values(loadStore().boosters).filter((b) => b.owner === userId && boughtOn(b, booster.type, today)).length;
 }
 
 /**
  * Raison pour laquelle on ne peut pas acheter ce booster maintenant
- * ('closed' | 'weekend' | 'not_yet' | 'user_limit' | 'sold_out'), ou null. À appeler JUSTE avant
+ * ('closed' | 'banned' | 'weekend' | 'not_yet' | 'user_limit' | 'sold_out'), ou null. À appeler JUSTE avant
  * spend() + createPending(), sans await entre les deux (Node mono-thread).
- * userId : applique aussi la limite par personne (dailyPerUser).
+ * userId : applique aussi la sanction admin (src/boosterBans.js) et la limite par personne (dailyPerUser).
  */
 function purchaseBlock(booster, now = Date.now(), userId = null) {
   booster = rulesOf(booster, now);
   if (!isOnSale(booster, now)) return 'closed';
+  if (userId && boosterBans.activeBan(userId, booster.type, now)) return 'banned';
   if (booster.weekdaysOnly && isWeekend(now)) return 'weekend';
   if (booster.dailyStock && !octobreRose.hasDropped(now)) return 'not_yet';
   if (userId && booster.dailyPerUser && boughtToday(booster, userId, now) >= booster.dailyPerUser) return 'user_limit';
@@ -300,9 +303,10 @@ function generateId() {
 
 /**
  * Enregistre un booster acheté (pas encore ouvert).
+ * `granted` : offert par un admin (v3.2) → hors stock du jour et hors limite par personne.
  * Retourne l'id du booster (à mettre dans le bouton « Ouvrir »).
  */
-function createPending(userId, type) {
+function createPending(userId, type, { granted = false } = {}) {
   const data = loadStore();
   const id = generateId();
   data.boosters[id] = {
@@ -310,6 +314,7 @@ function createPending(userId, type) {
     type,
     opened: false,
     createdAt: new Date().toISOString(),
+    ...(granted ? { granted: true } : {}),
   };
   saveStore(data);
   return id;
