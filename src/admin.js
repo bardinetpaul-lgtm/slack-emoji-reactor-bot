@@ -52,7 +52,7 @@ function createAdminActions({ safeSendDM, isBot, targetEmoji }) {
 
     await safeSendDM(client, targetId, {
       text: `🎁 On t'a offert une Attaque Jeanpip !`,
-      blocks: [section(`🎁 *On t'a offert une Attaque Jeanpip !* :${targetEmoji}:\n\nUn admin vient de te créditer une Attaque Jeanpip 🎉\n\n*Comment l'activer :*\nTape la commande \`/jeanpip-attack\` dans n'importe quel channel (ou clique sur ⚔️ dans l'onglet *Accueil* du bot) pour envoyer un Jeanpip aux 7 dernières personnes ayant posté dans le canal choisi !\n\n⚠️ _Si tu ne l'actives pas avant dimanche 20h, tu la perds._`)],
+      blocks: [section(`🎁 *On t'a offert une Attaque Jeanpip !* :${targetEmoji}:\n\nUn admin vient de te créditer une Attaque Jeanpip 🎉\n\n*Comment l'activer :*\nTape la commande \`/jeanpip-attack\` dans n'importe quel channel (ou clique sur ⚔️ dans l'onglet *Accueil* du bot) pour envoyer un Jeanpip aux 7 dernières personnes ayant posté dans le canal choisi !\n\n⚠️ _Si tu ne l'actives pas avant vendredi minuit (pas d'Attaque le week-end), tu la perds._`)],
     }, logger);
 
     logger.info(`🎁 <@${adminId}> a offert une attaque à <@${targetId}>`);

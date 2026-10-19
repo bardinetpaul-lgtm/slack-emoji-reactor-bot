@@ -23,6 +23,7 @@ const banDayFmt = new Intl.DateTimeFormat('fr-FR', { timeZone: 'Europe/Paris', w
 /** Fin d'une sanction booster : « jeudi 22 octobre à 9h36 ». */
 const banEndText = (ms) => `${banDayFmt.format(new Date(ms))} à ${spamLockTime(ms)}`;
 const boosterBans = require('./boosterBans');
+const weekend = require('./weekend');
 const broadcast = require('./broadcast');
 const { RARITIES, getAllMedia, listCustomMedia, mediaNumber } = require('./media');
 const { ARCHETYPES, getCardStats, getOverride } = require('./game/cards');
@@ -84,10 +85,13 @@ function buildHomeView(userId, ctx) {
   const mode = attackMode(userId, ctx.isAdmin);
   const pending = boosters.countPending(userId);
   const subscribed = broadcast.isSubscribed(userId);
+  const now = Date.now();
+  const isWeekend = weekend.isWeekend(now);   // 🏖️ v3.3 : jeu en pause du samedi 0h au lundi 0h
 
   const blocks = [
     { type: 'header', text: { type: 'plain_text', text: '🤖 Jeanpip', emoji: true } },
     section(`💰 *Ton solde : ${formatCredits(balance)} JP$*\n_+${ctx.creditsPerJeanpipLabel} JP$ à chaque réaction :${ctx.targetEmoji}: que tu poses (Jeanpip délivré, hors spam/farm)._`),
+    ...(isWeekend ? [section(`${weekend.PAUSE_TEXT}\nPas de Jeanpip, d'Attaque, de booster, de ticket ni de nouveau combat : on laisse les collègues tranquilles. Ton classeur et ton deck restent ouverts.`)] : []),
     { type: 'divider' },
   ];
 
@@ -108,13 +112,15 @@ function buildHomeView(userId, ctx) {
   let attackText;
   let attackButton = null;
 
-  if (ctx.farmRemainingMs > 0) {
+  if (isWeekend) {
+    attackText = `🏖️ *Pas d'Attaque le week-end* : ça reprend lundi.`;
+  } else if (ctx.farmRemainingMs > 0) {
     attackText = `🚜 *Pénalité anti-farm* encore *${ctx.formatRemaining(ctx.farmRemainingMs)}* : tu ne peux pas attaquer pour l'instant.`;
   } else if (mode === 'admin') {
     attackText = `⚔️ *Attaque Jeanpip :* 👑 illimitée (admin)`;
     attackButton = button('⚔️ Lancer une attaque', 'home_attack_open', { style: 'primary' });
   } else if (mode === 'free') {
-    attackText = `🎉 *Tu as débloqué une Attaque Jeanpip !* Elle est *gratuite*, à lancer avant dimanche 20h.`;
+    attackText = `🎉 *Tu as débloqué une Attaque Jeanpip !* Elle est *gratuite*, à lancer avant vendredi minuit (pas d'Attaque le week-end).`;
     attackButton = button('🎉 Lancer mon attaque gratuite', 'home_attack_open', { style: 'primary' });
   } else if (balance >= ctx.attackPrice) {
     attackText = `⚔️ *Attaque Jeanpip :* pas encore débloquée cette semaine.\n💰 *Achète-la pour ${ctx.attackPrice} JP$* (débités au lancement).\n${unlockHint}`;
@@ -129,7 +135,6 @@ function buildHomeView(userId, ctx) {
   blocks.push({ type: 'divider' });
 
   // 🎁 Boosters
-  const now = Date.now();
   const seasonal = boosters.listBoosters(now).find((b) => b.dailyStock);
   // 🚦 v3.0.3 : bouton du booster à stock bloqué après des clics en rafale (src/boosterSpam.js)
   const spamLock = seasonal ? boosterSpam.lockedUntil(userId, now) : 0;
@@ -139,7 +144,7 @@ function buildHomeView(userId, ctx) {
   const ban = seasonalBlock === 'banned' ? boosterBans.activeBan(userId, seasonal.type, now) : null;
   const seasonalStatus = {
     banned: ban && `🚫 *Booster interdit jusqu'au ${banEndText(ban.until)}* (sanction d'un admin${ban.reason ? ` : ${ban.reason}` : ''}).`,
-    weekend: `🏖️ *Pas de booster le week-end.* ${boosters.restockText(now)}`,
+    weekend: boosters.restockText(now),   // « Pas de booster le week-end » : ligne commune plus bas
     user_limit: `✅ *Tu as déjà eu le tien aujourd'hui.* Reviens ${boosters.restockText(now).includes('lundi') ? 'lundi' : 'demain'} 😉`,
     sold_out: seasonal && `😢 *Épuisé pour aujourd'hui* : les ${seasonal.dailyStock} boosters du jour sont partis. ${boosters.restockText(now)}`,
     not_yet: `⏳ ${boosters.DROP_TEXT} *Le bouton d'achat apparaîtra ici à leur arrivée.*`,
@@ -149,8 +154,9 @@ function buildHomeView(userId, ctx) {
 ${seasonal.emoji} *Booster ${seasonal.label}* : 1 ou 2 cartes exclusives qu'on ne trouve nulle part ailleurs, et 30 % de chances d'une légendaire. Seulement *${seasonal.dailyStock} par jour pour tout le monde*${seasonal.weekdaysOnly ? ', *du lundi au vendredi*' : ''}${seasonal.dailyPerUser ? `, *${seasonal.dailyPerUser} par personne*` : ''} !${seasonalStatus ? `
 ${seasonalStatus}` : ''}${spamLock ? `
 🚫 *Bloqué jusqu'à ${spamLockTime(spamLock)}* : tu as cliqué en rafale sur ce booster. Un seul clic suffit 😉` : ''}`
-    : ''}`));
-  blocks.push({
+    : ''}${isWeekend ? `
+🏖️ *Pas de booster le week-end*, ni achat ni ouverture : retour lundi 0h.` : ''}`));
+  if (!isWeekend) blocks.push({
     type: 'actions',
     block_id: 'home_boosters',
     elements: boosters.listBoosters(now).filter((b) => !(seasonal && b.type === seasonal.type && (seasonalBlock || spamLock))).map((b) => button(
@@ -164,7 +170,9 @@ ${seasonalStatus}` : ''}${spamLock ? `
     elements: [{
       type: 'mrkdwn',
       text: pending > 0
-        ? `🎁 *${pending} booster(s) non ouvert(s)* → va dans l'onglet *Messages* et clique sur « Ouvrir le booster ».`
+        ? (isWeekend
+          ? `🎁 *${pending} booster(s) non ouvert(s)* : ils t'attendent, ouvre-les lundi depuis l'onglet *Messages*.`
+          : `🎁 *${pending} booster(s) non ouvert(s)* → va dans l'onglet *Messages* et clique sur « Ouvrir le booster ».`)
         : `L'achat est débité tout de suite ; tu ouvres ton booster depuis l'onglet *Messages*.`,
     }],
   });
@@ -733,6 +741,10 @@ function buildTicketsBlocks(userId, url) {
     : used >= limit
       ? `✅ *${used}/${limit} aujourd'hui* : reviens demain 😉`
       : `_${used}/${limit} ticket${used > 1 ? 's' : ''} aujourd'hui._`;
+  // 🏖️ v3.3 : Kiosque fermé le week-end (un ticket acheté avant samedi 0h peut encore être gratté)
+  if (weekend.isWeekend() && !pending) {
+    return [section('🏉 *Tickets à gratter ESSAI !* — 🏖️ le Kiosque est fermé le week-end, retour lundi 0h.')];
+  }
   return [section(
     `🏉 *Tickets à gratter ESSAI !* — ${formatCredits(price)} JP$ le ticket, 9 ballons à gratter : *3 symboles identiques = le lot*. 🏆 Coupe = *carte légendaire*, 🥅 Poteaux = *${formatCredits(jackpot)} JP$* !
 ${status}`,

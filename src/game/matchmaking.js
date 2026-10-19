@@ -19,6 +19,7 @@
 
 const { DECK_SIZE } = require('./deck');
 const arenas = require('./arenas');
+const weekend = require('../weekend');
 
 const CHALLENGE_TTL_MS = 60 * 1000;
 const QUEUE_TTL_MS = 60 * 1000;
@@ -63,6 +64,7 @@ const getChallenge = (id) => challenges.get(id) || null;
 // ─────────────────────────────────────────────
 
 function createChallenge(from, to, now = Date.now(), { arena } = {}) {
+  if (weekend.isWeekend(now)) return { ok: false, reason: 'weekend' };   // 🏖️ v3.3
   if (from === to) return { ok: false, reason: 'self' };
   if (deps.isBusy(from) || isWaiting(from)) return { ok: false, reason: 'busy_from' };
   if (deps.isBusy(to) || inQueue(to)) return { ok: false, reason: 'busy_to' };
@@ -85,6 +87,7 @@ function createChallenge(from, to, now = Date.now(), { arena } = {}) {
  * des deux joueurs (renvoyés dans `cancelled` pour les prévenir).
  */
 function acceptChallenge(id, userId, now = Date.now()) {
+  if (weekend.isWeekend(now)) return { ok: false, reason: 'weekend' };
   const c = challenges.get(id);
   if (!c || now >= c.expiresAt) return { ok: false, reason: 'not_found' };
   if (c.to !== userId) return { ok: false, reason: 'not_target' };
@@ -113,6 +116,7 @@ function refuseChallenge(id, userId) {
 // ─────────────────────────────────────────────
 
 function joinQueue(userId, now = Date.now()) {
+  if (weekend.isWeekend(now)) return { ok: false, reason: 'weekend' };
   if (deps.isBusy(userId) || outgoing(userId)) return { ok: false, reason: 'busy' };
   if (deps.cardCount(userId) < DECK_SIZE) return { ok: false, reason: 'cards' };
   if (inQueue(userId)) return { ok: true, matched: null };

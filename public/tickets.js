@@ -385,6 +385,7 @@
   const BLOCK_TEXT = {
     penalty: '🚜 Pénalité anti-farm en cours : pas de ticket pour l\'instant.',
     limit: '✅ Tu as joué tous tes tickets du jour. Reviens demain !',
+    weekend: '🏖️ C’est le week-end : le Kiosque est fermé jusqu’à lundi 0h.',
     balance: '💸 Pas assez de JP$ pour un ticket.',
     error: '⚠️ Souci technique : ton ticket a été remboursé, réessaie.',
   };
