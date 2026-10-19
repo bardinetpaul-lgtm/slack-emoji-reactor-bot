@@ -23,6 +23,7 @@ const credits = require('./credits');
 const collections = require('./collections');
 const events = require('./events');
 const farm = require('./farm');
+const weekend = require('./weekend');
 const { drawCardOfRarity } = require('./media');
 const { parisDay } = require('./octobreRose');
 
@@ -59,11 +60,13 @@ function pendingTicket(userId, data = loadStore()) {
 
 /**
  * Raison pour laquelle ce joueur ne peut pas acheter maintenant, ou null :
- * 'penalty' | 'pending' | 'limit' | 'balance'.
+ * 'penalty' | 'pending' | 'weekend' | 'limit' | 'balance'.
+ * (🏖️ v3.3 : un ticket acheté avant samedi 0h peut encore être gratté.)
  */
 function purchaseBlock(userId, now = Date.now(), data = loadStore()) {
   if (farm.getPenaltyRemaining(userId, now) > 0) return 'penalty';
   if (pendingTicket(userId, data)) return 'pending';
+  if (weekend.isWeekend(now)) return 'weekend';
   if (boughtToday(userId, now, data) >= settings.getTicketDailyLimit()) return 'limit';
   if (credits.getBalance(userId) < settings.getTicketPrice()) return 'balance';
   return null;

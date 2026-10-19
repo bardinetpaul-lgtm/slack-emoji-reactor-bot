@@ -21,6 +21,7 @@ const dailyStreak = require('./game/dailyStreak');
 const arenas = require('./game/arenas');
 const deckRules = require('./game/deck');
 const collections = require('./collections');
+const weekend = require('./weekend');
 
 const OFFICE_NOTE = '🏢 _L\'Arène s\'ouvre depuis le bureau de Lorient ou d\'Asnières (page web)._';
 const SWEEP_MS = 5000;
@@ -37,6 +38,7 @@ const REASONS = {
   not_found: 'Ce défi a expiré ou a déjà été traité.',
   not_target: 'Ce défi ne t\'est pas adressé.',
   bot: 'Impossible de défier un bot.',
+  weekend: 'C\'est le week-end : l\'Arène est en pause jusqu\'à lundi 0h.',
 };
 const reasonText = (r) => REASONS[r] || 'Impossible pour le moment.';
 
@@ -71,6 +73,7 @@ function homeState(userId, links, now = Date.now()) {
     incoming: status.incoming,
     deckUrl: links.deck(userId),
     web: Boolean(links.deck(userId)),
+    weekend: weekend.isWeekend(now),   // 🏖️ v3.3 : pas de nouveau combat
   };
 }
 
@@ -90,6 +93,10 @@ function buildHomeBlocks(a) {
   if (a.match && a.match.url) {
     const label = a.match.status === 'running' ? 'Ton combat est en cours !' : 'Ton combat t\'attend : prépare ton deck.';
     blocks.push(section(`▶️ *${label}*`, { ...button('▶️ Rejoindre mon combat', 'arena_enter_web', { style: 'primary' }), url: a.match.url }));
+    return blocks;
+  }
+  if (a.weekend) {
+    blocks.push(section('🏖️ *Arène en pause le week-end* : pas de nouveau combat jusqu\'à lundi 0h. Tu peux toujours préparer ton deck.', deckBtn || undefined));
     return blocks;
   }
   for (const c of a.incoming) {

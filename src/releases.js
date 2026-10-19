@@ -16,6 +16,17 @@
 
 const RELEASES = [
   {
+    version: '3.3.0',
+    date: '2026-10-19',
+    title: 'Le week-end, on souffle',
+    changes: [
+      '🏖️ Du samedi 0h au lundi 0h, Jeanpip est en pause : on laisse les collègues tranquilles. Une réaction :jeanpip: ne fait rien (pas d\'image, pas de JP$, pas de point) et seul toi vois un petit rappel.',
+      '🏖️ Le week-end, pas d\'Attaque, pas d\'achat ni d\'ouverture de booster, pas de ticket à gratter et pas de nouveau combat d\'Arène. Ton classeur et ton deck restent ouverts, et tes boosters non ouverts t\'attendent lundi.',
+      '🔕 Le bot n\'envoie plus aucune notification le week-end : il répond seulement quand tu cliques sur quelque chose.',
+      '⚔️ Une Attaque débloquée se lance donc avant vendredi minuit (les scores repartent toujours à 0 le dimanche à 20h).',
+    ],
+  },
+  {
     version: '3.2.0',
     date: '2026-10-15',
     title: 'Octobre Rose sans triche',

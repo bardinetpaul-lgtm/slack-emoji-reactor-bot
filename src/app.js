@@ -24,6 +24,17 @@ const farm = require('./farm');
 const boosterSpam = require('./boosterSpam');
 const boosterBans = require('./boosterBans');
 const octobreRose = require('./octobreRose');
+const weekend = require('./weekend');
+
+/**
+ * 🏖️ v3.3 : le week-end, le bot n'envoie aucune notification automatique
+ * (seule la réponse directe à un clic du joueur part encore). → true = ne rien envoyer.
+ */
+function weekendMuted(logger, what) {
+  if (!weekend.isWeekend()) return false;
+  (logger || console).info(`🏖️ Week-end : ${what} non envoyé`);
+  return true;
+}
 const weeklyGift = require('./weeklyGift');
 const { SPAM_CARDS } = require('./spamCards');
 const looks = require('./game/looks');
@@ -178,6 +189,7 @@ function scheduleFarmRelease(client, userId, logger, delayMs = farm.FARM_PENALTY
     farm.clear(userId);
     farmReleaseTimers.delete(userId);
     refreshHomeIfSeen(client, userId, logger); // pénalité terminée → quota à 0
+    if (weekendMuted(logger, `DM de fin de pénalité anti-farm à <@${userId}>`)) return;
     try {
       await safeSendDM(client, userId, {
         text: `✅ Ton accès au Jeanpip est rétabli !`,
@@ -404,6 +416,8 @@ app.event('message', async ({ event, client, logger }) => {
     if (!authorId) return;
     // Cibles = env + dynamiques (via /jeanpip-auto)
     if (!targets.isTarget(authorId)) return;
+    // 🏖️ v3.3 : pas d'auto-react le week-end
+    if (weekend.isWeekend()) return;
 
     // 📮 Liste de diffusion : on ne cible que les personnes inscrites
     if (!broadcast.isSubscribed(authorId)) {
@@ -445,6 +459,13 @@ app.event('reaction_added', async ({ event, client, logger }) => {
     const messageTs = event.item.ts;
 
     logger.info(`🎯 Réaction :${TARGET_EMOJI}: détectée par <@${reactingUserId}>`);
+
+    // 🏖️ v3.3 : le week-end, une réaction ne fait rien (ni image, ni JP$, ni score)
+    if (weekend.isWeekend()) {
+      logger.info(`🏖️ Week-end : réaction de <@${reactingUserId}> ignorée, prévenu`);
+      await notifyReactor(client, channelId, reactingUserId, weekend.REACTION_TEXT, logger);
+      return;
+    }
 
     // 🚨 Anti-spam
     if (isSpam(reactingUserId, channelId, messageTs)) {
@@ -563,7 +584,7 @@ app.event('reaction_added', async ({ event, client, logger }) => {
             type: 'section',
             text: {
               type: 'mrkdwn',
-              text: `🎉 *Tu as débloqué l'Attaque Jeanpip !* :${TARGET_EMOJI}:\n\nTu as envoyé *${scores.ATTACK_THRESHOLD} Jeanpips* cette semaine, bravo !\n\n*Comment l'activer :*\nTape la commande \`/jeanpip-attack\` dans n'importe quel channel (ou clique sur ⚔️ dans l'onglet *Accueil* du bot) pour envoyer un Jeanpip aux 7 dernières personnes ayant posté dans le canal choisi !\n\n⚠️ _Si tu n'actives pas ton attaque avant dimanche 20h, tu perds tes Jeanpips._`,
+              text: `🎉 *Tu as débloqué l'Attaque Jeanpip !* :${TARGET_EMOJI}:\n\nTu as envoyé *${scores.ATTACK_THRESHOLD} Jeanpips* cette semaine, bravo !\n\n*Comment l'activer :*\nTape la commande \`/jeanpip-attack\` dans n'importe quel channel (ou clique sur ⚔️ dans l'onglet *Accueil* du bot) pour envoyer un Jeanpip aux 7 dernières personnes ayant posté dans le canal choisi !\n\n⚠️ _Si tu n'actives pas ton attaque avant vendredi minuit (pas d'Attaque le week-end), tu perds tes Jeanpips._`,
             },
           },
         ],
@@ -614,6 +635,8 @@ app.command('/jeanpip-attack', async ({ command, ack, client, logger }) => {
   const channelId = command.channel_id;
 
   try {
+    if (weekend.isWeekend()) return await sendWeekendAttackDM(client, userId, logger);
+
     const isAdmin = JEANPIP_ADMINS.includes(userId);
     const userHasAttack = scores.hasAttack(userId);
 
@@ -676,6 +699,13 @@ app.command('/jeanpip-attack', async ({ command, ack, client, logger }) => {
 // ─────────────────────────────────────────────
 const attackPurchaseLocks = new Set(); // userId → achat en cours (anti-double-clic)
 
+/** 🏖️ v3.3 : réponse à une Attaque tentée le week-end (rien n'est consommé ni débité). */
+function sendWeekendAttackDM(client, userId, logger) {
+  const text = `${weekend.PAUSE_TEXT}\nPas d'Attaque Jeanpip le week-end : on laisse les collègues tranquilles 😉\n\n_Rien n'a été consommé ni débité._`;
+  logger.info(`🏖️ Attaque refusée (week-end) : <@${userId}>`);
+  return safeSendDM(client, userId, { text: plain(text), blocks: [{ type: 'section', text: { type: 'mrkdwn', text } }] }, logger);
+}
+
 app.action('buy_attack', async ({ ack, body, action, client, logger }) => {
   await ack();
 
@@ -685,6 +715,10 @@ app.action('buy_attack', async ({ ack, body, action, client, logger }) => {
   attackPurchaseLocks.add(userId);
 
   try {
+    if (weekend.isWeekend()) {
+      await sendWeekendAttackDM(client, userId, logger);
+      return;
+    }
     const farmRemaining = getFarmPenaltyRemaining(userId);
     if (farmRemaining > 0) {
       await safeSendDM(client, userId, {
@@ -818,6 +852,16 @@ async function rejectNonAdmin(client, userId, logger, commandName) {
   return true;
 }
 
+// 🏖️ v3.3 : un cadeau admin notifie le joueur → pas le week-end
+const WEEKEND_GIFT_TEXT = '🏖️ C\'est le week-end : pas de cadeau (il notifierait la personne). Réessaie lundi.';
+
+/** Slash command admin de cadeau tentée le week-end → DM à l'admin, true = arrêter. */
+async function weekendGiftRefused(client, adminId, logger) {
+  if (!weekend.isWeekend()) return false;
+  await sendAdminResult(client, adminId, { text: WEEKEND_GIFT_TEXT }, logger);
+  return true;
+}
+
 /** Envoie en DM à l'admin le résultat d'une action admin ({ text, blocks? }). */
 async function sendAdminResult(client, adminId, result, logger) {
   await safeSendDM(client, adminId, {
@@ -838,6 +882,7 @@ app.command('/jeanpip-give', async ({ command, ack, client, logger }) => {
 
   try {
     if (await rejectNonAdmin(client, adminId, logger, '/jeanpip-give')) return;
+    if (await weekendGiftRefused(client, adminId, logger)) return;
 
     const targetId = parseUserId(command.text);
     if (!targetId) {
@@ -867,6 +912,7 @@ app.command('/jeanpip-give-credits', async ({ command, ack, client, logger }) =>
 
   try {
     if (await rejectNonAdmin(client, adminId, logger, '/jeanpip-give-credits')) return;
+    if (await weekendGiftRefused(client, adminId, logger)) return;
 
     const targetId = parseUserId(command.text);
 
@@ -1167,6 +1213,7 @@ async function checkBoosterDrop(client, logger) {
 
 /** 🤖 v3.2 : DM aux admins quand l'anti-spam repère des clics automatiques. */
 function alertAdminsAutoClick(client, userId, booster, verdict, logger) {
+  if (weekendMuted(logger, `alerte clics automatiques (<@${userId}>)`)) return;
   const gaps = verdict.gaps.map((g) => `${(g / 1000).toFixed(2)} s`).join(' · ');
   const text = `🤖 *Clics automatiques détectés* : <@${userId}> sur le Booster ${booster.emoji} ${booster.label}.\n\n`
     + `Écarts entre ses ${verdict.gaps.length + 1} derniers clics : ${gaps}\n`
@@ -1244,7 +1291,7 @@ app.action(/^buy_booster_/, async ({ ack, body, action, client, logger }) => {
       const why = ban
         ? `🚫 *Tu ne peux pas acheter de Booster ${booster.emoji} ${booster.label} jusqu'au ${home.banEndText(ban.until)}* (sanction d'un admin${ban.reason ? ` : ${ban.reason}` : ''}).`
         : blocked === 'weekend'
-        ? `🏖️ *Pas de Booster ${booster.emoji} ${booster.label} le week-end !* ${boosters.restockText()}`
+        ? `🏖️ *Pas de Booster ${booster.emoji} ${booster.label} le week-end !* Jeanpip est en pause jusqu'à lundi 0h.${booster.dailyStock ? ` ${boosters.restockText()}` : ''}`
         : blocked === 'user_limit'
         ? `🎀 *Tu as déjà eu ton Booster ${booster.emoji} ${booster.label} aujourd'hui !* C'est ${booster.dailyPerUser} par personne et par jour, pour en laisser aux autres. Reviens ${boosters.restockText().includes('lundi') ? 'lundi' : 'demain'} 😉`
         : blocked === 'not_yet'
@@ -1329,6 +1376,14 @@ app.action('open_booster', async ({ ack, body, action, client, logger }) => {
 
     if (result.status === 'forbidden') {
       logger.warn(`⛔ <@${userId}> a tenté d'ouvrir le booster de <@${result.pending.owner}>`);
+      return;
+    }
+
+    // 🏖️ v3.3 : pas d'ouverture le week-end, le booster attend lundi
+    if (result.status === 'weekend') {
+      const text = `${weekend.PAUSE_TEXT}\nPas d'ouverture de booster le week-end : le tien t'attend, ouvre-le lundi avec ce même bouton 😉`;
+      await sendDM(client, userId, { text: plain(text), blocks: [{ type: 'section', text: { type: 'mrkdwn', text } }] });
+      logger.info(`🏖️ Ouverture refusée (week-end) : <@${userId}> booster ${id}`);
       return;
     }
 
@@ -1588,6 +1643,7 @@ app.view('home_attack_submit', async ({ ack, body, view, client, logger }) => {
 
   // ✋ Vérifications rapides AVANT de fermer la modale (erreur affichée dedans)
   if (!channelId) return ack(fieldError('channel', 'Choisis un channel.'));
+  if (weekend.isWeekend()) return ack(fieldError('channel', '🏖️ C\'est le week-end : pas d\'Attaque avant lundi 0h.'));
   const farmRemaining = getFarmPenaltyRemaining(userId);
   if (farmRemaining > 0) {
     return ack(fieldError('channel', `🚜 Pénalité anti-farm : réessaie dans ${formatRemaining(farmRemaining)}.`));
@@ -1650,7 +1706,7 @@ app.view('weekly_gift_submit', async ({ ack, body, view, client, logger }) => {
   await ack();
   logger.info(`🎁 <@${userId}> a offert ${amount} JP$ du vendredi à <@${targetId}> (reste ${result.remaining})`);
   try {
-    await safeSendDM(client, targetId, {
+    if (!weekendMuted(logger, `DM de don à <@${targetId}>`)) await safeSendDM(client, targetId, {
       text: `🎁 <@${userId}> t'a offert ${amount} JP$ !`,
       blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `🎁 *<@${userId}> t'a offert ${amount} JP$ !* 💰\n\nNouveau solde : *${formatCredits(result.recipientBalance)}* JP$\n\nDépense-les avec \`/jeanpip-booster\` ou depuis l'onglet *Accueil* du bot ! 🎁` } }],
     }, logger);
@@ -1668,7 +1724,9 @@ async function runWeeklyGift(client, logger) {
   logger.info(`🎁 JP$ du vendredi : ${weeklyGift.WEEKLY_AMOUNT} à offrir pour ${granted.length} inscrit(s)`);
 
   const text = `🎁 JeanPip vous donne ${weeklyGift.WEEKLY_AMOUNT} JP$ que vous ne pouvez pas garder pour vous, depuis votre dashboard accordez-les aux personnes de votre choix. Bonne fin de semaine !`;
-  for (const userId of granted) {
+  // 🏖️ v3.3 : rattrapé au redémarrage un week-end → JP$ versés, mais pas de DM (visibles dans l'Accueil)
+  const muted = weekendMuted(logger, `DM du vendredi (${granted.length} inscrit(s))`);
+  for (const userId of muted ? [] : granted) {
     try {
       await safeSendDM(client, userId, {
         text,
@@ -1699,7 +1757,8 @@ const arenaHooks = arenaSlack.register(app, {
 bugsSlack.register(app, {
   admins: JEANPIP_ADMINS,
   isAdmin: (userId) => JEANPIP_ADMINS.includes(userId),
-  sendDM,
+  // 🏖️ v3.3 : le week-end, ni les admins ni le joueur ne sont notifiés (le bug reste listé dans l'Accueil admin)
+  sendDM: async (client, userId, msg) => (weekendMuted(console, `DM « bug signalé » à <@${userId}>`) ? null : sendDM(client, userId, msg)),
   openModal,
   refreshHome: refreshHomeIfSeen,
 });
@@ -1732,6 +1791,7 @@ for (const [actionId, buildModal] of Object.entries(ADMIN_MODALS)) {
 app.view('admin_give_attack_submit', async ({ ack, body, view, client, logger }) => {
   const adminId = body.user.id;
   if (!isAdminUser(adminId, logger, 'admin_give_attack_submit')) return ack(fieldError('user', 'Réservé aux admins.'));
+  if (weekend.isWeekend()) return ack(fieldError('user', WEEKEND_GIFT_TEXT));
 
   const targetId = view.state.values.user.value.selected_user;
   if (scores.hasAttack(targetId)) return ack(fieldError('user', 'Cette personne a déjà une Attaque Jeanpip disponible.'));
@@ -1758,6 +1818,8 @@ app.view('admin_credits_submit', async ({ ack, body, view, client, logger }) => 
   if (!Number.isFinite(amount) || amount === 0) {
     return ack(fieldError('amount', 'Montant non nul attendu (ex. 50, 2,5 ou -20).'));
   }
+  // 🏖️ v3.3 : un cadeau (montant positif) notifie la personne → pas le week-end ; une correction reste possible
+  if (amount > 0 && weekend.isWeekend()) return ack(fieldError('amount', WEEKEND_GIFT_TEXT));
 
   await ack();
   try {
@@ -1833,6 +1895,7 @@ app.view('admin_card_type_submit', async ({ ack, body, view, client, logger }) =
 app.view('admin_give_card_submit', async ({ ack, body, view, client, logger }) => {
   const adminId = body.user.id;
   if (!isAdminUser(adminId, logger, 'admin_give_card_submit')) return ack(fieldError('card', 'Réservé aux admins.'));
+  if (weekend.isWeekend()) return ack(fieldError('user', WEEKEND_GIFT_TEXT));
 
   const values = view.state.values;
   const targetId = values.user.value.selected_user;
@@ -1863,6 +1926,7 @@ app.view('admin_give_card_submit', async ({ ack, body, view, client, logger }) =
 app.view('admin_give_booster_submit', async ({ ack, body, view, client, logger }) => {
   const adminId = body.user.id;
   if (!isAdminUser(adminId, logger, 'admin_give_booster_submit')) return ack(fieldError('user', 'Réservé aux admins.'));
+  if (weekend.isWeekend()) return ack(fieldError('user', WEEKEND_GIFT_TEXT));
 
   const values = view.state.values;
   const targetId = values.user.value.selected_user;
@@ -1900,7 +1964,8 @@ app.view('admin_booster_ban_submit', async ({ ack, body, view, client, logger })
   const type = values.booster.value.selected_option && values.booster.value.selected_option.value;
   const days = Number(values.days.value.value);
   const reason = ((values.reason && values.reason.value.value) || '').trim();
-  const notify = ((values.notify && values.notify.value.selected_options) || []).some((o) => o.value === 'dm');
+  // 🏖️ v3.3 : pas de DM au joueur le week-end
+  const notify = !weekend.isWeekend() && ((values.notify && values.notify.value.selected_options) || []).some((o) => o.value === 'dm');
   const booster = boosters.getBooster(type);
   if (!targetId) return ack(fieldError('user', 'Choisis une personne.'));
   if (!booster) return ack(fieldError('booster', 'Choisis un booster.'));
@@ -2113,7 +2178,7 @@ app.command('/jeanpip-help', async ({ command, ack, client, logger }) => {
             type: 'mrkdwn',
             text: `⚔️ *Attaque Jeanpip — \`/jeanpip-attack\`*\nEnvoie un Jeanpip aux *7 dernières personnes* ayant posté dans le channel où tu lances la commande !\n\n*Comment débloquer :*\n• Envoie *${scores.ATTACK_THRESHOLD} Jeanpips* dans la semaine\n• Tu reçois un DM de notification quand c'est débloqué\n• Lance \`/jeanpip-attack\` dans le channel de ton choix\n• Ton compteur repart à 0, tu peux redébloquer ensuite !
 
-💰 *Pas envie d'attendre ?* Achète une attaque pour *${ATTACK_PRICE} JP$* : lance `/jeanpip-attack` et clique sur le bouton.\n\n⚠️ _Si tu ne l'actives pas avant dimanche 20h → tu perds l'attaque_${isAdmin ? '\n\n👑 *Tu es admin : accès illimité + panneau 👑 Admin dans l\'onglet Accueil (ou `/jeanpip-give @user`, `/jeanpip-auto`) !*' : ''}`,
+💰 *Pas envie d'attendre ?* Achète une attaque pour *${ATTACK_PRICE} JP$* : lance `/jeanpip-attack` et clique sur le bouton.\n\n⚠️ _Si tu ne l'actives pas avant vendredi minuit (pas d'Attaque le week-end) → tu perds l'attaque_${isAdmin ? '\n\n👑 *Tu es admin : accès illimité + panneau 👑 Admin dans l\'onglet Accueil (ou `/jeanpip-give @user`, `/jeanpip-auto`) !*' : ''}`,
           },
         },
         { type: 'divider' },

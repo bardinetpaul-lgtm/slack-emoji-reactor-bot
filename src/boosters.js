@@ -27,6 +27,7 @@ const { readJson, writeJsonAtomic } = require('./storage');
 const { drawCardOfRarity } = require('./media');
 const octobreRose = require('./octobreRose');
 const boosterBans = require('./boosterBans');
+const weekend = require('./weekend');
 
 // ─────────────────────────────────────────────
 // 🎨 Helpers de construction du catalogue
@@ -148,11 +149,8 @@ function effective(booster, now = Date.now()) {
   return { ...booster, ...rules };
 }
 
-/** Samedi ou dimanche, à l'heure de Paris. */
-function isWeekend(now = Date.now()) {
-  const wd = new Date(`${octobreRose.parisDay(now)}T12:00:00Z`).getUTCDay();
-  return wd === 0 || wd === 6;
-}
+/** Samedi ou dimanche, à l'heure de Paris (src/weekend.js). */
+const { isWeekend } = weekend;
 
 function getBooster(type, now = Date.now()) {
   return BOOSTERS[type] ? effective(BOOSTERS[type], now) : null;
@@ -203,7 +201,7 @@ function purchaseBlock(booster, now = Date.now(), userId = null) {
   booster = rulesOf(booster, now);
   if (!isOnSale(booster, now)) return 'closed';
   if (userId && boosterBans.activeBan(userId, booster.type, now)) return 'banned';
-  if (booster.weekdaysOnly && isWeekend(now)) return 'weekend';
+  if (isWeekend(now)) return 'weekend';   // 🏖️ v3.3 : aucun booster le week-end
   if (booster.dailyStock && !octobreRose.hasDropped(now)) return 'not_yet';
   if (userId && booster.dailyPerUser && boughtToday(booster, userId, now) >= booster.dailyPerUser) return 'user_limit';
   if (stockLeft(booster, now) === 0) return 'sold_out';

@@ -282,6 +282,7 @@ function handleOpen(res, id, token, { client, logger, onOpened }) {
   if (result.status === 'already' && (result.via !== 'web' || !result.cards)) {
     return sendJson(res, 200, { status: 'already_slack', booster: boosterInfo });
   }
+  if (result.status === 'weekend') return sendJson(res, 200, { status: 'weekend', booster: boosterInfo });   // 🏖️ v3.3
   if (result.status !== 'opened' && result.status !== 'already') {
     return sendJson(res, 404, { status: result.status });
   }

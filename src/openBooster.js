@@ -14,13 +14,14 @@
 const boosters = require('./boosters');
 const collections = require('./collections');
 const events = require('./events');
+const weekend = require('./weekend');
 
 /**
  * Ouvre un booster une seule fois.
  * @param {string} id     - id du booster
  * @param {string} userId - qui ouvre (doit être le propriétaire)
  * @param {'slack'|'web'} via
- * @returns {{ status: 'not_found'|'forbidden'|'already'|'opened',
+ * @returns {{ status: 'not_found'|'forbidden'|'already'|'weekend'|'opened',
  *             pending?, via?, cards?, counts? }}
  */
 function openOnce(id, userId, via) {
@@ -37,6 +38,9 @@ function openOnce(id, userId, via) {
       counts: pending.counts || null,
     };
   }
+
+  // 🏖️ v3.3 : aucune carte le week-end (le rejeu d'un booster déjà ouvert reste possible)
+  if (weekend.isWeekend()) return { status: 'weekend', pending };
 
   // 🔒 markOpened ne réussit qu'une fois
   if (!boosters.markOpened(id)) {
