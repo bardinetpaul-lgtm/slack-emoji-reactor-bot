@@ -45,7 +45,7 @@
     rempart: '🛡 Rempart ! Ta tour la plus proche est invulnérable 10 s',
     charge: '⚔️ Charge ! Tes unités foncent 6 s',
     salve: '🏹 Salve ! 200 dégâts autour du point',
-    renforts: '🐝 Renforts ! 4 abeilles arrivent',
+    renforts: '🐝 Renforts ! 3 abeilles arrivent',
     alarme: '🔔 Alarme ! Tes tours tirent trois fois plus fort 15 s',
     gel: '❄️ Gel ! Les ennemis sont figés 5 s',
   };

@@ -4,7 +4,7 @@
 //  ainsi que les modales ouvertes depuis l'Accueil.
 //  Fonctions pures : aucun appel Slack ici (voir refreshHome dans app.js).
 //
-//  • Partie joueur (tout le monde) : solde, score, attaque, boosters,
+//  • Partie joueur (tout le monde) : solde, score, raid, boosters,
 //    liste de diffusion.
 //  • Panneau « 👑 Admin » : UNIQUEMENT construit pour les admins.
 // ═══════════════════════════════════════════════════════════
@@ -24,6 +24,7 @@ const banDayFmt = new Intl.DateTimeFormat('fr-FR', { timeZone: 'Europe/Paris', w
 const banEndText = (ms) => `${banDayFmt.format(new Date(ms))} à ${spamLockTime(ms)}`;
 const boosterBans = require('./boosterBans');
 const weekend = require('./weekend');
+const raid = require('./raid');
 const broadcast = require('./broadcast');
 const { RARITIES, getAllMedia, listCustomMedia, mediaNumber } = require('./media');
 const { ARCHETYPES, getCardStats, getOverride } = require('./game/cards');
@@ -49,15 +50,6 @@ function button(text, actionId, { value, style } = {}) {
   };
 }
 
-/**
- * Coût de l'attaque pour un user : 'admin' (illimitée), 'free' (débloquée)
- * ou 'paid' (ATTACK_PRICE crédits).
- */
-function attackMode(userId, isAdmin) {
-  if (isAdmin) return 'admin';
-  return scores.hasAttack(userId) ? 'free' : 'paid';
-}
-
 // ─────────────────────────────────────────────
 // 🏠 Vue Accueil
 // ─────────────────────────────────────────────
@@ -66,7 +58,6 @@ function attackMode(userId, isAdmin) {
  * @param {string} userId
  * @param {Object} ctx
  * @param {boolean} ctx.isAdmin
- * @param {number}  ctx.attackPrice
  * @param {string}  ctx.creditsPerJeanpipLabel
  * @param {string}  ctx.targetEmoji
  * @param {number}  ctx.farmRemainingMs   - pénalité anti-farm restante (0 si aucune)
@@ -82,7 +73,6 @@ function attackMode(userId, isAdmin) {
 function buildHomeView(userId, ctx) {
   const balance = credits.getBalance(userId);
   const score = scores.getScore(userId);
-  const mode = attackMode(userId, ctx.isAdmin);
   const pending = boosters.countPending(userId);
   const subscribed = broadcast.isSubscribed(userId);
   const now = Date.now();
@@ -91,7 +81,7 @@ function buildHomeView(userId, ctx) {
   const blocks = [
     { type: 'header', text: { type: 'plain_text', text: '🤖 Jeanpip', emoji: true } },
     section(`💰 *Ton solde : ${formatCredits(balance)} JP$*\n_+${ctx.creditsPerJeanpipLabel} JP$ à chaque réaction :${ctx.targetEmoji}: que tu poses (Jeanpip délivré, hors spam/farm)._`),
-    ...(isWeekend ? [section(`${weekend.PAUSE_TEXT}\nPas de Jeanpip, d'Attaque, de booster, de ticket ni de nouveau combat : on laisse les collègues tranquilles. Ton classeur et ton deck restent ouverts.`)] : []),
+    ...(isWeekend ? [section(`${weekend.PAUSE_TEXT}\nPas de Jeanpip, de raid, de booster, de ticket ni de nouveau combat : on laisse les collègues tranquilles. Ton classeur et ton deck restent ouverts.`)] : []),
     { type: 'divider' },
   ];
 
@@ -105,32 +95,8 @@ function buildHomeView(userId, ctx) {
     blocks.push({ type: 'divider' });
   }
 
-  // 📊 Semaine + ⚔️ Attaque : soit débloquée (gratuite), soit à acheter — dit clairement (v2.2.1)
-  const scoreLine = `📊 *Ta semaine :* ${score}/${scores.ATTACK_THRESHOLD} :${ctx.targetEmoji}:`;
-  const missing = Math.max(0, scores.ATTACK_THRESHOLD - score);
-  const unlockHint = `_Ou envoie encore ${missing} Jeanpip${missing > 1 ? 's' : ''} cette semaine pour la débloquer gratuitement._`;
-  let attackText;
-  let attackButton = null;
-
-  if (isWeekend) {
-    attackText = `🏖️ *Pas d'Attaque le week-end* : ça reprend lundi.`;
-  } else if (ctx.farmRemainingMs > 0) {
-    attackText = `🚜 *Pénalité anti-farm* encore *${ctx.formatRemaining(ctx.farmRemainingMs)}* : tu ne peux pas attaquer pour l'instant.`;
-  } else if (mode === 'admin') {
-    attackText = `⚔️ *Attaque Jeanpip :* 👑 illimitée (admin)`;
-    attackButton = button('⚔️ Lancer une attaque', 'home_attack_open', { style: 'primary' });
-  } else if (mode === 'free') {
-    attackText = `🎉 *Tu as débloqué une Attaque Jeanpip !* Elle est *gratuite*, à lancer avant vendredi minuit (pas d'Attaque le week-end).`;
-    attackButton = button('🎉 Lancer mon attaque gratuite', 'home_attack_open', { style: 'primary' });
-  } else if (balance >= ctx.attackPrice) {
-    attackText = `⚔️ *Attaque Jeanpip :* pas encore débloquée cette semaine.\n💰 *Achète-la pour ${ctx.attackPrice} JP$* (débités au lancement).\n${unlockHint}`;
-    attackButton = button(`💰 Acheter une attaque (${ctx.attackPrice} JP$)`, 'home_attack_open', { style: 'danger' });
-  } else {
-    attackText = `⚔️ *Attaque Jeanpip :* pas encore débloquée cette semaine.\n💰 Elle s'achète *${ctx.attackPrice} JP$* : ❌ il te manque *${formatCredits(ctx.attackPrice - balance)}* JP$.\n${unlockHint}`;
-  }
-
-  blocks.push(section(`${scoreLine}\n${attackText}`, attackButton));
-  blocks.push({ type: 'context', elements: [{ type: 'mrkdwn', text: `L'attaque envoie un Jeanpip aux 7 dernières personnes inscrites ayant posté dans le channel choisi. _Scores remis à 0 chaque dimanche 20h._` }] });
+  // 📊 Semaine + ⚔️ Raid (v3.4) : défenses à jouer, raid en cours, ou lancer un raid
+  blocks.push(...buildRaidBlocks(userId, { ...ctx, balance, score, isWeekend, now }));
   blocks.push(buildFarmQuotaBlock(ctx));
   blocks.push({ type: 'divider' });
 
@@ -278,7 +244,7 @@ function buildAdminBlocks(autoTargets, statsUrl = null) {
       type: 'actions',
       block_id: 'home_admin',
       elements: [
-        button('🎁 Offrir une attaque', 'admin_give_attack_open'),
+        button('🎁 Offrir un raid', 'admin_give_attack_open'),
         button('💳 JP$ ±', 'admin_credits_open'),
         button('🖼️ Ajouter un média', 'admin_addmedia_open'),
         button('🃏 Donner une carte', 'admin_give_card_open'),
@@ -340,30 +306,110 @@ function userInput(label) {
   };
 }
 
-/** ⚔️ Modale « Lancer une attaque » : choix du channel + coût. */
-function buildAttackModal(userId, { isAdmin, attackPrice }) {
-  const mode = attackMode(userId, isAdmin);
-  const cost = {
-    admin: '👑 *Illimitée* (admin)',
-    free: '🎉 *Gratuite* : tu l\'as débloquée cette semaine',
-    paid: `💰 *Achat : ${attackPrice} JP$*, débités au lancement — ton solde : *${formatCredits(credits.getBalance(userId))}*`,
-  }[mode];
-  const submit = mode === 'paid' ? `💰 Acheter (${attackPrice} JP$)` : '⚔️ Lancer';
+// ─────────────────────────────────────────────
+// ⚔️ Raid (v3.4) — src/raid.js
+// ─────────────────────────────────────────────
 
-  return modal('home_attack_submit', 'Attaque Jeanpip', submit, [
-    section(`${cost}\n\nUn Jeanpip part vers les *7 dernières personnes inscrites* ayant posté dans le channel choisi.\n_Rien n'est débité si personne n'est attaquable._`),
+const raidClock = new Intl.DateTimeFormat('fr-FR', { timeZone: 'Europe/Paris', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+/** Heure de Paris « 10h42 ». */
+const raidTime = (ms) => raidClock.format(new Date(ms)).replace(':', 'h');
+const styleText = (key) => `${raid.STYLES[key].emoji} ${raid.STYLES[key].label}`;
+const defenseText = (key) => `${raid.DEFENSES[key].emoji} ${raid.DEFENSES[key].label}`;
+
+/** Les 3 boutons de défense d'un raid (DM d'alerte et Accueil). */
+function raidDefenseButtons(raidId) {
+  return {
+    type: 'actions',
+    block_id: `raid_defend_${raidId}`,
+    elements: Object.keys(raid.DEFENSES).map((d) => button(defenseText(d), `raid_defend_${d}`, { value: raidId })),
+  };
+}
+
+/** Règles de la défense, lues par la victime (DM d'alerte). */
+const RAID_RULES = Object.values(raid.DEFENSES)
+  .map((d) => `• ${d.emoji} *${d.label}* bat ${styleText(d.beats)}, tient contre ${styleText(d.holds)}`)
+  .join('\n');
+
+/** Blocs « Ta semaine + ⚔️ Raid » de l'Accueil. */
+function buildRaidBlocks(userId, ctx) {
+  const blocks = [];
+  const free = scores.hasAttack(userId);
+  const missing = Math.max(0, scores.ATTACK_THRESHOLD - ctx.score);
+  const scoreLine = `📊 *Ta semaine :* ${ctx.score}/${scores.ATTACK_THRESHOLD} :${ctx.targetEmoji}:${free ? '' : ` · encore ${missing} pour un raid gratuit`}`;
+
+  // 🚨 Raids qui me visent : se défendre ici aussi (mêmes boutons que dans le DM)
+  for (const r of raid.raidsAgainst(userId)) {
+    const me = r.targets.find((t) => t.userId === userId);
+    if (me.defense) {
+      blocks.push(section(`🚨 *<@${r.attacker}> te raide.* ${defenseText(me.defense)} enregistré : résultat à la fin du raid, au plus tard à ${raidTime(r.endsAt)}. 🤫`));
+    } else {
+      blocks.push(section(`🚨 *<@${r.attacker}> te raide !* Devine son style d'attaque avant *${raidTime(r.endsAt)}*.\n${RAID_RULES}`));
+      blocks.push(raidDefenseButtons(r.id));
+    }
+  }
+
+  const mine = raid.activeRaidOf(userId);
+  const block = raid.launchBlock(ctx.now);
+  const price = raid.cost(raid.BASE_TARGETS, free);
+  let text;
+  let launch = null;
+  if (mine) {
+    const answered = mine.targets.filter((t) => t.defense).length;
+    text = `⚔️ *Ton raid est en cours* (${styleText(mine.style)}) : ${answered}/${mine.targets.length} défense${mine.targets.length > 1 ? 's' : ''} reçue${answered > 1 ? 's' : ''}, fin au plus tard à ${raidTime(mine.endsAt)}.`;
+  } else if (ctx.isWeekend) {
+    text = '🏖️ *Pas de raid le week-end* : ça reprend lundi à 9h.';
+  } else if (block === 'hours') {
+    text = `⏰ *Raid :* ils se lancent ${raid.OPEN.text}, pour que tout soit fini à 18h.${free ? ' Ton raid gratuit t\'attend.' : ''}`;
+  } else if (ctx.farmRemainingMs > 0) {
+    text = `🚜 *Pénalité anti-farm* encore *${ctx.formatRemaining(ctx.farmRemainingMs)}* : pas de raid pour l'instant.`;
+  } else if (free) {
+    text = '🎉 *Raid gratuit débloqué !* Choisis jusqu\'à 5 cibles sans rien payer.';
+    launch = button('⚔️ Lancer mon raid gratuit', 'home_attack_open', { style: 'primary' });
+  } else {
+    text = `⚔️ *Raid :* ${price} JP$ pour ${raid.BASE_TARGETS} cibles${ctx.balance < price ? ` · ❌ il te manque *${formatCredits(price - ctx.balance)}* JP$` : ''}.`;
+    if (ctx.balance >= price) launch = button(`⚔️ Lancer un raid (${price} JP$)`, 'home_attack_open', { style: 'primary' });
+  }
+  blocks.push(section(`${scoreLine}\n${text}`, launch));
+  blocks.push({ type: 'context', elements: [{ type: 'mrkdwn', text: `Tu choisis tes cibles (${raid.BASE_TARGETS} incluses, +${raid.EXTRA_TARGET_PRICE} JP$ par cible en plus, ${raid.MAX_TARGETS} max) et un style secret. Chacune a 20 min pour deviner : celles qui tombent te donnent une carte (jamais une légendaire), une bonne défense t'en coûte une. _Scores remis à 0 chaque dimanche 20h._` }] });
+  return blocks;
+}
+
+/** ⚔️ Modale « Lancer un raid » (ou une modale d'info si on ne peut pas lancer). */
+function buildRaidModal(userId, now = Date.now()) {
+  const info = (text) => ({ type: 'modal', title: { type: 'plain_text', text: 'Raid Jeanpip' }, close: { type: 'plain_text', text: 'Fermer' }, blocks: [section(text)] });
+  const block = raid.launchBlock(now);
+  if (block === 'weekend') return info('🏖️ *Pas de raid le week-end.* Ça reprend lundi à 9h.');
+  if (block === 'hours') return info(`⏰ *Les raids se lancent ${raid.OPEN.text}*, pour que tout soit fini à 18h.`);
+  if (raid.activeRaidOf(userId)) return info('⚔️ *Tu as déjà un raid en cours.* Attends son résultat avant d\'en lancer un autre.');
+
+  const free = scores.hasAttack(userId);
+  const cost = free
+    ? `🎉 *Raid gratuit* pour ${raid.BASE_TARGETS} cibles (tu l'as débloqué cette semaine)`
+    : `💰 *${raid.PRICE} JP$* pour ${raid.BASE_TARGETS} cibles`;
+  return modal('raid_submit', 'Raid Jeanpip', '⚔️ Lancer le raid', [
+    section(`${cost}, puis *+${raid.EXTRA_TARGET_PRICE} JP$ par cible en plus* (${raid.MAX_TARGETS} max). Ton solde : *${formatCredits(credits.getBalance(userId))} JP$*.\n\nChaque cible reçoit une alerte et a *20 min* pour deviner ton style. Celles qui tombent te donnent une carte (un doublon d'abord, jamais une légendaire). Une bonne défense, c'est la *riposte* : tu perds une carte.`),
     {
       type: 'input',
-      block_id: 'channel',
-      label: { type: 'plain_text', text: 'Channel' },
-      element: {
-        type: 'conversations_select',
-        action_id: 'value',
-        placeholder: { type: 'plain_text', text: 'Choisis un channel' },
-        filter: { include: ['public', 'private'], exclude_bot_users: true },
-      },
-      hint: { type: 'plain_text', text: 'Le bot doit être invité dans ce channel.' },
+      block_id: 'targets',
+      label: { type: 'plain_text', text: 'Cibles' },
+      element: { type: 'multi_users_select', action_id: 'value', max_selected_items: raid.MAX_TARGETS, placeholder: { type: 'plain_text', text: `Jusqu'à ${raid.MAX_TARGETS} personnes` } },
+      hint: { type: 'plain_text', text: 'Inscrites à la liste de diffusion. Une personne ne subit qu\'un raid à la fois, et 2 par jour au maximum.' },
     },
+    {
+      type: 'input',
+      block_id: 'style',
+      label: { type: 'plain_text', text: 'Ton style d\'attaque (secret, le même pour tout le raid)' },
+      element: {
+        type: 'radio_buttons',
+        action_id: 'value',
+        options: Object.values(raid.STYLES).map((s) => ({ text: { type: 'plain_text', text: `${s.emoji} ${s.label}`, emoji: true }, value: s.key })),
+      },
+    },
+    { type: 'context', elements: [{ type: 'mrkdwn', text: Object.values(raid.STYLES).map((s) => {
+      const beats = Object.values(raid.DEFENSES).find((d) => d.beats === s.key);
+      const holds = Object.values(raid.DEFENSES).find((d) => d.holds === s.key);
+      return `${s.emoji} *${s.label}* : contré par ${beats.emoji} ${beats.label} (riposte), arrêté par ${holds.emoji} ${holds.label}`;
+    }).join('\n') }] },
   ]);
 }
 
@@ -417,8 +463,8 @@ function buildWeeklyGiftModal(userId) {
 }
 
 function buildGiveAttackModal() {
-  return modal('admin_give_attack_submit', 'Offrir une attaque', 'Offrir', [
-    userInput('À qui offrir une Attaque Jeanpip ?'),
+  return modal('admin_give_attack_submit', 'Offrir un raid', 'Offrir', [
+    userInput('À qui offrir un Raid gratuit ?'),
   ]);
 }
 
@@ -794,7 +840,10 @@ module.exports = {
   buildFarmLimitModal,
   buildTicketsModal,
   buildCreditValueModal,
-  buildAttackModal,
+  buildRaidModal,
+  raidDefenseButtons,
+  raidTime,
+  RAID_RULES,
   buildWeeklyGiftModal,
   buildReleaseNotesModal,
   buildGiveAttackModal,
@@ -810,5 +859,4 @@ module.exports = {
   buildBoosterBanModal,
   banEndText,
   cardFromValue,
-  attackMode,
 };

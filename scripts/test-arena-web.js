@@ -214,8 +214,19 @@ const pathOf = (url) => url.replace('http://jeanpip.test/', '');
   const dt = new URL(deckUrl).searchParams.get('t');
   const deckPage = await request('GET', pathOf(deckUrl));
   check('page « Mon deck » servie', deckPage.status === 200 && deckPage.body.includes('deck-editor.js?v='));
+  // 🎀🚨 v3.4 : tout le Hors série du classeur est jouable (Octobre Rose ET photos anti-spam)
+  const { SPAM_CARDS } = require(path.join(TMP, 'src', 'spamCards.js'));
+  const { ROSE_CARDS } = require(path.join(TMP, 'src', 'octobreRose.js'));
+  collections.addCards('UA', [SPAM_CARDS[0], ROSE_CARDS[0]]);
   const dget = await request('GET', `api/deck?t=${encodeURIComponent(dt)}`);
   const ownedA = collections.getCollection('UA').filter((c) => c.count > 0).length;
+  // 🎖 v3.4 : le Capitaine (9e carte hors deck) a son dessin → ses Renforts sont visibles
+  const deckCard = { url: 'https://example.test/deck1', title: 'Deck 1', rarity: 'common' };
+  const capCard = { url: 'https://example.test/cap1', title: 'Capitaine', rarity: 'common', archetype: 'essaim', power: 'renforts', used: false };
+  const fakeMatch = { engine: { players: { A: { cards: { [deckCard.url]: deckCard }, captain: capCard }, B: { cards: {}, captain: null } } } };
+  const assets = arenaWeb.combatAssets(fakeMatch);
+  check('combat : le Capitaine hors deck a son personnage (abeilles des Renforts visibles)', Boolean(assets.keyOf[capCard.url]) && assets.symbols.includes(`id="${assets.keyOf[capCard.url]}"`));
+  check('API deck : les cartes Hors série possédées sont proposées (anti-spam + Octobre Rose)', dget.json && [SPAM_CARDS[0].url, ROSE_CARDS[0].url].every((u) => dget.json.catalogue.some((c) => c.url === u)));
   check('API deck : mes cartes seulement (aucune non possédée) + mes decks', dget.json && dget.json.catalogue.length === ownedA && dget.json.catalogue.every((c) => c.copies > 0) && dget.json.decks.length === 3 && dget.json.active === 1);
   const dpost = await request('POST', `api/deck?t=${encodeURIComponent(dt)}`, { active: 0, decks: [{ name: 'Nouveau', cards: deckA }, {}, {}] });
   check('API deck : enregistrement', dpost.json && dpost.json.ok);

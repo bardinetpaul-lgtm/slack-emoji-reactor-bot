@@ -5,7 +5,7 @@
 //  Dans une COPIE temporaire du projet (aucune donnée réelle touchée),
 //  avec une horloge simulée, du samedi 0h au lundi 0h (heure de Paris) :
 //    • réaction :jeanpip: → rien (ni image, ni JP$, ni score) + rappel éphémère
-//    • auto-react des cibles coupé, Attaque refusée (slash, bouton, modale)
+//    • auto-react des cibles coupé, Raid refusé (modale)
 //    • boosters : ni achat ni ouverture (le booster attend lundi)
 //    • tickets à gratter et nouveaux combats d'Arène refusés
 //    • cadeaux admin refusés (ils notifieraient), correction de JP$ possible
@@ -156,14 +156,11 @@ const flat = (x) => JSON.stringify(x);
   await find(evts, 'message')({ event: { user: 'UAUTHOR', channel: 'C1', ts: '2.2' }, client: fakeClient, logger });
   check(targets.isTarget('UAUTHOR') && reactionsAdded.length === 0 && posted.length === dmCount, 'auto-react sur une cible : coupé le week-end (ni réaction, ni DM)');
 
-  // ── Attaque ──
-  await find(commands, '/jeanpip-attack')({ ack, command: { user_id: 'UADMIN', channel_id: 'C1', channel_name: 'general' }, client: fakeClient, logger });
-  check(/Pas d'Attaque Jeanpip le week-end/.test(flat(dmsTo('UADMIN').at(-1))) && reactionsAdded.length === 0, '/jeanpip-attack (même admin) : refusée, réponse en DM');
+  // ── Raid (v3.4) ──
   const before = credits.getBalance('UB');
-  await find(actions, 'buy_attack')({ ack, body: { user: { id: 'UB' } }, action: { value: 'C1' }, client: fakeClient, logger });
-  check(/Pas d'Attaque Jeanpip le week-end/.test(flat(dmsTo('UB').at(-1))) && credits.getBalance('UB') === before, 'bouton « Lancer l\'attaque (50 JP$) » : refusé, rien débité');
-  const modal = await submit('home_attack_submit', 'UB', { channel: { value: { selected_conversation: 'C1' } } });
-  check(modal && /week-end/.test(modal.errors.channel), 'modale d\'attaque de l\'Accueil : erreur « week-end »');
+  check(!home.buildRaidModal('UB').callback_id && /Pas de raid le week-end/.test(flat(home.buildRaidModal('UB'))), '/jeanpip-attack et bouton ⚔️ : modale « pas de raid le week-end »');
+  const modal = await submit('raid_submit', 'UB', { targets: { value: { selected_users: ['UR'] } }, style: { value: { selected_option: { value: 'ruse' } } } });
+  check(modal && /week-end/.test(modal.errors.targets) && credits.getBalance('UB') === before, 'modale de raid restée ouverte : refusée « week-end », rien débité');
 
   // ── Boosters ──
   await find(actions, 'buy_booster_common')({ ack, body: { user: { id: 'UB' } }, action: { value: 'common' }, client: fakeClient, logger });
@@ -183,7 +180,7 @@ const flat = (x) => JSON.stringify(x);
   check(matchmaking.createChallenge('UB', 'UR').reason === 'weekend', 'Arène : défi refusé');
 
   // ── Cadeaux admin ──
-  check(/week-end/.test((await submit('admin_give_attack_submit', 'UADMIN', { user: { value: { selected_user: 'UB' } } })).errors.user), 'admin : « Offrir une attaque » refusé le week-end');
+  check(/week-end/.test((await submit('admin_give_attack_submit', 'UADMIN', { user: { value: { selected_user: 'UB' } } })).errors.user), 'admin : « Offrir un raid » refusé le week-end');
   check(/week-end/.test((await submit('admin_give_booster_submit', 'UADMIN', { user: { value: { selected_user: 'UB' } }, booster: { value: { selected_option: { value: 'rare' } } }, count: { value: { value: '1' } } })).errors.user), 'admin : « Offrir un booster » refusé le week-end');
   check(/week-end/.test((await submit('admin_credits_submit', 'UADMIN', { user: { value: { selected_user: 'UB' } }, amount: { value: { value: '20' } } })).errors.amount), 'admin : JP$ +20 (cadeau) refusé le week-end');
   check(await submit('admin_credits_submit', 'UADMIN', { user: { value: { selected_user: 'UB' } }, amount: { value: { value: '-20' } } }) === null, 'admin : JP$ -20 (correction, sans notification) accepté');
@@ -192,8 +189,8 @@ const flat = (x) => JSON.stringify(x);
   // ── Accueil ──
   const h = homeOf('UB');
   check(h.includes('Jeanpip est en pause jusqu') && h.includes('on laisse les collègues tranquilles'), 'Accueil : bandeau « en pause jusqu\'à lundi 0h »');
-  check(!h.includes('home_attack_open') && !h.includes('buy_booster_') && !h.includes('open_tickets_web'), 'Accueil : plus de bouton Attaque, booster ni ticket');
-  check(h.includes("Pas d'Attaque le week-end") && h.includes('Kiosque est fermé le week-end'), 'Accueil : « pas d\'Attaque le week-end », « Kiosque fermé »');
+  check(!h.includes('home_attack_open') && !h.includes('buy_booster_') && !h.includes('open_tickets_web'), 'Accueil : plus de bouton Raid, booster ni ticket');
+  check(h.includes('Pas de raid le week-end') && h.includes('Kiosque est fermé le week-end'), 'Accueil : « pas de raid le week-end », « Kiosque fermé »');
   at(SUNDAY_2359);
   check(homeOf('UB').includes('en pause'), 'dimanche 23h59 : toujours en pause');
 

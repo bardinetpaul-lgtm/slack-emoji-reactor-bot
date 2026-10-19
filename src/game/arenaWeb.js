@@ -35,7 +35,8 @@ const arenaStore = require('./arenaStore');
 const characters = require('./characters');
 const { getCardStats } = require('./cards');
 const collections = require('../collections');
-const { getAllMedia } = require('../media');
+const { getAllMedia, getRemovedMedia } = require('../media');
+const { SPAM_CARDS } = require('../spamCards');
 const { ROSE_CARDS } = require('../octobreRose');
 const { cardImageUrl } = require('../cardImages');
 const wire = require('../../public/arena-wire');
@@ -97,8 +98,13 @@ function imageFor(card, prefix) {
   return /^https?:/.test(img) ? img : `${prefix}${img}`;
 }
 
-// Banque + cartes 🎀 Octobre Rose (hors banque mais jouables dans l'Arène)
-const arenaMedia = () => [...getAllMedia(), ...ROSE_CARDS.filter((c) => c.url)];
+// Banque + tout le « Hors série » du classeur, jouable dans l'Arène (v3.4) :
+// 🎀 Octobre Rose, 🚨 photos anti-spam et cartes retirées de la banque
+const arenaMedia = () => {
+  const seen = new Set();
+  return [...getAllMedia(), ...ROSE_CARDS.filter((c) => c.url), ...SPAM_CARDS, ...getRemovedMedia()]
+    .filter((m) => m && m.url && !seen.has(m.url) && seen.add(m.url));
+};
 
 // Seulement les cartes POSSÉDÉES : une carte qu'on n'a pas n'apparaît nulle part (ni envoyée)
 function catalogueFor(userId, prefix) {
@@ -129,6 +135,9 @@ function combatAssets(match) {
   for (const side of ['A', 'B']) {
     const p = match.engine.players[side];
     for (const url of Object.keys(p.cards)) cards.push(p.cards[url]);
+    // 🎖 v3.4 : le Capitaine est une 9e carte HORS deck ; sans son dessin, les abeilles
+    //    de ses Renforts (unités à son url) étaient invisibles sur le terrain
+    if (p.captain && !p.cards[p.captain.url] && !cards.some((c) => c.url === p.captain.url)) cards.push(p.captain);
   }
   const typeOf = Object.fromEntries(arenaMedia().map((m) => [m.url, m.type]));
   const keyOf = {};

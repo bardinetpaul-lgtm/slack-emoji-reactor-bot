@@ -24,8 +24,8 @@ const CAPTAINS = {
   },
   essaim: {
     style: 'Nuée',
-    passive: 'Tes Essaims ont deux abeilles de plus.',
-    power: { key: 'renforts', label: 'Renforts', lane: true, desc: '4 abeilles gratuites au point touché (aucune carte engagée).' },
+    passive: 'Tes Essaims ont une abeille de plus.',
+    power: { key: 'renforts', label: 'Renforts', lane: true, desc: '3 abeilles gratuites au point touché (aucune carte engagée).' },
   },
   vigie: {
     style: 'Garnison',
@@ -47,7 +47,9 @@ const TUNING = {
   rushSpeed: 1.2,
   rushDps: 1.15,
   towerRange: 1.1,
-  extraSwarm: 2,
+  // v3.4 : la Nuée était la Capitaine la plus forte (60 %, 64 victoires nettes sur 200) :
+  //        +2 → +1 abeille par Essaim, Renforts 4 → 3 abeilles → 55 % (39 nettes), comme les autres
+  extraSwarm: 1,
   spellDiscount: 1,
   spellDamage: 1,
   rempartMs: 10000,
@@ -55,7 +57,7 @@ const TUNING = {
   chargeSpeed: 2,
   chargeDps: 1.4,
   salveDamage: 200,
-  renforts: 4,
+  renforts: 3,
   gelMs: 5000,   // v2.3 : 3 s → 5 s (sans la Pompe et ses élixirs en plus, la Magie tombait à ~32 %)
   // v2.3 : Garnison (remplace Économie : élixir de départ, maximum 11, recharge, Surchauffe)
   vigieDuration: 2,   // simulation : 1,5 → 2 (la Nuée gagnait 81 % de ses combats contre la Garnison)

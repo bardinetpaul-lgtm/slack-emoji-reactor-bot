@@ -18,7 +18,7 @@
 
   const LABELS = {
     reaction: 'Réactions', weekly_gift: 'Cadeaux du vendredi', arena_reward: 'Récompenses arène', arena_streak: 'Séries arène', bug_bounty: 'Bugs signalés', media_author: 'Auteurs de médias',
-    admin_gift: 'Dons admin', unknown: '❓ Inconnu', booster: 'Boosters', arena_shop: 'Boutique arène', attack: 'Attaques', scratch: 'Tickets à gratter', ticket: 'achat', win: 'gains',
+    admin_gift: 'Dons admin', unknown: '❓ Inconnu', booster: 'Boosters', arena_shop: 'Boutique arène', attack: 'Attaques', raid: 'Raids',scratch: 'Tickets à gratter', ticket: 'achat', win: 'gains',
     common: 'Commun', rare: 'Rare', epic: 'Épique', legendary: 'Légendaire', rose: 'Octobre Rose', octobre_rose: '🎀 Octobre Rose',
   };
   const label = (key) => String(key).split('/').map((k) => LABELS[k] || k).join(' · ');
