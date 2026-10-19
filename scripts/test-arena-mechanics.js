@@ -91,7 +91,7 @@ const give = (s, side, urls) => { s.players[side].hand = urls.slice(); s.players
   engine.applyAction(ess, 'A', { type: 'deploy', url: 'essaim2', lane: 1 });
   engine.applyAction(ess, 'A', { type: 'deploy', url: 'guerrier2', lane: 2 });
   run(ess, 1000);
-  check('Nuée (Essaim) : tes Essaims +2 abeilles', ess.units.filter((u) => u.archetype === 'essaim').length === 8);
+  check('Nuée (Essaim) : tes Essaims +1 abeille (v3.4)', ess.units.filter((u) => u.archetype === 'essaim').length === 7);
   check('Nuée (Essaim) : les autres groupes inchangés', ess.units.filter((u) => u.archetype === 'guerrier').length === 3);
   const rush = match(player('UA', DECK_A, { captain: 'guerrier1' }));
   give(rush, 'A', ['guerrier2']);
@@ -142,7 +142,7 @@ const give = (s, side, urls) => { s.players[side].hand = urls.slice(); s.players
   const renf = match(player('UA', DECK_A, { captain: 'essaim1' }));
   engine.applyAction(renf, 'A', { type: 'power', lane: 1 });
   run(renf, 1000);
-  check('Renforts : 4 abeilles gratuites', renf.units.filter((u) => u.side === 'A' && u.archetype === 'essaim').length === 4);
+  check('Renforts : 3 abeilles gratuites', renf.units.filter((u) => u.side === 'A' && u.archetype === 'essaim').length === 3);
   check('Renforts : aucune carte engagée (rien à perdre)', renf.poses.length === 0);
 
   const chg = match(player('UA', DECK_A, { captain: 'guerrier1' }));

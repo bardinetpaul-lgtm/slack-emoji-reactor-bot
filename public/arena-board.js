@@ -201,9 +201,23 @@
   const GROUND = 'M-20 2A20 7 0 1 0 20 2A20 7 0 1 0 -20 2Z';
   const spriteOf = (raw) => (!raw ? null : typeof raw === 'string' ? { id: raw, walk: 'none' } : raw);
 
+  // v3.4 : autre taille de groupe (Essaim de la Nuée = 7, Renforts = 3…) → grille de 3 de large,
+  //        dernière rangée centrée. Avant, tout le groupe était dessiné au MÊME point
+  //        (une seule abeille visible qui frappait comme sept).
+  function gridFormation(n) {
+    const rows = Math.ceil(n / 3);
+    return Array.from({ length: n }, (_, i) => {
+      const row = Math.floor(i / 3);
+      const inRow = Math.min(3, n - row * 3);
+      return [((i % 3) - (inRow - 1) / 2) * 12, (row - (rows - 1) / 2) * 11];
+    });
+  }
+
   function formationOffset(u) {
     if (u.archetype === 'tank' && u.packSize === 2) return [[-13, -4], [13, 4]][(u.slot || 0) % 2];   // deux chars côte à côte
-    const f = FORMATIONS[u.packSize] || FORMATIONS[1];
+    const n = u.packSize || 1;
+    if (!FORMATIONS[n]) FORMATIONS[n] = gridFormation(n);
+    const f = FORMATIONS[n];
     return f[(u.slot || 0) % f.length] || [0, 0];
   }
 
@@ -702,6 +716,6 @@
     W, H, LANE_X, ARENAS, COLORS: { INK, CREAM, PINK, BLUE, ORANGE, I7, I8 },
     TOWER_SYMBOLS, GRADIENT_DEF,
     toBoard, groundPaths, renderGround, renderDynamic, renderScene, createRenderer,
-    pointToDeploy, pointToPower, vigieTower, renderZones, renderGhost, laneAtPoint, unitAtPoint, unmapY, planX, engineX, BRIDGE_X,
+    formationOffset, pointToDeploy, pointToPower, vigieTower, renderZones, renderGhost, laneAtPoint, unitAtPoint, unmapY, planX, engineX, BRIDGE_X,
   };
 }));

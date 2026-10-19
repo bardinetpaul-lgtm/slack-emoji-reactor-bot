@@ -38,7 +38,7 @@ function section(text) {
  */
 function createAdminActions({ safeSendDM, isBot, targetEmoji }) {
   // ─────────────────────────────────────────────
-  // 🎁 Offrir une Attaque Jeanpip
+  // 🎁 Offrir un Raid gratuit (v3.4 : l'Attaque est devenue le Raid)
   // ─────────────────────────────────────────────
   async function giveAttack(client, adminId, targetId, logger) {
     if (await isBot(client, targetId)) {
@@ -47,16 +47,16 @@ function createAdminActions({ safeSendDM, isBot, targetEmoji }) {
 
     if (!scores.giveAttack(targetId)) {
       logger.info(`ℹ️ <@${targetId}> avait déjà une attaque, give ignoré`);
-      return { ok: false, error: 'already', text: `ℹ️ *<@${targetId}> a déjà une Attaque Jeanpip disponible.*\nRien à faire.` };
+      return { ok: false, error: 'already', text: `ℹ️ *<@${targetId}> a déjà un Raid gratuit disponible.*\nRien à faire.` };
     }
 
     await safeSendDM(client, targetId, {
-      text: `🎁 On t'a offert une Attaque Jeanpip !`,
-      blocks: [section(`🎁 *On t'a offert une Attaque Jeanpip !* :${targetEmoji}:\n\nUn admin vient de te créditer une Attaque Jeanpip 🎉\n\n*Comment l'activer :*\nTape la commande \`/jeanpip-attack\` dans n'importe quel channel (ou clique sur ⚔️ dans l'onglet *Accueil* du bot) pour envoyer un Jeanpip aux 7 dernières personnes ayant posté dans le canal choisi !\n\n⚠️ _Si tu ne l'actives pas avant vendredi minuit (pas d'Attaque le week-end), tu la perds._`)],
+      text: `🎁 On t'a offert un Raid gratuit !`,
+      blocks: [section(`🎁 *On t'a offert un Raid gratuit !* :${targetEmoji}:\n\nUn admin vient de te créditer un Raid Jeanpip 🎉\n\n*Comment le lancer :*\nClique sur ⚔️ dans l'onglet *Accueil* du bot (ou tape \`/jeanpip-attack\`), choisis jusqu'à 5 cibles et ton style secret. Celles qui ne devinent pas ta tactique te donnent une carte !\n\n⚠️ _Les raids se lancent en semaine, de 9h à 17h40. Ton raid gratuit est perdu dimanche à 20h s'il n'a pas servi._`)],
     }, logger);
 
-    logger.info(`🎁 <@${adminId}> a offert une attaque à <@${targetId}>`);
-    return { ok: true, text: `✅ *Attaque Jeanpip offerte à <@${targetId}> !*\nLa personne a été notifiée.` };
+    logger.info(`🎁 <@${adminId}> a offert un raid gratuit à <@${targetId}>`);
+    return { ok: true, text: `✅ *Raid gratuit offert à <@${targetId}> !*\nLa personne a été notifiée.` };
   }
 
   // ─────────────────────────────────────────────

@@ -16,6 +16,21 @@
 
 const RELEASES = [
   {
+    version: '3.4.0',
+    date: '2026-10-19',
+    title: 'L\'Attaque devient le Raid',
+    changes: [
+      '⚔️ Nouveau : le Raid Jeanpip remplace l\'Attaque. Tu choisis tes cibles (5 incluses, +10 JP$ par cible en plus, 10 au maximum) et un style d\'attaque secret : 💥 Assaut, 🦊 Ruse ou 🌫️ Embuscade.',
+      '🛡️ Chaque cible reçoit une alerte et a 20 minutes pour deviner ton style avec 🛡️ Bouclier, 🪤 Piège ou 🏃 Esquive. Elle se trompe ou ne répond pas : elle te donne une carte. Sa défense tient : rien ne se passe. Elle devine : riposte, c\'est toi qui lui donnes une carte.',
+      '🃏 Une carte prise, c\'est d\'abord un doublon, et jamais une légendaire ni une carte hors série. Le raid n\'envoie plus de carte à personne.',
+      '🤫 Les résultats tombent à la fin du raid, pour tout le monde en même temps : inutile de crier ta défense dans l\'open space.',
+      '💰 Un raid coûte 50 JP$, ou rien si tu as envoyé 100 Jeanpips dans la semaine. Les raids se lancent en semaine, de 9h à 17h40 : tout est fini à 18h. Une personne ne subit qu\'un raid à la fois, et 2 par jour au maximum.',
+      '🃏 Arène : toutes tes cartes « Hors série » sont maintenant jouables dans ton deck, y compris les photos anti-spam 🚨 et les cartes retirées de la banque.',
+      '🐝 Arène : les abeilles des Renforts de la Capitaine Essaim étaient invisibles, elles apparaissent enfin. Et les abeilles d\'un même Essaim ne s\'empilent plus au même endroit : chacune a sa place.',
+      '⚖️ Arène : la Capitaine Essaim était la plus forte. Son passif donne maintenant 1 abeille de plus par Essaim (au lieu de 2), et ses Renforts appellent 3 abeilles (au lieu de 4).',
+    ],
+  },
+  {
     version: '3.3.0',
     date: '2026-10-19',
     title: 'Le week-end, on souffle',

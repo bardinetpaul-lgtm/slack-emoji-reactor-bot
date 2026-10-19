@@ -237,5 +237,12 @@ check('Alarme : tour détruite sans marque', countFx(board.renderDynamic({ ...al
 check('Alarme : pas de marque sur le QG', countFx(board.renderDynamic({ ...alarmView(true, false), buildings: [{ ...alarmTower('A', true), kind: 'qg' }] }, {})) === 0);
 check('Alarme : sans players, rien ne plante', countFx(board.renderDynamic({ you: 'A', units: [], buildings: [alarmTower('A', true)] }, {})) === 0);
 
+// 🐝 v3.4 : chaque abeille d'un groupe a sa place, quelle que soit la taille du groupe
+//    (Essaim de la Nuée = 7, Renforts = 3) : avant, 4, 7 ou 8 abeilles étaient dessinées au même point
+for (const n of [1, 2, 3, 4, 6, 7, 8]) {
+  const spots = Array.from({ length: n }, (_, slot) => board.formationOffset({ archetype: 'essaim', packSize: n, slot }).join(','));
+  check(`groupe de ${n} : ${n} place(s) distincte(s)`, new Set(spots).size === n);
+}
+
 console.log(failures ? `\n❌ ${failures} échec(s)` : '\n✅ Tout est bon');
 process.exit(failures ? 1 : 0);

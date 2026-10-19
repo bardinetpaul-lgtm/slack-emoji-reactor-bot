@@ -7,7 +7,7 @@
 const { App, LogLevel } = require('@slack/bolt');
 require('dotenv').config();
 
-const { getRandomMedia, normalizeRarity, getAllMedia, RARITIES } = require('./media');
+const { getRandomMedia, normalizeRarity, getAllMedia, getRemovedMedia, RARITIES } = require('./media');
 const { buildMediaBlocks } = require('./blocks');
 const scores = require('./scores');
 const targets = require('./targets');
@@ -25,6 +25,7 @@ const boosterSpam = require('./boosterSpam');
 const boosterBans = require('./boosterBans');
 const octobreRose = require('./octobreRose');
 const weekend = require('./weekend');
+const raid = require('./raid');
 
 /**
  * 🏖️ v3.3 : le week-end, le bot n'envoie aucune notification automatique
@@ -78,9 +79,6 @@ const TARGET_EMOJI = process.env.TARGET_EMOJI;
 const JEANPIP_ADMINS = process.env.JEANPIP_ADMINS
   ? process.env.JEANPIP_ADMINS.split(',').map((id) => id.trim()).filter(Boolean)
   : [];
-
-// ⚔️ Prix d'une Attaque Jeanpip achetée en crédits (si pas d'attaque gratuite)
-const ATTACK_PRICE = 25;
 
 // 💰 Crédits gagnés par Jeanpip envoyé (demi-crédits autorisés) : réglable en
 //    live par un admin depuis l'onglet Accueil (src/settings.js, défaut 0,5).
@@ -272,50 +270,6 @@ async function sendJeanpipDM(client, userId, { text, headerText, media, collect 
 }
 
 /**
- * Récupère les N derniers auteurs uniques d'un channel.
- * Pagine dans l'historique jusqu'à trouver assez de personnes,
- * peu importe si ça s'étale sur des semaines/mois.
- * Retourne un tableau de { user, ts } où ts = timestamp du DERNIER
- * message de cette personne (pour pouvoir y réagir).
- */
-async function getLastUniqueAuthors(client, channelId, count, excludeIds, logger) {
-  const victims = [];
-  const seen = new Set(excludeIds);
-  let cursor;
-  let pagesFetched = 0;
-  const MAX_PAGES = 20; // sécurité : jusqu'à 20 × 200 = 4000 messages max
-
-  while (victims.length < count && pagesFetched < MAX_PAGES) {
-    const result = await client.conversations.history({
-      channel: channelId,
-      limit: 200,
-      ...(cursor ? { cursor } : {}),
-    });
-
-    pagesFetched++;
-
-    for (const msg of result.messages) {
-      if (!msg.user) continue;      // messages système / bots sans user
-      if (msg.bot_id) continue;     // messages postés par un bot
-      if (seen.has(msg.user)) continue;
-      seen.add(msg.user);
-      // 📮 Liste de diffusion : on ne cible que les personnes inscrites
-      if (!broadcast.isSubscribed(msg.user)) continue;
-      victims.push({ user: msg.user, ts: msg.ts });
-      if (victims.length >= count) break;
-    }
-
-    if (!result.has_more || !result.response_metadata || !result.response_metadata.next_cursor) {
-      break;
-    }
-    cursor = result.response_metadata.next_cursor;
-  }
-
-  logger.info(`🔎 ${victims.length} victime(s) trouvée(s) en ${pagesFetched} page(s) d'historique`);
-  return victims;
-}
-
-/**
  * Extrait le premier ID utilisateur d'un texte de slash command.
  * Slack envoie les mentions sous la forme <@U12345|username> ou <@U12345>.
  * Accepte aussi un ID brut (U12345).
@@ -344,7 +298,6 @@ function buildHomeFor(userId) {
   const isAdmin = JEANPIP_ADMINS.includes(userId);
   return home.buildHomeView(userId, {
     isAdmin,
-    attackPrice: ATTACK_PRICE,
     creditsPerJeanpipLabel: creditsPerJeanpipLabel(),
     targetEmoji: TARGET_EMOJI,
     farmRemainingMs: getFarmPenaltyRemaining(userId),
@@ -575,16 +528,16 @@ app.event('reaction_added', async ({ event, client, logger }) => {
       refreshHomeIfSeen(client, reactingUserId, logger);
     }
 
-    // 🎉 Notification déblocage attaque
+    // 🎉 Notification : Raid gratuit débloqué (v3.4 : 100 Jeanpips dans la semaine)
     if (justUnlocked) {
       await safeSendDM(client, reactingUserId, {
-        text: `🎉 Tu as débloqué l'Attaque Jeanpip !`,
+        text: `🎉 Tu as débloqué un Raid gratuit !`,
         blocks: [
           {
             type: 'section',
             text: {
               type: 'mrkdwn',
-              text: `🎉 *Tu as débloqué l'Attaque Jeanpip !* :${TARGET_EMOJI}:\n\nTu as envoyé *${scores.ATTACK_THRESHOLD} Jeanpips* cette semaine, bravo !\n\n*Comment l'activer :*\nTape la commande \`/jeanpip-attack\` dans n'importe quel channel (ou clique sur ⚔️ dans l'onglet *Accueil* du bot) pour envoyer un Jeanpip aux 7 dernières personnes ayant posté dans le canal choisi !\n\n⚠️ _Si tu n'actives pas ton attaque avant vendredi minuit (pas d'Attaque le week-end), tu perds tes Jeanpips._`,
+              text: `🎉 *Tu as débloqué un Raid gratuit !* :${TARGET_EMOJI}:\n\nTu as envoyé *${scores.ATTACK_THRESHOLD} Jeanpips* cette semaine, bravo !\n\n*Comment le lancer :*\nClique sur ⚔️ dans l'onglet *Accueil* du bot (ou tape \`/jeanpip-attack\`), choisis jusqu'à ${raid.BASE_TARGETS} cibles et ton style secret. Celles qui ne devinent pas ta tactique te donnent une carte !\n\n⚠️ _Les raids se lancent ${raid.OPEN.text}. Ton raid gratuit est perdu dimanche à 20h s'il n'a pas servi._`,
             },
           },
         ],
@@ -626,216 +579,206 @@ app.event('reaction_added', async ({ event, client, logger }) => {
 });
 
 // ─────────────────────────────────────────────
-// ⚔️  Slash command : /jeanpip-attack
+// ⚔️ RAID (v3.4) — remplace l'Attaque Jeanpip (src/raid.js)
+//    Modale (cibles + style secret) → alerte en DM aux victimes avec
+//    3 boutons de défense → 20 min plus tard (ou dès que toutes ont
+//    répondu), cartes échangées et résultats en DM, tous en même temps.
 // ─────────────────────────────────────────────
+const RAID_TARGET_TEXT = {
+  self: 'toi-même',
+  bot: 'un bot',
+  unsubscribed: 'pas inscrit(e) à la liste de diffusion',
+  penalty: 'en pénalité anti-farm',
+  busy: 'subit déjà un raid',
+  limit: `a déjà subi ${raid.MAX_RECEIVED_PER_DAY} raids aujourd'hui`,
+};
+const raidStyle = (key) => `${raid.STYLES[key].emoji} ${raid.STYLES[key].label}`;
+const raidDefense = (key) => `${raid.DEFENSES[key].emoji} ${raid.DEFENSES[key].label}`;
+const cardText = (c) => `${(RARITIES[c.rarity] || RARITIES.common).emoji} *${c.title}*`;
+
+/** Nom affichable d'un user (erreurs de modale, en texte brut). */
+async function userName(client, userId) {
+  try {
+    const info = await client.users.info({ user: userId });
+    return info.user.real_name || info.user.name || userId;
+  } catch {
+    return userId;
+  }
+}
+
+/** Ouvre la modale du raid (Accueil ou /jeanpip-attack). */
+function openRaidModal(client, triggerId, userId, logger) {
+  return openModal(client, { trigger_id: triggerId }, home.buildRaidModal(userId), logger);
+}
+
 app.command('/jeanpip-attack', async ({ command, ack, client, logger }) => {
   await ack();
-
-  const userId = command.user_id;
-  const channelId = command.channel_id;
-
-  try {
-    if (weekend.isWeekend()) return await sendWeekendAttackDM(client, userId, logger);
-
-    const isAdmin = JEANPIP_ADMINS.includes(userId);
-    const userHasAttack = scores.hasAttack(userId);
-
-    // 🚜 Sous pénalité anti-farm : impossible d'envoyer aux autres
-    const farmRemaining = getFarmPenaltyRemaining(userId);
-    if (farmRemaining > 0) {
-      await safeSendDM(client, userId, {
-        text: `🚜 Anti-farm : tu ne peux pas lancer d'attaque pour le moment.`,
-        blocks: [{
-          type: 'section',
-          text: {
-            type: 'mrkdwn',
-            text: `🚜 *Tu es sous pénalité anti-farm.*\n\nTu ne peux rien envoyer aux autres pendant encore *${formatRemaining(farmRemaining)}*.\n\n_Ton attaque n'a pas été consommée, tu pourras la lancer après._`,
-          },
-        }],
-      }, logger);
-      logger.info(`🚜 /jeanpip-attack bloquée (anti-farm) pour <@${userId}>`);
-      return;
-    }
-
-    if (!isAdmin && !userHasAttack) {
-      // 💰 Pas d'attaque gratuite → on propose de l'acheter en crédits
-      const currentScore = scores.getScore(userId);
-      const balance = credits.getBalance(userId);
-      const canAfford = balance >= ATTACK_PRICE;
-      await safeSendDM(client, userId, {
-        text: `⚔️ Tu n'as pas d'Attaque Jeanpip gratuite — achète-la pour ${ATTACK_PRICE} JP$ !`,
-        blocks: [
-          {
-            type: 'section',
-            text: {
-              type: 'mrkdwn',
-              text: `⚔️ *Tu n'as pas d'Attaque Jeanpip gratuite.*\n\nTon score cette semaine : *${currentScore}/${scores.ATTACK_THRESHOLD}* :${TARGET_EMOJI}: (envoie-en ${scores.ATTACK_THRESHOLD} pour la débloquer gratuitement)\n\n💰 *Ou achète-la maintenant : ${ATTACK_PRICE} JP$* — ton solde : *${balance}*${canAfford ? '' : `\n\n❌ _Il te manque ${ATTACK_PRICE - balance} JP$._`}`,
-            },
-          },
-          ...(canAfford ? [{
-            type: 'actions',
-            elements: [{
-              type: 'button',
-              style: 'danger',
-              text: { type: 'plain_text', text: `⚔️ Lancer l'attaque dans #${command.channel_name} (${ATTACK_PRICE} JP$)` },
-              action_id: 'buy_attack',
-              value: channelId,
-            }],
-          }] : []),
-        ],
-      }, logger);
-      return;
-    }
-
-    await launchAttack(client, userId, channelId, logger, { consumeFree: !isAdmin });
-  } catch (error) {
-    logger.error('❌ Erreur dans /jeanpip-attack:', error);
-  }
+  await openRaidModal(client, command.trigger_id, command.user_id, logger);
 });
 
-// ─────────────────────────────────────────────
-// 💰 Action : clic sur « Lancer l'attaque (X crédits) »
-//    action_id = buy_attack · value = <channelId>
-// ─────────────────────────────────────────────
-const attackPurchaseLocks = new Set(); // userId → achat en cours (anti-double-clic)
-
-/** 🏖️ v3.3 : réponse à une Attaque tentée le week-end (rien n'est consommé ni débité). */
-function sendWeekendAttackDM(client, userId, logger) {
-  const text = `${weekend.PAUSE_TEXT}\nPas d'Attaque Jeanpip le week-end : on laisse les collègues tranquilles 😉\n\n_Rien n'a été consommé ni débité._`;
-  logger.info(`🏖️ Attaque refusée (week-end) : <@${userId}>`);
-  return safeSendDM(client, userId, { text: plain(text), blocks: [{ type: 'section', text: { type: 'mrkdwn', text } }] }, logger);
-}
-
-app.action('buy_attack', async ({ ack, body, action, client, logger }) => {
+app.action('home_attack_open', async ({ ack, body, client, logger }) => {
   await ack();
-
-  const userId = body.user.id;
-  const channelId = action.value;
-  if (attackPurchaseLocks.has(userId)) return;
-  attackPurchaseLocks.add(userId);
-
-  try {
-    if (weekend.isWeekend()) {
-      await sendWeekendAttackDM(client, userId, logger);
-      return;
-    }
-    const farmRemaining = getFarmPenaltyRemaining(userId);
-    if (farmRemaining > 0) {
-      await safeSendDM(client, userId, {
-        text: `🚜 Anti-farm : tu ne peux pas lancer d'attaque pour le moment.`,
-        blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `🚜 *Tu es sous pénalité anti-farm.*\n\nRéessaie dans *${formatRemaining(farmRemaining)}*. _Aucun JP$ n'a été débité._` } }],
-      }, logger);
-      return;
-    }
-
-    const launched = await launchAttack(client, userId, channelId, logger, { price: ATTACK_PRICE });
-
-    // 🔕 Désactiver le bouton une fois l'attaque partie
-    if (launched && body.channel && body.message) {
-      try {
-        await client.chat.update({
-          channel: body.channel.id,
-          ts: body.message.ts,
-          text: `⚔️ Attaque Jeanpip achetée !`,
-          blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `⚔️ *Attaque Jeanpip achetée et lancée dans <#${channelId}> !* (-${ATTACK_PRICE} JP$)` } }],
-        });
-      } catch (updateError) {
-        logger.error(`❌ Impossible de désactiver le bouton :`, updateError.message);
-      }
-    }
-  } catch (error) {
-    logger.error('❌ Erreur dans buy_attack:', error);
-  } finally {
-    attackPurchaseLocks.delete(userId);
-  }
+  await openRaidModal(client, body.trigger_id, body.user.id, logger);
 });
 
-/**
- * Lance une Attaque Jeanpip dans `channelId`.
- *   • consumeFree : consomme l'attaque gratuite débloquée par le score
- *   • price       : débite ce nombre de crédits (attaque achetée)
- * Rien n'est consommé/débité si personne n'est attaquable.
- * Retourne true si l'attaque est partie.
- */
-async function launchAttack(client, userId, channelId, logger, { consumeFree = false, price = 0 } = {}) {
-  logger.info(`⚔️  Attaque Jeanpip lancée par <@${userId}> dans <#${channelId}>${price ? ` (payée ${price} JP$)` : ''}`);
+// Vieux DM « Lancer l'attaque (25 JP$) » d'avant la v3.4 : l'Attaque est devenue le Raid
+app.action('buy_attack', async ({ ack, body, client, logger }) => {
+  await ack();
+  const text = '⚔️ *L\'Attaque Jeanpip est devenue le Raid !* Lance-le depuis l\'onglet *Accueil* du bot (ou `/jeanpip-attack`).';
+  await safeSendDM(client, body.user.id, { text: plain(text), blocks: [{ type: 'section', text: { type: 'mrkdwn', text } }] }, logger)
+    .catch((e) => logger.error('❌ DM ancienne attaque :', e.message));
+});
 
-  // 🔎 Récupérer les 7 dernières personnes uniques (avec leur dernier message)
-  let victims;
-  try {
-    victims = await getLastUniqueAuthors(client, channelId, 7, [userId, botUserId], logger);
-  } catch (histError) {
-    logger.error(`❌ Impossible de lire l'historique du channel:`, histError.message);
-    await safeSendDM(client, userId, {
-      text: `❌ Je n'arrive pas à lire ce channel. Suis-je bien invité dedans ?`,
-      blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `❌ *Je n'arrive pas à lire ce channel.*\nAssure-toi que le bot est invité dans le channel (\`/invite @${botName}\`).${price ? '\n\n_Aucun JP$ n\'a été débité._' : ''}` } }],
-    }, logger);
-    return false;
-  }
-
-  if (victims.length === 0) {
-    await safeSendDM(client, userId, {
-      text: `😅 Personne à attaquer dans ce channel !`,
-      blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `😅 *Personne à attaquer dans ce channel !*\n\nPersonne n'y a posté récemment… ou personne n'est inscrit à la liste de diffusion Jeanpip 📮\n\n_${price ? 'Aucun JP$ n\'a été débité.' : 'Ton attaque n\'a pas été consommée.'}_` } }],
-    }, logger);
-    return false;
-  }
-
-  if (price) {
-    if (!credits.spend(userId, price, { source: 'attack', ref: channelId })) {
-      const balance = credits.getBalance(userId);
-      await safeSendDM(client, userId, {
-        text: `❌ Solde insuffisant pour l'Attaque Jeanpip`,
-        blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `❌ *Il te manque ${price - balance} JP$* pour acheter l'Attaque Jeanpip.\n\n💰 Ton solde : *${balance}* · Prix : *${price}*` } }],
-      }, logger);
-      return false;
-    }
-  } else if (consumeFree) {
-    scores.consumeAttack(userId);
-  }
-
-  const attackerInfo = await client.users.info({ user: userId });
-  const attackerName = attackerInfo.user.real_name || attackerInfo.user.name;
-
-  let sent = 0;
-  for (const victim of victims) {
-    const victimId = victim.user;
-    try {
-      // 1️⃣ Réagir avec :jeanpip: sur le dernier message de la victime (visible dans le channel)
-      try {
-        await client.reactions.add({
-          channel: channelId,
-          name: TARGET_EMOJI,
-          timestamp: victim.ts,
-        });
-        logger.info(`⚔️  Réaction :${TARGET_EMOJI}: ajoutée sur le msg de <@${victimId}>`);
-      } catch (reactError) {
-        // already_reacted ou message introuvable → on continue quand même
-        logger.info(`ℹ️  Pas pu réagir sur le msg de <@${victimId}>: ${reactError.data ? reactError.data.error : reactError.message}`);
-      }
-
-      // 2️⃣ Envoyer le DM avec média aléatoire pondéré (affiche la rareté)
-      const media = await getRandomMedia();
-      const ok = await sendJeanpipDM(client, victimId, {
-        text: `🚨 ALERTE ! ${attackerName} a lancé une Attaque Jeanpip !`,
-        headerText: `🚨 *ALERTE ATTAQUE JEANPIP !*\n*<@${userId}>* t'a ciblé dans <#${channelId}> ! :${TARGET_EMOJI}:`,
-        media,
-      }, logger);
-      if (ok) sent++;
-    } catch (error) {
-      logger.error(`❌ Erreur envoi attaque à <@${victimId}>:`, error.message);
-    }
-  }
-
-  await safeSendDM(client, userId, {
-    text: `⚔️ Attaque Jeanpip lancée sur ${sent} personnes !`,
-    blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `⚔️ *Attaque Jeanpip lancée !*\n\nTu as ciblé *${sent} personne(s)* dans <#${channelId}> :${TARGET_EMOJI}:\n${victims.map(v => `• <@${v.user}>`).join('\n')}` } }],
-  }, logger);
-
-  logger.info(`✅ Attaque Jeanpip terminée : ${sent}/${victims.length} victimes`);
-  await refreshHome(client, userId, logger);
-  return true;
+/** Alerte envoyée à chaque victime. */
+function buildRaidAlert(r) {
+  const text = `🚨 *RAID EN COURS !* <@${r.attacker}> te raide.\nDevine son style d'attaque pour te défendre, avant *${parisTime(r.endsAt)}* :\n${home.RAID_RULES}\n\n✅ Ta défense bat son style : *riposte*, tu lui prends une carte.\n🤝 Elle tient : rien ne se passe.\n❌ Elle cède, ou pas de réponse : il te prend une carte (jamais une légendaire).\n_Un seul clic. Résultat à la fin du raid, pour tout le monde en même temps._`;
+  return { text: `🚨 Raid en cours : réponds avant ${parisTime(r.endsAt)} !`, blocks: [{ type: 'section', text: { type: 'mrkdwn', text } }, home.raidDefenseButtons(r.id)] };
 }
+
+/** Message d'alerte une fois la défense choisie (plus de boutons). */
+function buildRaidAnswered(r, defense) {
+  const text = `🚨 *Raid de <@${r.attacker}>* : ${raidDefense(defense)} enregistré. Résultat à la fin du raid, au plus tard à ${parisTime(r.endsAt)}. 🤫`;
+  return { text: plain(text), blocks: [{ type: 'section', text: { type: 'mrkdwn', text } }] };
+}
+
+app.view('raid_submit', async ({ ack, body, view, client, logger }) => {
+  const attacker = body.user.id;
+  const values = view.state.values;
+  const targets = [...new Set((values.targets.value.selected_users || []))];
+  const style = values.style.value.selected_option && values.style.value.selected_option.value;
+
+  const block = raid.launchBlock();
+  if (block) return ack(fieldError('targets', block === 'weekend' ? '🏖️ Pas de raid le week-end.' : `⏰ Les raids se lancent ${raid.OPEN.text}.`));
+  if (getFarmPenaltyRemaining(attacker) > 0) return ack(fieldError('targets', `🚜 Pénalité anti-farm : réessaie dans ${formatRemaining(getFarmPenaltyRemaining(attacker))}.`));
+  if (!targets.length) return ack(fieldError('targets', 'Choisis au moins une cible.'));
+  if (targets.length > raid.MAX_TARGETS) return ack(fieldError('targets', `${raid.MAX_TARGETS} cibles au maximum.`));
+  if (!raid.STYLES[style]) return ack(fieldError('style', 'Choisis ton style d\'attaque.'));
+
+  // Cibles refusées (en parallèle : la modale doit répondre en moins de 3 s)
+  const bots = await Promise.all(targets.map((t) => isBot(client, t)));
+  const problemOf = (t, i) => (t === attacker ? 'self'
+    : bots[i] ? 'bot'
+      : !broadcast.isSubscribed(t) ? 'unsubscribed'
+        : getFarmPenaltyRemaining(t) > 0 ? 'penalty'
+          : raid.targetProblem(attacker, t));
+  let refused = targets.map((t, i) => [t, problemOf(t, i)]).filter(([, p]) => p);
+  if (refused.length) {
+    const names = await Promise.all(refused.map(([t, p]) => userName(client, t).then((n) => `${n} (${RAID_TARGET_TEXT[p]})`)));
+    return ack(fieldError('targets', `Impossible de raider : ${names.join(', ')}.`));
+  }
+
+  // 🔒 Plus aucun await jusqu'à l'enregistrement : re-vérification, paiement et création d'un bloc
+  if (raid.activeRaidOf(attacker)) return ack(fieldError('targets', 'Tu as déjà un raid en cours.'));
+  refused = targets.filter((t) => raid.targetProblem(attacker, t));
+  if (refused.length) return ack(fieldError('targets', 'Une de tes cibles vient d\'être raidée par quelqu\'un d\'autre : change ta sélection.'));
+  const free = scores.hasAttack(attacker);
+  const price = raid.cost(targets.length, free);
+  if (price > 0 && !credits.spend(attacker, price, { source: 'raid', item: `${targets.length} cibles` })) {
+    return ack(fieldError('targets', `Il te faut ${price} JP$ (ton solde : ${formatCredits(credits.getBalance(attacker))} JP$).`));
+  }
+  if (free) scores.consumeAttack(attacker);
+  const r = raid.create({ attacker, targets, style, price, free });
+  events.record('raid_launched', attacker, { raidId: r.id, targets, style, price, free });
+  await ack();
+  logger.info(`⚔️ Raid ${r.id} lancé par <@${attacker}> (${style}) sur ${targets.map((t) => `<@${t}>`).join(', ')} · ${free ? 'gratuit' : ''}${price ? ` ${price} JP$` : ''}`);
+
+  try {
+    for (const t of targets) {
+      try {
+        const ref = await sendDM(client, t, buildRaidAlert(r));
+        raid.setDm(r.id, t, ref);
+      } catch (error) {
+        logger.error(`❌ Alerte de raid à <@${t}> :`, error.message);
+      }
+    }
+    const paid = [free ? '🎉 raid gratuit utilisé' : null, price ? `💰 ${price} JP$ débités` : null].filter(Boolean).join(' + ');
+    const text = `⚔️ *Raid lancé* en ${raidStyle(style)} sur ${targets.map((t) => `<@${t}>`).join(', ')}.\n${paid}.\n\nChaque cible a jusqu'à *${parisTime(r.endsAt)}* pour se défendre. Tu reçois le récap à la fin du raid.`;
+    const ref = await sendDM(client, attacker, { text: plain(text), blocks: [{ type: 'section', text: { type: 'mrkdwn', text } }] });
+    raid.setDm(r.id, null, ref);
+  } catch (error) {
+    logger.error('❌ Erreur dans raid_submit:', error);
+  }
+  await Promise.all([attacker, ...targets].map((u) => refreshHomeIfSeen(client, u, logger)));
+});
+
+// 🛡️ Une victime choisit sa défense (DM d'alerte ou Accueil)
+app.action(/^raid_defend_(bouclier|piege|esquive)$/, async ({ ack, body, action, client, logger }) => {
+  await ack();
+  const userId = body.user.id;
+  const defense = action.action_id.replace('raid_defend_', '');
+  const res = raid.defend(action.value, userId, defense);
+  const inDm = body.channel && body.message;
+  try {
+    if (res.status === 'ok' || res.status === 'already') {
+      const t = res.raid.targets.find((x) => x.userId === userId);
+      if (inDm) await client.chat.update({ channel: body.channel.id, ts: body.message.ts, ...buildRaidAnswered(res.raid, t.defense) });
+      else if (t.dm) await client.chat.update({ channel: t.dm.channel, ts: t.dm.ts, ...buildRaidAnswered(res.raid, t.defense) }).catch(() => {});
+      if (res.status === 'ok') logger.info(`🛡️ Raid ${res.raid.id} : <@${userId}> joue ${defense}`);
+    } else if (res.status === 'over' && inDm) {
+      await client.chat.update({ channel: body.channel.id, ts: body.message.ts, text: 'Raid terminé', blocks: [{ type: 'section', text: { type: 'mrkdwn', text: '⌛ *Ce raid est terminé.* Ton résultat t\'a été envoyé.' } }] });
+    }
+  } catch (error) {
+    logger.error('❌ Erreur dans raid_defend:', error);
+  }
+  await refreshHomeIfSeen(client, userId, logger);
+  if (res.status === 'ok' && res.allAnswered) await finishRaid(client, res.raid.id, logger);
+  else if (res.status === 'ok') await refreshHomeIfSeen(client, res.raid.attacker, logger);   // « 2/5 défenses reçues »
+});
+
+/** Résultat d'une victime (DM de fin). */
+function victimResultText(r, t) {
+  const by = `<@${r.attacker}> attaquait en ${raidStyle(r.style)}`;
+  const mine = t.defense ? `ton ${raidDefense(t.defense)}` : null;
+  if (t.outcome === 'riposte') {
+    return `✅ *Riposte réussie !* ${by}, ${mine} l'a renvoyé.\n${t.card ? `Tu lui prends ${cardText(t.card)} 🎁` : 'Il n\'avait aucune carte prenable : tu ne gagnes rien, mais l\'honneur est sauf.'}`;
+  }
+  if (t.outcome === 'repousse') return `🤝 *Raid repoussé.* ${by}, ${mine} a tenu. Rien ne bouge.`;
+  const head = t.defense ? `❌ *Tu es tombé(e).* ${by}, ${mine} a cédé.` : `❌ *Pas de réponse à temps.* ${by}.`;
+  return `${head}\n${t.card ? `Il te prend ${cardText(t.card)}.` : 'Tu n\'avais aucune carte prenable : tu ne perds rien.'}`;
+}
+
+const OUTCOME_LABEL = { tombe: '❌ tombé(e)', repousse: '🤝 repoussé', riposte: '✅ riposte' };
+
+/** Termine un raid : cartes échangées, résultats en DM à tous en même temps. */
+async function finishRaid(client, raidId, logger) {
+  const res = raid.resolve(raidId);
+  if (res.status !== 'resolved') return;
+  const r = res.raid;
+  const count = (o) => r.targets.filter((t) => t.outcome === o).length;
+  events.record('raid_resolved', r.attacker, {
+    raidId: r.id, style: r.style,
+    targets: r.targets.map((t) => ({ userId: t.userId, defense: t.defense, outcome: t.outcome, card: t.card && { url: t.card.url, title: t.card.title, rarity: t.card.rarity } })),
+  });
+  logger.info(`⚔️ Raid ${r.id} terminé : ${count('tombe')} tombé(s), ${count('repousse')} repoussé(s), ${count('riposte')} riposte(s)`);
+
+  // Raid fini pendant une coupure, rattrapé un week-end : cartes échangées, mais pas de DM
+  if (!weekendMuted(logger, `résultats du raid ${r.id}`)) {
+    for (const t of r.targets) {
+      const text = victimResultText(r, t);
+      try {
+        if (t.dm) await client.chat.update({ channel: t.dm.channel, ts: t.dm.ts, text: 'Raid terminé', blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `⌛ *Raid de <@${r.attacker}> terminé.* Ton résultat est juste en dessous.` } }] }).catch(() => {});
+        await sendDM(client, t.userId, { text: plain(text), blocks: [{ type: 'section', text: { type: 'mrkdwn', text } }] });
+      } catch (error) {
+        logger.error(`❌ Résultat de raid à <@${t.userId}> :`, error.message);
+      }
+    }
+    const lines = r.targets.map((t) => `• <@${t.userId}> : ${t.defense ? raidDefense(t.defense) : '_pas de réponse_'} → ${OUTCOME_LABEL[t.outcome]}${t.card ? ` (${t.outcome === 'riposte' ? 'tu perds' : 'tu gagnes'} ${cardText(t.card)})` : ''}`);
+    const text = `⚔️ *Raid terminé* (${raidStyle(r.style)}) : ${count('tombe')} tombé(s), ${count('repousse')} repoussé(s), ${count('riposte')} riposte(s).\n`
+      + `${res.won.length ? `🎁 Tu gagnes ${res.won.length} carte${res.won.length > 1 ? 's' : ''}` : '🎁 Aucune carte gagnée'}${res.lost.length ? ` · 💔 tu en perds ${res.lost.length}` : ''}.\n\n${lines.join('\n')}`;
+    try {
+      await sendDM(client, r.attacker, { text: plain(text), blocks: [{ type: 'section', text: { type: 'mrkdwn', text } }] });
+    } catch (error) {
+      logger.error(`❌ Récap de raid à <@${r.attacker}> :`, error.message);
+    }
+  }
+  await Promise.all([r.attacker, ...r.targets.map((t) => t.userId)].map((u) => refreshHomeIfSeen(client, u, logger)));
+}
+
+/** Raids arrivés au bout de leurs 20 min (vérifié toutes les 10 s, et au démarrage). */
+async function finishDueRaids(client, logger) {
+  for (const r of raid.dueRaids()) await finishRaid(client, r.id, logger);
+}
+const RAID_CHECK_MS = 10 * 1000;
 
 // ─────────────────────────────────────────────
 // 👑 Helpers communs aux commandes admin
@@ -872,7 +815,7 @@ async function sendAdminResult(client, adminId, result, logger) {
 
 // ─────────────────────────────────────────────
 // 🎁 Slash command : /jeanpip-give @user  (admin uniquement)
-//    Crédite une Attaque Jeanpip à quelqu'un et le notifie
+//    Offre un Raid gratuit à quelqu'un et le notifie
 //    (aussi disponible dans le panneau 👑 Admin de l'Accueil)
 // ─────────────────────────────────────────────
 app.command('/jeanpip-give', async ({ command, ack, client, logger }) => {
@@ -888,7 +831,7 @@ app.command('/jeanpip-give', async ({ command, ack, client, logger }) => {
     if (!targetId) {
       await safeSendDM(client, adminId, {
         text: `❓ Usage : /jeanpip-give @utilisateur`,
-        blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `❓ *Usage :* \`/jeanpip-give @utilisateur\`\nMentionne la personne à qui tu veux offrir une Attaque Jeanpip.` } }],
+        blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `❓ *Usage :* \`/jeanpip-give @utilisateur\`\nMentionne la personne à qui tu veux offrir un Raid gratuit.` } }],
       }, logger);
       return;
     }
@@ -1078,7 +1021,7 @@ app.command('/jeanpip-credits', async ({ command, ack, client, logger }) => {
           type: 'section',
           text: {
             type: 'mrkdwn',
-            text: `💰 *Tu as ${balance} JP$ !*\n\nTu gagnes *+${creditsPerJeanpipLabel()} JP$* à chaque fois que tu poses une réaction :${TARGET_EMOJI}: sur un message.\n\n🎁 Dépense-les en boosters avec \`/jeanpip-booster\`\n⚔️ ou achète une Attaque Jeanpip (*${ATTACK_PRICE}* JP$) avec \`/jeanpip-attack\` !`,
+            text: `💰 *Tu as ${balance} JP$ !*\n\nTu gagnes *+${creditsPerJeanpipLabel()} JP$* à chaque fois que tu poses une réaction :${TARGET_EMOJI}: sur un message.\n\n🎁 Dépense-les en boosters avec \`/jeanpip-booster\`\n⚔️ ou lance un Raid Jeanpip (*${raid.PRICE}* JP$) depuis l'Accueil ou avec \`/jeanpip-attack\` !`,
           },
         },
       ],
@@ -1626,49 +1569,6 @@ function plain(text) {
   return text.replace(/[*_`]/g, '').replace(/<@([A-Z0-9]+)>/g, 'cette personne').split('\n')[0];
 }
 
-// ⚔️ Attaque depuis l'Accueil : modale avec choix du channel
-app.action('home_attack_open', async ({ ack, body, client, logger }) => {
-  await ack();
-  const userId = body.user.id;
-  await openModal(client, body, home.buildAttackModal(userId, {
-    isAdmin: JEANPIP_ADMINS.includes(userId),
-    attackPrice: ATTACK_PRICE,
-  }), logger);
-});
-
-app.view('home_attack_submit', async ({ ack, body, view, client, logger }) => {
-  const userId = body.user.id;
-  const channelId = view.state.values.channel.value.selected_conversation;
-  const mode = home.attackMode(userId, JEANPIP_ADMINS.includes(userId));
-
-  // ✋ Vérifications rapides AVANT de fermer la modale (erreur affichée dedans)
-  if (!channelId) return ack(fieldError('channel', 'Choisis un channel.'));
-  if (weekend.isWeekend()) return ack(fieldError('channel', '🏖️ C\'est le week-end : pas d\'Attaque avant lundi 0h.'));
-  const farmRemaining = getFarmPenaltyRemaining(userId);
-  if (farmRemaining > 0) {
-    return ack(fieldError('channel', `🚜 Pénalité anti-farm : réessaie dans ${formatRemaining(farmRemaining)}.`));
-  }
-  if (mode === 'paid' && credits.getBalance(userId) < ATTACK_PRICE) {
-    return ack(fieldError('channel', `Solde insuffisant : il te faut ${ATTACK_PRICE} JP$.`));
-  }
-  if (attackPurchaseLocks.has(userId)) {
-    return ack(fieldError('channel', 'Une attaque est déjà en cours de lancement…'));
-  }
-
-  await ack();
-  attackPurchaseLocks.add(userId);
-  try {
-    // Mêmes règles que /jeanpip-attack : gratuite consommée / admin illimité / payée.
-    // Rien n'est débité ni consommé si personne n'est attaquable (DM d'explication).
-    await launchAttack(client, userId, channelId, logger,
-      mode === 'paid' ? { price: ATTACK_PRICE } : { consumeFree: mode === 'free' });
-  } catch (error) {
-    logger.error('❌ Erreur dans home_attack_submit:', error);
-  } finally {
-    attackPurchaseLocks.delete(userId);
-  }
-});
-
 // 📰 Nouveautés : release note du jeu (src/releases.js)
 app.action('release_notes_open', async ({ ack, body, client, logger }) => {
   await ack();
@@ -1794,7 +1694,7 @@ app.view('admin_give_attack_submit', async ({ ack, body, view, client, logger })
   if (weekend.isWeekend()) return ack(fieldError('user', WEEKEND_GIFT_TEXT));
 
   const targetId = view.state.values.user.value.selected_user;
-  if (scores.hasAttack(targetId)) return ack(fieldError('user', 'Cette personne a déjà une Attaque Jeanpip disponible.'));
+  if (scores.hasAttack(targetId)) return ack(fieldError('user', 'Cette personne a déjà un Raid gratuit disponible.'));
 
   await ack();
   try {
@@ -2149,7 +2049,7 @@ app.command('/jeanpip-help', async ({ command, ack, client, logger }) => {
           type: 'section',
           text: {
             type: 'mrkdwn',
-            text: `🏠 *Le plus simple : l'onglet Accueil du bot !*\nClique sur le bot dans la barre latérale → onglet *Accueil* : ton solde, ton score, l'achat de boosters, l'Attaque Jeanpip (avec choix du channel) et la liste de diffusion, en boutons.${isAdmin ? '\n👑 _Tu y trouveras aussi le panneau Admin._' : ''}`,
+            text: `🏠 *Le plus simple : l'onglet Accueil du bot !*\nClique sur le bot dans la barre latérale → onglet *Accueil* : ton solde, ton score, l'achat de boosters, le Raid Jeanpip (lancer, se défendre) et la liste de diffusion, en boutons.${isAdmin ? '\n👑 _Tu y trouveras aussi le panneau Admin._' : ''}`,
           },
         },
         { type: 'divider' },
@@ -2166,8 +2066,8 @@ app.command('/jeanpip-help', async ({ command, ack, client, logger }) => {
           text: {
             type: 'mrkdwn',
             text: `📊 *Ton score cette semaine*\nTu as envoyé *${currentScore}/${scores.ATTACK_THRESHOLD}* :${TARGET_EMOJI}: cette semaine\n${userHasAttack
-              ? '✅ *Tu as une Attaque Jeanpip disponible ! Lance \`/jeanpip-attack\` !*'
-              : `⏳ Il te manque *${Math.max(0, scores.ATTACK_THRESHOLD - currentScore)}* Jeanpip(s) pour débloquer l'Attaque`
+              ? '✅ *Tu as un Raid gratuit disponible ! Lance-le depuis l\'Accueil ou avec \`/jeanpip-attack\` !*'
+              : `⏳ Il te manque *${Math.max(0, scores.ATTACK_THRESHOLD - currentScore)}* Jeanpip(s) pour débloquer un Raid gratuit`
             }\n\n_Les scores se remettent à 0 chaque dimanche à 20h_`,
           },
         },
@@ -2176,9 +2076,7 @@ app.command('/jeanpip-help', async ({ command, ack, client, logger }) => {
           type: 'section',
           text: {
             type: 'mrkdwn',
-            text: `⚔️ *Attaque Jeanpip — \`/jeanpip-attack\`*\nEnvoie un Jeanpip aux *7 dernières personnes* ayant posté dans le channel où tu lances la commande !\n\n*Comment débloquer :*\n• Envoie *${scores.ATTACK_THRESHOLD} Jeanpips* dans la semaine\n• Tu reçois un DM de notification quand c'est débloqué\n• Lance \`/jeanpip-attack\` dans le channel de ton choix\n• Ton compteur repart à 0, tu peux redébloquer ensuite !
-
-💰 *Pas envie d'attendre ?* Achète une attaque pour *${ATTACK_PRICE} JP$* : lance `/jeanpip-attack` et clique sur le bouton.\n\n⚠️ _Si tu ne l'actives pas avant vendredi minuit (pas d'Attaque le week-end) → tu perds l'attaque_${isAdmin ? '\n\n👑 *Tu es admin : accès illimité + panneau 👑 Admin dans l\'onglet Accueil (ou `/jeanpip-give @user`, `/jeanpip-auto`) !*' : ''}`,
+            text: `⚔️ *Raid Jeanpip — Accueil ou \`/jeanpip-attack\`*\nChoisis tes cibles (${raid.BASE_TARGETS} incluses, +${raid.EXTRA_TARGET_PRICE} JP$ par cible en plus, ${raid.MAX_TARGETS} max) et un style d'attaque secret : 💥 Assaut, 🦊 Ruse ou 🌫️ Embuscade.\n• Chaque cible reçoit une alerte et a *20 min* pour deviner (🛡️ Bouclier, 🪤 Piège ou 🏃 Esquive)\n• ❌ Elle se trompe ou ne répond pas → elle te donne une carte (un doublon d'abord, jamais une légendaire)\n• 🤝 Sa défense tient → rien ne se passe\n• ✅ Elle devine → *riposte* : c'est toi qui lui donnes une carte\n• Les résultats tombent à la fin du raid, pour tout le monde en même temps\n\n*Prix :* gratuit si tu as envoyé *${scores.ATTACK_THRESHOLD} Jeanpips* dans la semaine, sinon *${raid.PRICE} JP$*.\n⏰ _Les raids se lancent ${raid.OPEN.text} : tout est fini à 18h._${isAdmin ? '\n\n👑 *Panneau 👑 Admin dans l\'onglet Accueil (ou `/jeanpip-give @user`, `/jeanpip-auto`) !*' : ''}`,
           },
         },
         { type: 'divider' },
@@ -2197,7 +2095,7 @@ app.command('/jeanpip-help', async ({ command, ack, client, logger }) => {
           type: 'section',
           text: {
             type: 'mrkdwn',
-            text: `🎁 *Boosters JeanPip — \`/jeanpip-booster\`*\nTu as *${creditBalance}* JP$ 💰\n\n*Comment gagner des JP$ :*\n• *+${creditsPerJeanpipLabel()} JP$* à chaque réaction :${TARGET_EMOJI}: que TU poses (spam exclu)\n\n*Comment les dépenser :*\n• \`/jeanpip-booster\` → achète un booster (${boosters.listBoosters().map((b) => `${b.emoji} ${b.price}`).join(' · ')})\n• \`/jeanpip-attack\` → achète une Attaque Jeanpip (${ATTACK_PRICE}) si tu n'en as pas de gratuite\n• Chaque booster = *8 cartes* révélées une par une\n• Plus le booster est cher, plus les cartes rares sont probables !\n\n_Tape \`/jeanpip-credits\` pour voir ton solde à tout moment._`,
+            text: `🎁 *Boosters JeanPip — \`/jeanpip-booster\`*\nTu as *${creditBalance}* JP$ 💰\n\n*Comment gagner des JP$ :*\n• *+${creditsPerJeanpipLabel()} JP$* à chaque réaction :${TARGET_EMOJI}: que TU poses (spam exclu)\n\n*Comment les dépenser :*\n• \`/jeanpip-booster\` → achète un booster (${boosters.listBoosters().map((b) => `${b.emoji} ${b.price}`).join(' · ')})\n• Un Raid Jeanpip (${raid.PRICE}) si tu n'en as pas de gratuit\n• Chaque booster = *8 cartes* révélées une par une\n• Plus le booster est cher, plus les cartes rares sont probables !\n\n_Tape \`/jeanpip-credits\` pour voir ton solde à tout moment._`,
           },
         },
         { type: 'divider' },
@@ -2221,7 +2119,7 @@ app.command('/jeanpip-help', async ({ command, ack, client, logger }) => {
           type: 'section',
           text: {
             type: 'mrkdwn',
-            text: `📋 *Toutes les commandes*\n\`/jeanpip\` → Entrer ou sortir de la liste de diffusion\n\`/jeanpip-help\` → Affiche ce message avec ton score actuel\n\`/jeanpip-attack\` → Lance une Attaque Jeanpip sur le channel (gratuite si débloquée, sinon ${ATTACK_PRICE} JP$)\n\`/jeanpip-credits\` → Affiche ton solde de JP$\n\`/jeanpip-booster\` → Ouvre la boutique de boosters${isAdmin ? '\n`/jeanpip-give @user` → (admin) Offre une Attaque Jeanpip à quelqu\'un\n`/jeanpip-give-credits @user <montant>` → (admin) Crédite le porte-monnaie de quelqu\'un\n`/jeanpip-addmedia <lien> <rareté> [@auteur] [titre]` → (admin) Ajoute un média à la banque (l\'auteur gagne des JP$)\n`/jeanpip-auto add|remove|list` → (admin) Gère les cibles auto-react' : ''}`,
+            text: `📋 *Toutes les commandes*\n\`/jeanpip\` → Entrer ou sortir de la liste de diffusion\n\`/jeanpip-help\` → Affiche ce message avec ton score actuel\n\`/jeanpip-attack\` → Lance un Raid Jeanpip (gratuit si débloqué, sinon ${raid.PRICE} JP$)\n\`/jeanpip-credits\` → Affiche ton solde de JP$\n\`/jeanpip-booster\` → Ouvre la boutique de boosters${isAdmin ? '\n`/jeanpip-give @user` → (admin) Offre un Raid gratuit à quelqu\'un\n`/jeanpip-give-credits @user <montant>` → (admin) Crédite le porte-monnaie de quelqu\'un\n`/jeanpip-addmedia <lien> <rareté> [@auteur] [titre]` → (admin) Ajoute un média à la banque (l\'auteur gagne des JP$)\n`/jeanpip-auto add|remove|list` → (admin) Gère les cibles auto-react' : ''}`,
           },
         },
         {
@@ -2282,6 +2180,12 @@ function createCardLook(client, media, logger) {
   weeklyGiftTick();
   setInterval(weeklyGiftTick, 5 * 60 * 1000);
 
+  // ⚔️ v3.4 : raids arrivés au bout de leurs 20 min (et ceux finis pendant une coupure)
+  const raidTick = () => finishDueRaids(app.client, console)
+    .catch((error) => console.error('❌ Fin des raids :', error.message));
+  raidTick();
+  setInterval(raidTick, RAID_CHECK_MS);
+
   // 🙈 v3.2 : arrivée du stock du jour → le bouton d'achat apparaît dans tous les Accueils ouverts
   const dropTick = () => checkBoosterDrop(app.client, console)
     .catch((error) => console.error('❌ Arrivée du stock :', error.message));
@@ -2305,7 +2209,8 @@ function createCardLook(client, media, logger) {
   }
 
   // 🎭 Personnages d'Arène : cartes sans look (ou aux règles périmées) faites en fond
-  looks.backfill(getAllMedia(), { client: app.client, logger: console })
+  //    (banque + Hors série jouable dans l'Arène depuis la v3.4 : Octobre Rose, anti-spam, cartes retirées)
+  looks.backfill([...getAllMedia(), ...octobreRose.ROSE_CARDS.filter((c) => c.url), ...SPAM_CARDS, ...getRemovedMedia()], { client: app.client, logger: console })
     .then((r) => { if (r.done) console.log(`🎭 Personnages d'Arène : ${r.done} créé(s) — ${r.haiku} analysé(s) par Haiku, ${r.pixels} par leurs couleurs`); })
     .catch((error) => console.error('❌ Personnages d\'Arène :', error.message));
 
@@ -2318,7 +2223,7 @@ function createCardLook(client, media, logger) {
   console.log(`  🎯  Emoji surveillé : :${TARGET_EMOJI}:`);
   console.log(`  🤖  Bot ID : ${botUserId}`);
   console.log(`  🚨  Anti-spam : ${SPAM_THRESHOLD_SECONDS}s seuil → ${SPAM_TROLL_SEQUENCE.length}x troll`);
-  console.log(`  ⚔️   Attaque Jeanpip : seuil ${scores.ATTACK_THRESHOLD} jeanpips/semaine`);
+  console.log(`  ⚔️   Raid : gratuit à ${scores.ATTACK_THRESHOLD} jeanpips/semaine, sinon ${raid.PRICE} JP$ (${raid.OPEN.text})`);
   console.log(`  🎁  Boosters : ${boosters.listBoosters().map((b) => `${b.emoji}${b.price}`).join(' ')} (8 cartes)`);
   if (JEANPIP_ADMINS.length > 0) {
     console.log(`  👑  Admins (${JEANPIP_ADMINS.length}) : ${JEANPIP_ADMINS.join(', ')}`);
