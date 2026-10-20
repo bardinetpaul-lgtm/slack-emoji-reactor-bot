@@ -33,7 +33,7 @@
 //    (spécialités automatiques comprises) :
 //    • à stratégie égale (bon contre bon), le deck riche gagne PLUS de 50 % ;
 //    • un bon joueur 100 % commun bat un mauvais joueur au deck riche
-//      AU MOINS 60 % du temps.
+//      AU MOINS 55 % du temps (60 % jusqu'à la v3.4 ; abaissé en v3.5 pour renforcer la rareté).
 //    (le deck « tout rare » 3 légendaires + 3 épiques + 2 rares est indiqué)
 //
 //  Départage (simulation seulement, les vraies règles de fin ne changent pas) :
@@ -526,11 +526,11 @@ const eqTally = lastTally;
 const skill = skillRate('good', 'common', 'bad', 'rich');
 const skTally = lastTally;
 const eqBad = 100 - equal <= 50;   // les raretés doivent l'emporter à stratégie égale
-const skBad = skill < 60;
+const skBad = skill < 55;
 if (eqBad) failures += 1;
 if (skBad) failures += 1;
 console.log(`à stratégie égale : bon commun contre bon deck riche       → ${pct(100 - equal)} pour le deck riche${eqBad ? '  ❌ doit être > 50 %' : ''}  ${split(eqTally)}`);
-console.log(`la stratégie paie : bon commun contre mauvais deck riche    → ${pct(skill)} pour le bon joueur${skBad ? '  ❌ < 60 %' : ''}  ${split(skTally)}`);
+console.log(`la stratégie paie : bon commun contre mauvais deck riche    → ${pct(skill)} pour le bon joueur${skBad ? '  ❌ < 55 %' : ''}  ${split(skTally)}`);
 console.log(`(indicatif) bon commun contre mauvais deck « tout rare »    → ${pct(skillRate('good', 'common', 'bad', 'star'))} pour le bon joueur  ${split()}`);
 
 }

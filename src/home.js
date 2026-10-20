@@ -533,7 +533,7 @@ function buildAddMediaModal() {
 // ⚔️ Types de carte de l'Arène (ordre d'affichage) + « automatique »
 const ARCH_ORDER = ['tank', 'guerrier', 'tireur', 'essaim', 'sort', 'vigie'];
 const ARCH_HINTS = {
-  tank: 'char : ne vise que les bâtiments', guerrier: 'corps à corps', tireur: 'archer, tire de loin',
+  tank: 'char : vise les bâtiments, piétine les troupes', guerrier: 'corps à corps', tireur: 'archer, tire de loin',
   essaim: 'petits volants', sort: 'explosion visée', vigie: 'guetteur sur une tour',
 };
 

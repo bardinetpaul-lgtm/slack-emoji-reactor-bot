@@ -79,6 +79,9 @@ const TOWER = { hp: 600, dps: 80, range: 12 };
 const QG = { hp: 2000, dps: 100, range: 10 };
 
 const RAGE = { elixir: 2, ms: 10000, dps: 1.1 };
+// 🛡 Piétinement (v3.5) : un Tank abîme les troupes ennemies collées à lui (dégâts/s par Tank,
+//    contres compris), sans s'arrêter : il continue vers les bâtiments.
+const TRAMPLE = { radius: 3, dps: 3 };
 const ZONE = { homeMin: 8, homeMax: 45, foeMin: 55, foeMax: 92, spellMin: 3, spellMax: 97, xMin: 4, xMax: 96 };
 const RECALL_SPEED = 1.5;   // un groupe rappelé recule 50 % plus vite
 const SLOW = 0.6;           // Ralenti : vitesse ×0,6
@@ -799,6 +802,12 @@ function step(state, events) {
       moveToward(u, goal, Math.min(speed * dt, goal === target ? dist - u.range : D(goal, u)));
     }
   }
+  for (const u of state.units) {
+    if (u.archetype !== 'tank' || u.summoned || u.recalling || u.frozenUntil > now) continue;
+    for (const e of state.units) {
+      if (e.side !== u.side && D(e, u) <= TRAMPLE.radius) hit(e, TRAMPLE.dps * dt * damageMultiplier('tank', e.archetype));
+    }
+  }
   for (const b of state.buildings) {
     if (!b.alive || !b.dps) continue;
     const target = findBuildingTarget(state, b);
@@ -960,6 +969,7 @@ module.exports = {
   ZONE,
   BREACH_RADIUS,
   KITE,
+  TRAMPLE,
   createMatch,
   applyAction,
   tick,

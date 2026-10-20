@@ -16,6 +16,18 @@
 
 const RELEASES = [
   {
+    version: '3.5.0',
+    date: '2026-10-20',
+    title: 'Rééquilibrage de l\'Arène',
+    changes: [
+      '⚖️ Arène : on a analysé vos 102 combats depuis le 30 septembre. Résultat : l\'🐝 Essaim écrasait tout, le 💥 Sort était devenu obligatoire pour s\'en sortir et le 🛡 Tank servait trop peu. Voici les retouches.',
+      '🛡 Le Tank piétine : il fonce toujours sur les bâtiments, mais il abîme maintenant les troupes collées à lui en passant. Les ⚔️ Guerriers (qu\'il contre) le sentent passer, et l\'Essaim ne le fait plus fondre sans y laisser des plumes.',
+      '🐝 L\'Essaim perd un peu de PV (105 → 95 par abeille) : les decks à 5 Essaims ne passent plus aussi facilement.',
+      '🗼 La Vigie protège mieux sa tour : garde 200 → 250.',
+      '🔵 Les cartes rares et plus sont mieux récompensées : Rare +9 % de PV (au lieu de +6 %), Épique +15 % (au lieu de +11 %), Légendaire +20 % (au lieu de +16 %). La stratégie garde le dernier mot : un bon joueur avec des communes bat encore le plus souvent un deck riche mal joué.',
+    ],
+  },
+  {
     version: '3.4.0',
     date: '2026-10-19',
     title: 'L\'Attaque devient le Raid',

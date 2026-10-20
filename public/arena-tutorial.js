@@ -206,7 +206,7 @@
       art: cycleArt,
       body: () => [
         para(['Chaque groupe va vers ', ['la cible la plus proche'], ' : un ennemi repéré, sinon ', ['la tour ennemie la plus proche'], ' (ou le QG). À pied, il passe par le pont le plus court.']),
-        para(['Le 🛡 ', ['Tank ignore les troupes'], ' et fonce sur les bâtiments : c’est ton bouclier. Pendant que l’ennemi tape dessus, tes troupes derrière font le travail.']),
+        para(['Le 🛡 ', ['Tank fonce sur les bâtiments'], ' et piétine au passage les troupes collées à lui : c’est ton bouclier. Pendant que l’ennemi tape dessus, tes troupes derrière font le travail.']),
         para(['Les ', ['tours'], ' et le ', ['QG'], ' tirent sur l’ennemi le plus proche à leur portée. Les poses adverses sont signalées ', ['en orange'], ', et les 4 dernières s’affichent en haut du terrain.']),
       ],
     },
