@@ -33,10 +33,10 @@
 
   // Rôle de chaque archétype (miroir de src/game/cards.js : ARCHETYPES + COUNTERS).
   // `vs` décrit les dégâts RÉELS : l'attaquant fait ×1,5 à ce qu'il contre et
-  // ×0,67 à ce qui le contre. Le Tank ne frappant jamais les troupes, son
-  // « contre » ne joue que dans un sens : il encaisse mal l'Essaim, bien les Guerriers.
+  // ×0,67 à ce qui le contre. Le Tank ne vise que les bâtiments, mais depuis la v3.5 il
+  // piétine les troupes collées à lui (petits dégâts, contres compris).
   const ROLES = {
-    tank:     { emoji: '🛡', label: 'Tank',     role: '2 chars d’assaut (700 PV), lents et lourds, qui ignorent les troupes et foncent sur les tours.', vs: 'Encaisse bien les ⚔️ Guerriers (ils ne lui font que ×0,67). L’🐝 Essaim le fait fondre (×1,5).' },
+    tank:     { emoji: '🛡', label: 'Tank',     role: '2 chars d’assaut (700 PV), lents et lourds, qui foncent sur les tours et piétinent les troupes collées à eux.', vs: 'Encaisse bien les ⚔️ Guerriers (ils ne lui font que ×0,67) et les écrase en passant. L’🐝 Essaim le fait fondre (×1,5).' },
     guerrier: { emoji: '⚔️', label: 'Guerrier', role: '3 combattants chargés qui frappent au contact, polyvalents.', vs: 'Écrase les 🏹 Tireurs (×1,5). Tape mal sur les 🛡 Tanks (×0,67) : laisse plutôt l’Essaim s’en charger.' },
     tireur:   { emoji: '🏹', label: 'Tireur',   role: '3 archers légers et vifs qui tirent de loin, fragiles : à protéger derrière un Tank.', vs: 'Nettoie l’🐝 Essaim (×1,5). Tape mal sur les ⚔️ Guerriers (×0,67), qui l’écrasent en retour.' },
     essaim:   { emoji: '🐝', label: 'Essaim',   role: '6 petits volants très rapides.', vs: 'Fait fondre les 🛡 Tanks (×1,5). Tape mal sur les 🏹 Tireurs (×0,67), qui le nettoient. Craint les 💥 Sorts.' },
@@ -69,10 +69,10 @@
     [
       'Qui frappe fort qui : ⚔️ Guerrier > 🏹 Tireur > 🐝 Essaim > 🛡 Tank, et 💥 Sort > 🐝 Essaim (×1,5). Dans l’autre sens, les coups ne font que ×0,67 (un Tireur qui tape un Guerrier, un Guerrier qui tape un Tank…).',
       'Le 🛡 Tank ne frappe jamais les troupes : il sert de bouclier. Pendant que les ennemis s’acharnent sur lui, tes Tireurs et Guerriers derrière font le travail.',
-      'Chaque groupe va vers la cible LA PLUS PROCHE : un ennemi repéré, sinon la tour ennemie la plus proche (le 🛡 Tank, lui, ne vise que les bâtiments). À pied, on traverse la rivière par un des 2 ponts ; l’🐝 Essaim vole.',
+      'Chaque groupe va vers la cible LA PLUS PROCHE : un ennemi repéré, sinon la tour ennemie la plus proche (le 🛡 Tank, lui, ne vise que les bâtiments, en piétinant au passage les troupes collées à lui). À pied, on traverse la rivière par un des 2 ponts ; l’🐝 Essaim vole.',
       'Les poses adverses s’affichent sur le terrain (🏹 Tireur…) et dans le bandeau en haut du terrain.',
       'Tu poses où tu veux dans ta moitié, et autour d’une tour adverse détruite. Tes 8 cartes sont en main dès le début.',
-      'La rareté (cadre coloré) renforce les PV : Rare +6 %, Épique +11 %, Légendaire +16 %. Les Épiques et Légendaires ont en plus une spécialité ✨.',
+      'La rareté (cadre coloré) renforce les PV : Rare +9 %, Épique +15 %, Légendaire +20 %. Les Épiques et Légendaires ont en plus une spécialité ✨.',
       'Une pose apparaît 0,5 s après avoir été jouée.',
     ].forEach((t) => rules.append(el('li', null, t)));
     box.append(list, rules);

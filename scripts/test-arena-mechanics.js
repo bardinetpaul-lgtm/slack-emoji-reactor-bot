@@ -257,22 +257,23 @@ const give = (s, side, urls) => { s.players[side].hand = urls.slice(); s.players
   const boosted = h - near.hp;
   check(`Vigie : dégâts de la tour ×1,4 (${base.toFixed(1)} → ${boosted.toFixed(1)} par s)`, Math.abs(base - 80) < 1e-6 && Math.abs(boosted - 112) < 1e-6);
 
-  // Garde
+  // Garde (commune : 250 PV depuis la v3.5)
+  const G = cards.ARCHETYPES.vigie.guard;
   const gd = vm();
   const tg = vigieOn(gd, 0);
-  check('Garde : 200 PV de garde (commune)', tg.vigie.guard === 200 && tg.vigie.guardMax === 200);
+  check(`Garde : ${G} PV de garde (commune)`, G === 250 && tg.vigie.guard === G && tg.vigie.guardMax === G);
   const hitter = dummy(gd, 17, 16.5, { dps: 1000 });   // au pied de la tour : 100 dégâts par pas
   run(gd, 100);
-  check('Garde : 100 dégâts → garde −100, tour intacte', Math.abs(tg.vigie.guard - 100) < 1e-6 && tg.hp === 600);
+  check('Garde : 100 dégâts → garde −100, tour intacte', Math.abs(tg.vigie.guard - (G - 100)) < 1e-6 && tg.hp === 600);
   hitter.dps = 3000;
   run(gd, 100);
-  check('Garde : dégâts > garde → l\'excédent touche la tour', tg.vigie.guard === 0 && Math.abs(tg.hp - 400) < 1e-6);
+  check('Garde : dégâts > garde → l\'excédent touche la tour', tg.vigie.guard === 0 && Math.abs(tg.hp - (600 - (300 - (G - 100)))) < 1e-6);
   const rp = match({ ...player('UA', VDECK), captain: 'tank3', captainCard: card('tank3') });
   const tr = vigieOn(rp, 0);
   engine.applyAction(rp, 'A', { type: 'power', lane: 0 });
   dummy(rp, 17, 16.5, { dps: 3000 });
   run(rp, 300);
-  check('Garde : Rempart actif → ni la garde ni la tour ne bougent', tr.vigie.guard === 200 && tr.hp === 600);
+  check('Garde : Rempart actif → ni la garde ni la tour ne bougent', tr.vigie.guard === G && tr.hp === 600);
 
   // Expiration : 40 s (commune), 80 s avec le Capitaine Garnison
   const ex = vm();
@@ -288,7 +289,7 @@ const give = (s, side, urls) => { s.players[side].hand = urls.slice(); s.players
   run(gx, 100);
   check(`Garnison : elle reste ${TUNING.vigieDuration * 40} s (deux fois plus longtemps)`, tower(gx, 'A', 0).vigie === null && gx.poses[0].status === 'expired');
   const leg = cards.getCardStats(card('vigie1', 'legendary'));
-  check('Vigie légendaire : garde et durée renforcées, tir et portée inchangés', leg.guard > 200 && leg.durationMs > 40000 && leg.dpsBonus === 0.4 && leg.rangeBonus === 2);
+  check('Vigie légendaire : garde et durée renforcées, tir et portée inchangés', leg.guard > cards.ARCHETYPES.vigie.guard && leg.durationMs > 40000 && leg.dpsBonus === 0.4 && leg.rangeBonus === 2);
 
   // Tour détruite avec sa Vigie : carte perdue
   const de = vm();
@@ -324,7 +325,7 @@ const give = (s, side, urls) => { s.players[side].hand = urls.slice(); s.players
   run(ps, 1000);
   const view = engine.publicState(ps, 'B');
   const vb = view.buildings.find((b) => b.side === 'A' && b.kind === 'tower' && b.lane === 1);
-  check('vue : buildings[].vigie (url, garde, temps restant)', vb.vigie && vb.vigie.url === 'vigie1' && vb.vigie.guard === 200 && vb.vigie.guardMax === 200 && vb.vigie.remainingMs === 500 + 80000 - ps.timeMs);
+  check('vue : buildings[].vigie (url, garde, temps restant)', vb.vigie && vb.vigie.url === 'vigie1' && vb.vigie.guard === cards.ARCHETYPES.vigie.guard && vb.vigie.guardMax === cards.ARCHETYPES.vigie.guard && vb.vigie.remainingMs === 500 + 80000 - ps.timeMs);
   check('vue : pas de Vigie sur les autres bâtiments', view.buildings.filter((b) => b !== vb).every((b) => b.vigie === null));
   check('vue : plus de Surchauffe', !('overheat' in view.players.A));
 
@@ -505,6 +506,33 @@ const give = (s, side, urls) => { s.players[side].hand = urls.slice(); s.players
     return JSON.stringify(s.result);
   };
   check('même graine + mêmes actions → même combat (avec Capitaines)', play() === play());
+}
+
+// ═══ 🛡 Piétinement du Tank (v3.5) ═══
+{
+  const s = match();
+  give(s, 'A', ['tank1']);
+  engine.applyAction(s, 'A', { type: 'deploy', url: 'tank1', lane: 1 });
+  give(s, 'B', ['guerrier3']);
+  engine.applyAction(s, 'B', { type: 'deploy', url: 'guerrier3', lane: 1 });
+  run(s, 1000);
+  // au milieu du terrain, loin des tours : les 2 chars et UN guerrier figé collé à eux
+  const tanks = s.units.filter((u) => u.side === 'A' && u.archetype === 'tank');
+  const foe = s.units.find((u) => u.side === 'B');
+  s.units = [...tanks, foe];
+  for (const t of tanks) Object.assign(t, { x: 50, y: 50 });
+  Object.assign(foe, { x: 50, y: 51, frozenUntil: Infinity });
+  const before = foe.hp;
+  const tankHp = tanks.map((t) => t.hp);
+  run(s, engine.STEP_MS);   // un seul pas : les chars avancent ensuite hors de portée
+  const expected = tanks.length * engine.TRAMPLE.dps * cards.damageMultiplier('tank', 'guerrier') * (engine.STEP_MS / 1000);
+  check(`piétinement : le Tank abîme la troupe collée à lui (${(before - foe.hp).toFixed(2)} PV, attendu ${expected.toFixed(2)})`, Math.abs(before - foe.hp - expected) < 1e-6);
+  check('piétinement : le Tank, lui, ne s\'arrête pas pour frapper (cible toujours un bâtiment)', tanks.every((t) => t.y > 50));
+  check('piétinement : un guerrier figé ne fait aucun dégât au Tank', tanks.every((t, i) => t.hp === tankHp[i]));
+  Object.assign(foe, { x: 50, y: 40 });   // derrière les chars, qui avancent vers les tours adverses
+  const far = foe.hp;
+  run(s, 500);
+  check('piétinement : rien sur une troupe hors de portée', foe.hp === far);
 }
 
 try { require(path.join(TMP, 'src', 'db.js')).close(); } catch { /* base jamais ouverte */ }   // Windows : fichier ouvert = non supprimable

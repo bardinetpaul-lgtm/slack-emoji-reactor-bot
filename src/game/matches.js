@@ -253,11 +253,15 @@ function startMatch(match, now) {
 function recordMatchEvent(match, cancelled, now) {
   const winner = !cancelled && match.engine && match.engine.result ? match.engine.result.winner : null;
   const result = cancelled ? 'cancelled' : winner ? 'win' : 'draw';
-  const players = ['A', 'B'].map((side) => ({
-    userId: match.players[side].userId,
-    outcome: cancelled ? 'cancelled' : !winner ? 'draw' : winner === side ? 'win' : 'loss',
-    deck: match.players[side].played || null,
-  }));
+  const players = ['A', 'B'].map((side) => {
+    const cap = match.engine && match.engine.players[side] && match.engine.players[side].captain;   // 🎖 depuis la v3.5
+    return {
+      userId: match.players[side].userId,
+      outcome: cancelled ? 'cancelled' : !winner ? 'draw' : winner === side ? 'win' : 'loss',
+      deck: match.players[side].played || null,
+      captain: cap ? { url: cap.url, title: cap.title, rarity: cap.rarity, archetype: cap.archetype, used: Boolean(cap.used) } : null,
+    };
+  });
   const side = winner && match.summary && match.summary[winner];
   const loot = side && side.loot ? { url: side.loot.url, title: side.loot.title, rarity: side.loot.rarity } : null;
   events.record('match_finished', null, { matchId: match.id, result, players, loot },

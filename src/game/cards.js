@@ -10,9 +10,9 @@
 //  Rareté : renforce les PV (et les dégâts d'un Sort, la garde / la durée
 //  d'une Vigie), jamais les dégâts des unités ; à moitié pour l'Essaim.
 //  Les épiques / légendaires reçoivent en plus une spécialité.
-//  Réglé par la simulation (v2.3, avec la Vigie) : à stratégie égale un deck riche gagne ~76 %
-//  (combats presque tous départagés aux PV, très peu de tours tombées),
-//  mais un bon joueur 100 % commun bat un mauvais joueur au deck riche ~69 %.
+//  Réglé par la simulation (v3.5, rareté renforcée à la demande de Paul pour récompenser
+//  les rares / épiques) : à stratégie égale un deck riche gagne ~67 %, et un bon joueur
+//  100 % commun bat encore un mauvais joueur au deck riche ~56 % (seuil abaissé de 60 à 55 %).
 //
 //  Contres : l'attaquant fait ×1,5 à ce qu'il contre, ×0,67 à ce
 //  qui le contre. Tank → Guerrier → Tireur → Essaim → Tank ; Sort → Essaim.
@@ -39,12 +39,13 @@ const ARCHETYPES = {
   tank:     { key: 'tank',     label: 'Tank',     emoji: '🛡', share: 20, cost: 5, hp: 700, dps: 22.5, range: 2,  speed: 6,  count: 2, targets: 'buildings' },
   guerrier: { key: 'guerrier', label: 'Guerrier', emoji: '⚔️', share: 27, cost: 3, hp: 170, dps: 24,   range: 2,  speed: 8,  count: 3, targets: 'all' },
   tireur:   { key: 'tireur',   label: 'Tireur',   emoji: '🏹', share: 23, cost: 3, hp: 115, dps: 29,   range: 10, speed: 9,  count: 3, targets: 'all' },
-  essaim:   { key: 'essaim',   label: 'Essaim',   emoji: '🐝', share: 15, cost: 3, hp: 105, dps: 20,   range: 2,  speed: 11, count: 6, targets: 'all', rarityWeight: 0.5 },
+  essaim:   { key: 'essaim',   label: 'Essaim',   emoji: '🐝', share: 15, cost: 3, hp: 95,  dps: 20,   range: 2,  speed: 11, count: 6, targets: 'all', rarityWeight: 0.5 },
   sort:     { key: 'sort',     label: 'Sort',     emoji: '💥', share: 10, cost: 4, damage: 350, radius: 6, buildingRatio: 0.4 },
   // 🗼 Vigie (v2.3, à la place exacte de l'ancienne Pompe dans le tirage) : monte sur une tour de
   //    son camp. Garde = PV qui encaissent avant la tour ; tir +40 % ; portée +2
-  //    (v2.3, simulation avec départage des nuls : garde 250 → 200, tir +60 % → +40 %, portée +4 → +2).
-  vigie:    { key: 'vigie',    label: 'Vigie',    emoji: '🗼', share: 5,  cost: 4, durationMs: 40000, guard: 200, dpsBonus: 0.4, rangeBonus: 2 },
+  //    (v2.3, simulation avec départage des nuls : garde 250 → 200, tir +60 % → +40 %, portée +4 → +2 ;
+//    v3.5, peu jouée et 43 % de victoires en prod : garde 200 → 250).
+  vigie:    { key: 'vigie',    label: 'Vigie',    emoji: '🗼', share: 5,  cost: 4, durationMs: 40000, guard: 250, dpsBonus: 0.4, rangeBonus: 2 },
 };
 
 // Anciens noms d'archétypes (surcharges écrites avant la v2.3) → nom actuel
@@ -52,10 +53,10 @@ const RENAMED = { pompe: 'vigie' };
 
 const RARITY_MODS = {
   common:    { mult: 1,    cost: 0 },
-  rare:      { mult: 1.06, cost: 0 },
-  epic:      { mult: 1.11, cost: 0 },
-  legendary: { mult: 1.16, cost: 0 },
-  rose:      { mult: 1.11, cost: 0 },   // 🎀 Octobre Rose (hors série) = puissance d'une épique
+  rare:      { mult: 1.09, cost: 0 },   // v3.5 : 1,06 → 1,09
+  epic:      { mult: 1.15, cost: 0 },   // v3.5 : 1,11 → 1,15
+  legendary: { mult: 1.20, cost: 0 },   // v3.5 : 1,16 → 1,20
+  rose:      { mult: 1.15, cost: 0 },   // 🎀 Octobre Rose (hors série) = puissance d'une épique
 };
 
 // attaquant → archétype qu'il contre

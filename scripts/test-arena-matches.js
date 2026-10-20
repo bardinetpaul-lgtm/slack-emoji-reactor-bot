@@ -174,6 +174,7 @@ check('combats terminés purgés après 10 min', matches.getMatch(m5.id) === nul
   const played = rows.filter((d) => d.result !== 'cancelled');
   check('match_finished : decks joués présents', played.length > 0 && played.every((d) => d.players.every((p) => Array.isArray(p.deck) && p.deck.length > 0)));
   check('match_finished : issue cohérente', rows.every((d) => d.players.length === 2 && d.players.every((p) => ['win', 'loss', 'draw', 'cancelled'].includes(p.outcome))));
+  check('match_finished : Capitaine noté (v3.5)', played.every((d) => d.players.every((p) => p.captain === null || (p.captain.url && p.captain.archetype))));
 }
 
 // ─── 📺 v2.3 : historique enrichi à la fin d'un vrai combat ───
