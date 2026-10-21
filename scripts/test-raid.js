@@ -140,6 +140,17 @@ const card = (key, rarity) => ({ url: `https://example.test/${key}`, title: `Car
   check(raid.launchBlock(RealDate.parse('2026-10-24T09:00:00Z')) === 'weekend', 'samedi : pas de raid');
   check(raid.cost(5) === 50 && raid.cost(7) === 70 && raid.cost(10) === 100 && raid.cost(5, true) === 0 && raid.cost(7, true) === 20, 'prix : 50 JP$ pour 5 cibles, +10 par cible en plus ; gratuit = seulement les cibles en plus');
   check(scores.ATTACK_THRESHOLD === 65, 'raid gratuit à 65 Jeanpips dans la semaine (v3.6)');
+  // 🐛 v3.6.1 : 90 Jeanpips gagnés avant la baisse du seuil (100 → 65) = raid gratuit tout de suite, sans attendre un Jeanpip de plus
+  {
+    const file = path.join(TMP, 'data', 'scores.json');
+    scores.incrementScore('UOLD');   // crée le fichier des scores
+    const data = JSON.parse(fs.readFileSync(file, 'utf8'));
+    data.users.UOLD = { score: 90, hasAttack: false, notified: false };
+    fs.writeFileSync(file, JSON.stringify(data));
+    check(scores.hasAttack('UOLD') === true && !homeOf('UOLD').includes('encore 0 pour un raid gratuit') && homeOf('UOLD').includes('Raid gratuit débloqué'), 'v3.6.1 : 90/65 sans raid gratuit → débloqué dès l\'Accueil');
+    scores.consumeAttack('UOLD');
+    check(scores.hasAttack('UOLD') === false && scores.getScore('UOLD') === 0, 'v3.6.1 : une fois utilisé, pas de 2e raid gratuit dans la semaine');
+  }
 
   // ── Butin ──
   collections.addCards('LOOT1', [card('leg', 'legendary'), card('leg', 'legendary'), card('rose', 'rose'), card('rose', 'rose'), card('spam', 'spam'), card('spam', 'spam'), card('u1', 'common'), card('d1', 'rare'), card('d1', 'rare')]);

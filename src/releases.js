@@ -16,6 +16,14 @@
 
 const RELEASES = [
   {
+    version: '3.6.1',
+    date: '2026-10-21',
+    title: 'Raid gratuit débloqué pour tous',
+    changes: [
+      '⚔️ Correctif : si tu avais déjà plus de 65 Jeanpips cette semaine avant la baisse du seuil, ton Raid gratuit n\'apparaissait pas. Il est maintenant débloqué tout de suite, sans attendre un Jeanpip de plus.',
+    ],
+  },
+  {
     version: '3.6.0',
     date: '2026-10-21',
     title: 'Revente, congés et fini le spam',
