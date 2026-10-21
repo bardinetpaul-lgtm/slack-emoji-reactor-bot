@@ -7,7 +7,7 @@
 //  touchée). Un joueur dépasse la limite de Jeanpips de l'heure (v3.0.2) :
 //    • il ne reçoit plus AUCUNE image : ni la sienne quand il réagit, ni
 //      les Jeanpips des autres, ni l'auto-réaction, ni une Attaque ;
-//    • ses Jeanpips n'arrivent plus aux autres pendant la pénalité ;
+//    • v3.6 : une réaction n'envoie plus jamais d'image à l'auteur du message ;
 //    • un Jeanpip envoyé à un joueur sanctionné ne compte pas (aucun JP$)
 //      mais son auteur reçoit quand même SON image ;
 //    • à la fin de la pénalité, tout revient (envoi + réception).
@@ -112,10 +112,10 @@ const wait = (ms) => new Promise((r) => realSetTimeout(r, ms));
 
   origLog(`\n🧪 Anti-farm (limite ${MAX} Jeanpips / h)\n`);
 
-  await test(`sous la limite : le réacteur et l'auteur reçoivent chacun une image`, async () => {
+  await test(`sous la limite : le réacteur reçoit une image, l'auteur rien (v3.6)`, async () => {
     const out = await react('U_FARMER', 'U_AUTEUR');
     assert.strictEqual(dmsTo(out, 'U_FARMER').length, 1, 'réacteur');
-    assert.strictEqual(dmsTo(out, 'U_AUTEUR').length, 1, 'auteur');
+    assert.strictEqual(dmsTo(out, 'U_AUTEUR').length, 0, 'auteur');
   });
 
   await test(`dépasser la limite → pénalité`, async () => {
@@ -188,11 +188,11 @@ const wait = (ms) => new Promise((r) => realSetTimeout(r, ms));
     assert.strictEqual(collections.getCollection('U_FARMER').reduce((s, c) => s + c.count, 0), before);
   });
 
-  await test(`fin de pénalité : il peut de nouveau envoyer`, async () => {
+  await test(`fin de pénalité : il reçoit de nouveau son image`, async () => {
     farm.clear('U_FARMER');
     const out = await react('U_FARMER', 'U_AUTEUR');
     assert.strictEqual(dmsTo(out, 'U_FARMER').length, 1, 'réacteur');
-    assert.strictEqual(dmsTo(out, 'U_AUTEUR').length, 1, 'auteur');
+    assert.strictEqual(dmsTo(out, 'U_AUTEUR').length, 0, 'auteur');
   });
 
   const errors = logs.filter((l) => l.startsWith('ERR'));

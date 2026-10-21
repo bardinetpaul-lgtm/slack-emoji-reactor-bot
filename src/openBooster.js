@@ -40,7 +40,7 @@ function openOnce(id, userId, via) {
   }
 
   // 🏖️ v3.3 : aucune carte le week-end (le rejeu d'un booster déjà ouvert reste possible)
-  if (weekend.isWeekend()) return { status: 'weekend', pending };
+  if (weekend.pauseFor(userId)) return { status: 'weekend', pending };   // + fermeture, congés (v3.6)
 
   // 🔒 markOpened ne réussit qu'une fois
   if (!boosters.markOpened(id)) {

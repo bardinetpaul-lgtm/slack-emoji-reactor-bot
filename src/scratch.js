@@ -2,15 +2,20 @@
 //  🎟️ MODULE TICKET À GRATTER « ESSAI ! » (logique pure)
 //  Façon Goal / Maxi Goal (FDJ), en version rugby : 9 ballons ovales
 //  à gratter (grille 3×3), 3 symboles identiques = le lot du symbole.
-//  Un ticket gagne AU PLUS un lot : on tire d'abord le lot, puis on
+//  Les ballons gagnent AU PLUS un lot : on tire d'abord le lot, puis on
 //  construit une grille qui le montre.
+//  v3.6 : la zone SCORE est un 2e jeu, tiré À PART : « Votre score » plus
+//  grand que le « Score adverse » = mise remboursée (1 ticket sur 4), que
+//  les ballons gagnent ou non (avant, elle ne faisait que raconter les ballons).
 //
-//  Équilibre (validé par Paul le 13/10) :
+//  Équilibre (validé par Paul le 13/10, rééquilibré le 21/10 pour le score) :
 //    • lots JP$ = multiples de la mise → le prix (réglable par un admin)
 //      ne change pas la rentabilité ;
-//    • légendaire = prix ÷ 300 (1/60 à 5 JP$) → ~300 JP$ dépensés par légendaire,
-//      ~5 par mois pour qui joue ses 10 tickets chaque jour (Paul, 13/10) ;
-//    • retour JP$ ≈ 64 % de la mise, ~1 ticket sur 2,8 gagnant.
+//    • légendaire = prix ÷ 500 (1/100 à 5 JP$, décision de Paul le 21/10 ; avant
+//      ÷ 300 = 1/60) → ~500 JP$ dépensés par légendaire, ~3 par mois pour qui
+//      joue ses 10 tickets chaque jour ;
+//    • retour JP$ ≈ 64 % de la mise au total (ballons ~39 % + score 25 %),
+//      ~1 ticket sur 2,7 gagnant (ballons ou score).
 //  Aucun accès disque ici : testable seul (scripts/test-scratch.js).
 // ═══════════════════════════════════════════════════════════
 
@@ -28,16 +33,20 @@ const SYMBOLS = {
 };
 const SYMBOL_KEYS = Object.keys(SYMBOLS);
 
-// Lots JP$ : multiple de la mise + chance (probabilité par ticket)
+// Lots JP$ des ballons : multiple de la mise + chance (probabilité par ticket)
+// v3.6 : chances baissées pour faire de la place au score (le Sifflet, imprimé
+// dans la légende du ticket, reste un lot)
 const JP_PRIZES = [
   { symbol: 'posts', multiplier: 40, chance: 0.002 },
-  { symbol: 'ball', multiplier: 10, chance: 0.008 },
-  { symbol: 'jersey', multiplier: 4, chance: 0.025 },
-  { symbol: 'boot', multiplier: 2, chance: 0.08 },
-  { symbol: 'whistle', multiplier: 1, chance: 0.22 },
+  { symbol: 'ball', multiplier: 10, chance: 0.006 },
+  { symbol: 'jersey', multiplier: 4, chance: 0.02 },
+  { symbol: 'boot', multiplier: 2, chance: 0.04 },
+  { symbol: 'whistle', multiplier: 1, chance: 0.09 },
 ];
+// 🏉 Zone SCORE (v3.6) : tirée à part des ballons
+const SCORE_PRIZE = { multiplier: 1, chance: 0.25 };
 const LEGENDARY_SYMBOL = 'trophy';
-const LEGENDARY_JP_PER_CARD = 300;   // JP$ dépensés en moyenne par légendaire
+const LEGENDARY_JP_PER_CARD = 500;   // JP$ dépensés en moyenne par légendaire (v3.6 : 300 → 500)
 const LEGENDARY_MAX_CHANCE = 0.5;
 
 /** Chance de légendaire pour un ticket à ce prix. */
@@ -103,20 +112,24 @@ function buildGrid(outcome, rand = Math.random) {
   return shuffle(cells, rand);
 }
 
+/** Le score gagne-t-il ce ticket ? → { win, amount } (amount = la mise si gagné). */
+function drawScore(price, rand = Math.random) {
+  const win = rand() < SCORE_PRIZE.chance;
+  return { win, amount: win ? prizeAmount(price, SCORE_PRIZE.multiplier) : 0 };
+}
+
 /**
- * Zone « SCORE » du ticket (comme le 2e jeu du Maxi Goal) : elle raconte
- * le résultat, sans lot en plus. Gagnant → victoire (gros lot / légendaire
- * = large victoire) ; perdant → défaite ou match nul.
+ * Zone « SCORE » du ticket (comme le 2e jeu du Maxi Goal), v3.6 : un vrai jeu.
+ * Gagné → « Votre score » plus grand ; perdu → défaite ou match nul (1 fois sur 5).
  */
-function buildScore(outcome, rand = Math.random) {
+function buildScore(win, rand = Math.random) {
   const points = () => 3 * Math.floor(rand() * 6) + 7 * Math.floor(rand() * 3);   // pénalités + essais transformés
-  if (outcome.kind === 'lose') {
+  if (!win) {
     const us = points();
     return { us, them: us + (rand() < 0.2 ? 0 : 1 + Math.floor(rand() * 12)) };
   }
   const them = points();
-  const big = outcome.kind === 'legendary' || outcome.symbol === 'posts';
-  return { us: them + (big ? 20 + Math.floor(rand() * 15) : 1 + Math.floor(rand() * 12)), them };
+  return { us: them + 1 + Math.floor(rand() * 15), them };
 }
 
 /** Symbole présent 3 fois dans la grille (null si perdante). */
@@ -131,12 +144,14 @@ module.exports = {
   SYMBOLS,
   SYMBOL_KEYS,
   JP_PRIZES,
+  SCORE_PRIZE,
   LEGENDARY_SYMBOL,
   legendaryChance,
   prizeAmount,
   prizeTable,
   drawOutcome,
   buildGrid,
+  drawScore,
   buildScore,
   winningSymbol,
 };

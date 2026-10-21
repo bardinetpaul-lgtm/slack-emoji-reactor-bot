@@ -38,7 +38,9 @@ const REASONS = {
   not_found: 'Ce défi a expiré ou a déjà été traité.',
   not_target: 'Ce défi ne t\'est pas adressé.',
   bot: 'Impossible de défier un bot.',
-  weekend: 'C\'est le week-end : l\'Arène est en pause jusqu\'à lundi 0h.',
+  weekend: 'Jeanpip est en pause (week-end, fermeture de l\'entreprise ou congés) : pas de nouveau combat pour le moment.',
+  leave_to: 'Cette personne est en congés : on la laisse tranquille 🌴',
+  leave_from: 'Cette personne est partie en congés entre-temps : défi annulé 🌴',
 };
 const reasonText = (r) => REASONS[r] || 'Impossible pour le moment.';
 
@@ -73,7 +75,7 @@ function homeState(userId, links, now = Date.now()) {
     incoming: status.incoming,
     deckUrl: links.deck(userId),
     web: Boolean(links.deck(userId)),
-    weekend: weekend.isWeekend(now),   // 🏖️ v3.3 : pas de nouveau combat
+    pause: weekend.pauseFor(userId, now),   // 🏖️ v3.3 (+ fermeture, congés : v3.6) : pas de nouveau combat
   };
 }
 
@@ -95,8 +97,8 @@ function buildHomeBlocks(a) {
     blocks.push(section(`▶️ *${label}*`, { ...button('▶️ Rejoindre mon combat', 'arena_enter_web', { style: 'primary' }), url: a.match.url }));
     return blocks;
   }
-  if (a.weekend) {
-    blocks.push(section('🏖️ *Arène en pause le week-end* : pas de nouveau combat jusqu\'à lundi 0h. Tu peux toujours préparer ton deck.', deckBtn || undefined));
+  if (a.pause) {
+    blocks.push(section(`${a.pause.icon} *Arène en pause ${a.pause.short}* : pas de nouveau combat ${a.pause.until}. Tu peux toujours préparer ton deck.`, deckBtn || undefined));
     return blocks;
   }
   for (const c of a.incoming) {

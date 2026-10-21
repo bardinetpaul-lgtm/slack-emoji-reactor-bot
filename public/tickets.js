@@ -283,14 +283,27 @@
     $('veil').hidden = true;
     $('reveal-all').hidden = false;
     $('buy').hidden = true;
-    setMsg('Gratte les ballons et le score ! 3 symboles identiques = le gain.');
+    setMsg('Gratte les ballons et le score ! 3 symboles identiques = le gain, et si ton score bat le score adverse : mise remboursée.');
   }
 
   function onReveal(key, cell, name) {
     revealed.add(key);
     if (name) name.classList.add('on');
     if (cell) highlightPairs();
+    if (key.startsWith('s_') && revealed.has('s_us') && revealed.has('s_them')) showScore();
     if (revealed.size === layers.length) finishTicket();
+  }
+
+  // 🏉 v3.6 : le score est un 2e jeu → on dit tout de suite s'il gagne
+  function showScore() {
+    if (!ticket || !ticket.score) return;
+    const win = ticket.score.us > ticket.score.them;
+    $('score-us').classList.add(win ? 'won' : 'lost');
+    const strip = $('result-strip');
+    if (win && !strip.classList.contains('teaser')) {
+      strip.className = 'result-strip teaser';
+      strip.textContent = `SCORE GAGNANT : ${fmt(state.scorePrize || state.price)} JP$ !`;
+    }
   }
 
   function highlightPairs() {
@@ -339,34 +352,42 @@
     ticket = null;
     const cells = [...document.querySelectorAll('.cell')];
     const strip = $('result-strip');
-    const us = $('score-us');
-    const them = $('score-them');
+    const score = result.score || 0;   // 🏉 v3.6 : gain du score, en plus des ballons
+    $('score-us').classList.add(score ? 'won' : 'lost');
+
     if (result.kind === 'lose') {
-      strip.className = 'result-strip lose';
-      strip.textContent = 'PERDU… PAS CETTE FOIS !';
-      us.classList.add('lost');
-      setMsg('Le prochain sera le bon ?');
+      if (!score) {
+        strip.className = 'result-strip lose';
+        strip.textContent = 'PERDU… PAS CETTE FOIS !';
+        setMsg('Le prochain sera le bon ?');
+        return;
+      }
+      strip.className = 'result-strip win';
+      strip.textContent = 'SCORE : MISE REMBOURSÉE';
+      flyAmount(`+${fmt(score)} JP$`);
+      setMsg('Pas de trio sous les ballons, mais ton score te rembourse !');
       return;
     }
-    us.classList.add('won');
     for (const c of cells) {
       c.classList.remove('pair');
       c.classList.add(c.dataset.symbol === result.symbol ? 'win' : 'dim');
     }
     if (result.kind === 'legendary') {
       strip.className = 'result-strip big';
-      strip.textContent = '🏆 CARTE LÉGENDAIRE !';
+      strip.textContent = score ? `🏆 LÉGENDAIRE + ${fmt(score)} JP$ !` : '🏆 CARTE LÉGENDAIRE !';
+      if (score) flyAmount(`+${fmt(score)} JP$`);
       confetti(260);
       setTimeout(() => showCard(result.card), reduced ? 0 : 900);
       setMsg('La carte est déjà dans ton classeur.');
       return;
     }
+    const total = result.amount + score;
     const big = result.symbol === 'posts' || result.symbol === 'ball';
     strip.className = `result-strip ${big ? 'big' : 'win'}`;
-    strip.textContent = result.amount === state.price ? `MISE REMBOURSÉE : ${fmt(result.amount)} JP$` : `GAGNÉ : ${fmt(result.amount)} JP$ !`;
-    flyAmount(`+${fmt(result.amount)} JP$`);
-    if (big) confetti(big && result.symbol === 'posts' ? 300 : 140);
-    setMsg(result.amount === state.price ? 'Remboursé ! Tu retentes ta chance ?' : 'Bien joué ! Les JP$ sont sur ton compte.');
+    strip.textContent = total === state.price ? `MISE REMBOURSÉE : ${fmt(total)} JP$` : `GAGNÉ : ${fmt(total)} JP$ !`;
+    flyAmount(`+${fmt(total)} JP$`);
+    if (big) confetti(result.symbol === 'posts' ? 300 : 140);
+    setMsg(total === state.price ? 'Remboursé ! Tu retentes ta chance ?' : `Bien joué ! Les JP$ sont sur ton compte${score ? ` (dont ${fmt(score)} JP$ grâce au score)` : ''}.`);
   }
 
   function showCard(card) {
@@ -385,7 +406,7 @@
   const BLOCK_TEXT = {
     penalty: '🚜 Pénalité anti-farm en cours : pas de ticket pour l\'instant.',
     limit: '✅ Tu as joué tous tes tickets du jour. Reviens demain !',
-    weekend: '🏖️ C’est le week-end : le Kiosque est fermé jusqu’à lundi 0h.',
+    weekend: '🏖️ Jeanpip est en pause (week-end, fermeture ou congés) : le Kiosque est fermé jusqu’à la reprise.',
     balance: '💸 Pas assez de JP$ pour un ticket.',
     error: '⚠️ Souci technique : ton ticket a été remboursé, réessaie.',
   };

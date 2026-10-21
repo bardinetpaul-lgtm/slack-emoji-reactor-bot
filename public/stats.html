@@ -45,6 +45,9 @@
           <option value="booster">Boosters</option>
           <option value="arena_shop">Boutique arène</option>
           <option value="attack">Attaques</option>
+          <option value="raid">Raids</option>
+          <option value="scratch">Tickets à gratter</option>
+          <option value="resale">Revente de doublons</option>
         </select>
       </label>
     </form>
@@ -52,6 +55,13 @@
   </header>
 
   <main>
+    <section id="live">
+      <h2>📡 En direct</h2>
+      <p class="since">Les 10 derniers événements du jeu (hors réactions, résumées ci-dessous), mis à jour toutes les 15 s.</p>
+      <div class="kpis"></div>
+      <div class="table" id="t-live"></div>
+    </section>
+
     <section id="economy">
       <h2>💰 Économie</h2>
       <p class="since"></p>
@@ -60,7 +70,8 @@
         <figure><figcaption>Masse en circulation</figcaption><canvas id="c-mass"></canvas></figure>
         <figure><figcaption>Créés vs consommés</figcaption><canvas id="c-flow"></canvas></figure>
         <figure><figcaption>Moyenne et médiane par joueur</figcaption><canvas id="c-perplayer"></canvas></figure>
-        <figure><figcaption>Créés par source · consommés par usage</figcaption><canvas id="c-sources"></canvas></figure>
+        <figure><figcaption>Créés par source · consommés par usage (JP$)</figcaption><canvas id="c-sources" class="tall"></canvas></figure>
+        <figure><figcaption>Plus grosses fortunes (solde actuel · part de toute la monnaie)</figcaption><div class="table" id="t-fortunes"></div></figure>
       </div>
     </section>
 
@@ -103,6 +114,17 @@
         <figure><figcaption>🏆 Classement des joueurs</figcaption><div class="table" id="t-ranking"></div></figure>
         <figure><figcaption>Combats</figcaption><canvas id="c-matches"></canvas></figure>
         <figure><figcaption>Cartes les plus jouées</figcaption><div class="table" id="t-topcards"></div></figure>
+      </div>
+    </section>
+
+    <section id="scratch">
+      <h2>🎟️ Tickets à gratter</h2>
+      <div class="kpis"></div>
+      <div class="grid">
+        <figure><figcaption>Misés vs gagnés (JP$)</figcaption><canvas id="c-scratch"></canvas></figure>
+        <figure><figcaption>Résultats par lot</figcaption><div class="table" id="t-outcomes"></div></figure>
+        <figure><figcaption>🏆 Plus gros lots</figcaption><div class="table" id="t-bigwins"></div></figure>
+        <figure><figcaption>Joueurs (bilan = gagné − misé)</figcaption><div class="table" id="t-scratchers"></div></figure>
       </div>
     </section>
 

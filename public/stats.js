@@ -18,7 +18,7 @@
 
   const LABELS = {
     reaction: 'Réactions', weekly_gift: 'Cadeaux du vendredi', arena_reward: 'Récompenses arène', arena_streak: 'Séries arène', bug_bounty: 'Bugs signalés', media_author: 'Auteurs de médias',
-    admin_gift: 'Dons admin', unknown: '❓ Inconnu', booster: 'Boosters', arena_shop: 'Boutique arène', attack: 'Attaques', raid: 'Raids',scratch: 'Tickets à gratter', ticket: 'achat', win: 'gains',
+    admin_gift: 'Dons admin', unknown: '❓ Inconnu', booster: 'Boosters', arena_shop: 'Boutique arène', attack: 'Attaques', raid: 'Raids', resale: '♻️ Revente de doublons', scratch: 'Tickets à gratter', ticket: 'achat', win: 'gains',
     common: 'Commun', rare: 'Rare', epic: 'Épique', legendary: 'Légendaire', rose: 'Octobre Rose', octobre_rose: '🎀 Octobre Rose',
   };
   const label = (key) => String(key).split('/').map((k) => LABELS[k] || k).join(' · ');
@@ -102,6 +102,58 @@
       <tbody>${rows.map((r) => `<tr>${r.map((c, i) => `<td${head[i][1] ? ' class="num"' : ''}>${esc(c)}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
   }
 
+  // Montant écrit au bout de chaque barre horizontale (graphique « par source »)
+  const valueLabels = {
+    id: 'valueLabels',
+    afterDatasetsDraw(c) {
+      const { ctx } = c;
+      ctx.save();
+      ctx.font = '12px system-ui, sans-serif';
+      ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--text').trim() || '#333';
+      ctx.textBaseline = 'middle';
+      c.data.datasets.forEach((ds, i) => c.getDatasetMeta(i).data.forEach((el, j) => ctx.fillText(fmt(ds.data[j], 0), el.x + 6, el.y)));
+      ctx.restore();
+    },
+  };
+
+  // 🎟️ Symboles des tickets à gratter (src/scratch.js)
+  const SYMBOLS = { trophy: '🏆', posts: '🥅', ball: '🏉', jersey: '👕', boot: '👟', whistle: '📣' };
+  const SYMBOL_NAMES = { trophy: 'Coupe (carte légendaire)', posts: 'Poteaux', ball: 'Ballon ovale', jersey: 'Maillot', boot: 'Crampon', whistle: 'Sifflet' };
+  const prizeLabel = (key, symbol) => ({ lose: '❌ Perdant', score: '🏉 Score gagnant (mise remboursée)', score_only: '🏉 Ballons perdants, score gagnant' }[key]
+    || `${SYMBOLS[symbol] || ''} ${SYMBOL_NAMES[symbol] || key}`);
+
+  // 📡 Une ligne lisible par événement du fil « En direct »
+  const BOOSTER = (t) => `🎁 ${label(t)}`;
+  function describe(e) {
+    const d = e.data || {};
+    switch (e.type) {
+      case 'scratch_ticket': {
+        const sc = d.score ? `${d.card || d.amount ? ' + ' : ' '}🏉 score : ${fmt(d.score)} JP$` : '';
+        return d.card ? `🎟️ Ticket gratté : ${SYMBOLS[d.symbol] || '🏆'} gagne ${d.card.title} !${sc}`
+          : d.amount ? `🎟️ Ticket gratté : ${SYMBOLS[d.symbol] || ''} gagne ${fmt(d.amount)} JP$${sc}`
+            : d.score ? `🎟️ Ticket gratté :${sc}` : '🎟️ Ticket gratté : perdu';
+      }
+      case 'booster_bought': return `🛒 Achète un booster ${BOOSTER(d.boosterType)} (${fmt(d.price)} JP$)`;
+      case 'booster_opened': return `📦 Ouvre un booster ${BOOSTER(d.boosterType)}${d.best ? ` · meilleure carte : ${d.best.title}` : ''}`;
+      case 'booster_granted': return `🎁 Reçoit un booster ${BOOSTER(d.boosterType)}${d.reason === 'arena' ? ' (Arène)' : ''}`;
+      case 'match_finished': {
+        const ps = d.players || [];
+        const w = ps.find((p) => p.outcome === 'win');
+        const l = ps.find((p) => p.outcome === 'loss');
+        return w && l ? `⚔️ ${who(w.userId)} bat ${who(l.userId)} en Arène` : `⚔️ Combat terminé (${ps.map((p) => who(p.userId)).join(' vs ')})`;
+      }
+      case 'raid_launched': return `🚨 Lance un raid sur ${d.targets} cible${d.targets > 1 ? 's' : ''}${d.free ? ' (gratuit)' : ''}`;
+      case 'raid_resolved': return `⚔️ Raid terminé : ${d.tombe} tombé(s), ${d.riposte} riposte(s) sur ${d.targets}`;
+      case 'card_added': return `🖼️ Nouvelle carte au catalogue : ${d.title}`;
+      case 'cards_sold': return `♻️ Revend des doublons : +${fmt(d.gained)} JP$`;
+      case 'credit_weekly_gift': return `🎁 Reçoit ${fmt(d.amount)} JP$ (cadeau du vendredi)`;
+      case 'credit_media_author': return `🎨 Gagne ${fmt(d.amount)} JP$ (auteur d'un média)`;
+      case 'credit_admin_gift': return `👑 Reçoit ${fmt(d.amount)} JP$ d'un admin`;
+      case 'credit_bug_bounty': return `🐛 Gagne ${fmt(d.amount)} JP$ (bug validé)`;
+      default: return e.type;
+    }
+  }
+
   const RENDER = {
     economy(d) {
       since('economy', d.since);
@@ -123,8 +175,29 @@
           labels: [...src.map((x) => `+ ${label(x.key)}`), ...use.map((x) => `− ${label(x.key)}`)],
           datasets: [{ label: 'JP$', data: [...src.map((x) => x.credits), ...use.map((x) => x.credits)], backgroundColor: [...src.map(() => COLORS[2]), ...use.map(() => COLORS[1])], borderRadius: 4 }],
         },
-        options: { indexAxis: 'y', plugins: { legend: { display: false } } },
+        // Toutes les étiquettes (pas d'une sur deux) + le montant au bout de chaque barre
+        options: { indexAxis: 'y', plugins: { legend: { display: false } }, scales: { y: { ticks: { autoSkip: false } }, x: { grace: '12%' } } },
+        plugins: [valueLabels],
       });
+      table('t-fortunes', [['#', 1], ['Joueur'], ['Solde', 1], ['Part', 1]],
+        d.tables.fortunes.map((p, i) => [['🥇', '🥈', '🥉'][i] || String(i + 1), who(p.userId), `${fmt(p.balance)} JP$`, `${fmt(p.sharePct)} %`]));
+    },
+    scratch(d) {
+      kpis('scratch', [{ key: 'tickets', text: 'Tickets grattés' }, { key: 'staked', text: 'JP$ misés' }, { key: 'won', text: 'JP$ gagnés' },
+        { key: 'net', text: 'JP$ retirés du jeu (misés − gagnés)' }, { key: 'rtpPct', text: 'Taux de retour', unit: ' %' }, { key: 'winRatePct', text: 'Tickets gagnants', unit: ' %' },
+        { key: 'cards', text: '🏆 Légendaires gagnées' }, { key: 'scoreWins', text: '🏉 Scores gagnants' }, { key: 'players', text: 'Joueurs' }], d);
+      chart('c-scratch', { type: 'bar', data: { labels: d.series.labels, datasets: [bar('Misés', d.series.staked, 1), bar('Gagnés', d.series.won, 2)] } });
+      table('t-outcomes', [['Lot'], ['Tickets', 1], ['JP$ versés', 1]],
+        d.tables.outcomes.map((o) => [prizeLabel(o.key, o.symbol), fmt(o.count, 0), fmt(o.credits)]));
+      table('t-bigwins', [['Date'], ['Joueur'], ['Lot']],
+        d.tables.biggest.map((w) => [new Date(w.at).toLocaleString('fr-FR'), who(w.userId), w.card ? `${SYMBOLS[w.symbol] || '🏆'} ${w.card.title}${w.score ? ` + ${fmt(w.score)} JP$` : ''}` : `${SYMBOLS[w.symbol] || (w.score ? '🏉' : '')} ${fmt(w.amount)} JP$`]));
+      table('t-scratchers', [['Joueur'], ['Tickets', 1], ['Misé', 1], ['Gagné', 1], ['Bilan', 1], ['🏆', 1]],
+        d.tables.players.map((p) => [who(p.userId), fmt(p.tickets, 0), fmt(p.staked), fmt(p.won), `${p.net > 0 ? '+' : ''}${fmt(p.net)}`, fmt(p.cards, 0)]));
+    },
+    live(d) {
+      kpis('live', [{ key: 'reactionsHour', text: 'Réactions (dernière heure)' }, { key: 'reactionsDay', text: 'Réactions (24 h)' }], d);
+      table('t-live', [['Quand'], ['Joueur'], ['Quoi']],
+        d.tables.feed.map((e) => [new Date(e.at).toLocaleTimeString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' }), e.userId ? who(e.userId) : '—', describe(e)]));
     },
     purchases(d) {
       kpis('purchases', [{ key: 'purchases', text: 'Achats' }, { key: 'credits', text: 'JP$ dépensés' }, { key: 'buyers', text: 'Acheteurs' }], d);
@@ -206,6 +279,11 @@
     } catch { /* noms facultatifs */ }
     form.addEventListener('change', refresh);
     refresh();
+    // 📡 « En direct » : seul ce bloc se recharge, toutes les 15 s (pas quand l'onglet est caché)
+    setInterval(() => {
+      if (document.hidden) return;
+      api('live').then((d) => RENDER.live(d)).catch(() => { /* prochain essai dans 15 s */ });
+    }, 15000);
   }
   init();
 })();

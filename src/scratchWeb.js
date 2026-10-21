@@ -56,7 +56,8 @@ function publicTicket(ticket) {
 
 function publicResult(ticket) {
   const { kind, symbol, amount } = ticket.outcome;
-  const result = { kind, symbol, amount };
+  const score = ticket.scoreWin && ticket.scoreWin.win ? ticket.scoreWin.amount : 0;   // 🏉 v3.6
+  const result = { kind, symbol, amount, score };
   if (ticket.card) {
     result.card = { title: ticket.card.title, rarity: ticket.card.rarity, image: cardImageUrl(ticket.card), count: ticket.count || 1 };
   }
@@ -75,6 +76,7 @@ function state(userId, now = Date.now()) {
     penaltyMs: farm.getPenaltyRemaining(userId, now),
     symbols: scratch.SYMBOLS,
     prizes: scratch.prizeTable(price).map(({ symbol, kind, amount }) => ({ symbol, kind, amount: amount || 0 })),
+    scorePrize: scratch.prizeAmount(price, scratch.SCORE_PRIZE.multiplier),
     ticket: publicTicket(scratchTickets.pendingTicket(userId)),
   };
 }
@@ -115,7 +117,7 @@ async function route(req, res, url) {
     const result = scratchTickets.buy(userId);
     if (result.status === 'bought') {
       const t = result.ticket;
-      ctx.logger.info(`🎟️ <@${userId}> achète un ticket (${t.price} JP$) → ${t.outcome.kind}${t.outcome.amount ? ` ${t.outcome.amount} JP$` : ''}${t.card ? ` ${t.card.title}` : ''} (versé au grattage)`);
+      ctx.logger.info(`🎟️ <@${userId}> achète un ticket (${t.price} JP$) → ${t.outcome.kind}${t.outcome.amount ? ` ${t.outcome.amount} JP$` : ''}${t.card ? ` ${t.card.title}` : ''}${t.scoreWin.win ? ` + score ${t.scoreWin.amount} JP$` : ''} (versé au grattage)`);
       notify(userId);
     }
     ctx.sendJson(res, 200, { ...state(userId), bought: result.status === 'bought', reason: result.reason || null });

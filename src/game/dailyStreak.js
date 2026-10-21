@@ -14,6 +14,7 @@
 // ═══════════════════════════════════════════════════════════
 
 const { parisDay } = require('../octobreRose');
+const closure = require('../closure');
 
 const REWARDS = [
   { credits: 1 },
@@ -31,11 +32,14 @@ const DAY_MS = 24 * 3600 * 1000;
 const noon = (day) => Date.parse(`${day}T12:00:00Z`);
 const dayOf = (ms) => new Date(ms).toISOString().slice(0, 10);
 const isWeekend = (day) => [0, 6].includes(new Date(noon(day)).getUTCDay());
+// 🏢 v3.6 : un jour de fermeture de l'entreprise ne casse pas la série non plus
+//    (les congés individuels, eux, comptent comme des jours normaux : choix de Paul)
+const isOffDay = (day) => isWeekend(day) || Boolean(closure.closureOnDay(day));
 
 /** Dernier jour ouvré AVANT `day` (le vendredi pour un lundi). */
 function previousBusinessDay(day) {
   let d = dayOf(noon(day) - DAY_MS);
-  while (isWeekend(d)) d = dayOf(noon(d) - DAY_MS);
+  for (let i = 0; i < 400 && isOffDay(d); i += 1) d = dayOf(noon(d) - DAY_MS);
   return d;
 }
 

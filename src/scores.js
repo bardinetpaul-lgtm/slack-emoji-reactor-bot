@@ -9,7 +9,7 @@ const path = require('path');
 const { readJson, writeJsonAtomic } = require('./storage');
 
 const SCORES_PATH = path.join(__dirname, '..', 'data', 'scores.json');
-const ATTACK_THRESHOLD = 100; // Jeanpips dans la semaine pour débloquer un Raid gratuit (v3.4)
+const ATTACK_THRESHOLD = 65;  // Jeanpips dans la semaine pour débloquer un Raid gratuit (v3.4 : 100 ; v3.6 : 65, avec 20 Jeanpips max par jour)
 
 // ─────────────────────────────────────────────
 // 📦 Chargement / Sauvegarde

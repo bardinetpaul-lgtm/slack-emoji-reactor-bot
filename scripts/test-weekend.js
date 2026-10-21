@@ -139,7 +139,7 @@ const flat = (x) => JSON.stringify(x);
   // ── Vendredi 23h59 : une réaction marche ──
   at(FRIDAY_2359);
   await react('UR');
-  check(credits.getBalance('UR') > 300 && dmsTo('UR').length === 1 && dmsTo('UAUTHOR').length === 1, 'vendredi 23h59 : réaction → JP$ + image au réacteur et à l\'auteur');
+  check(credits.getBalance('UR') > 300 && dmsTo('UR').length === 1 && dmsTo('UAUTHOR').length === 0, 'vendredi 23h59 : réaction → JP$ + image au réacteur seul (v3.6)');
 
   // ── Samedi : la réaction ne fait rien ──
   at(SATURDAY_0000);

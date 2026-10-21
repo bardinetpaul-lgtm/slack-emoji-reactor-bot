@@ -16,6 +16,23 @@
 
 const RELEASES = [
   {
+    version: '3.6.0',
+    date: '2026-10-21',
+    title: 'Revente, congés et fini le spam',
+    changes: [
+      '🎯 Fini la course aux réactions : 20 Jeanpips comptent par jour, et chacun rapporte maintenant 1 JP$ (au lieu de 0,5). Au total, on gagne autant qu\'avant, mais sans spammer. Au-delà de 20, une réaction ne donne plus rien jusqu\'au lendemain. Ton compteur du jour est dans l\'Accueil.',
+      '🏉 Tickets à gratter : le SCORE est maintenant un vrai 2e jeu. Si « Votre score » bat le « Score adverse », ta mise est remboursée, même si les ballons perdent (1 ticket sur 4). Les lots des ballons sont un peu plus rares pour compenser : au total, les tickets rapportent autant qu\'avant.',
+      '⚔️ Le Raid gratuit se débloque maintenant à 65 Jeanpips dans la semaine (au lieu de 100). Et une personne en pénalité anti-farm peut maintenant être raidée.',
+      '♻️ Nouveau : revends tes doublons contre des JP$ depuis l\'onglet Accueil. ⚪ Commune 0,5 · 🔵 Rare 2 · 🟣 Épique 5 · 🎀 Octobre Rose 10 · 🟡 Légendaire 20 JP$ l\'exemplaire. Tu gardes toujours un exemplaire de chaque carte, et ceux de tes decks d\'Arène. Les cartes troll de l\'anti-spam ne se revendent pas.',
+      '♻️ Jusqu\'à 30 JP$ de revente par personne et par semaine (remis à zéro le lundi), pour que les JP$ gardent leur valeur. Pas de revente pendant un raid que tu subis.',
+      '🌴 Nouveau : « Mes congés » dans l\'onglet Accueil. Tu choisis tes dates (60 jours au maximum) et, pendant tes congés, Jeanpip te laisse tranquille : on ne peut ni te raider ni te défier, tu ne reçois aucun Jeanpip ni notification, et réagir à tes messages ne rapporte rien. Toi non plus tu ne joues pas : pas de raid, d\'Arène, de booster ni de ticket. Tu peux revenir plus tôt avec « Je suis rentré(e) ».',
+      '🌴 Pendant tes congés, ta série de combats, ton Raid gratuit et tes JP$ du vendredi continuent comme d\'habitude. Un raid ou un combat déjà commencé se termine normalement.',
+      '🏢 Quand l\'entreprise ferme (Noël, pont…), un admin met Jeanpip en pause pour tout le monde, comme un week-end. Tu reçois un message le premier jour à 9h, puis à la reprise. Ces jours-là ne cassent pas ta série de combats.',
+      '🔕 Quand tu réagis avec :jeanpip:, tu reçois ton image comme avant, mais l\'auteur du message ne reçoit plus rien. Plus de DM d\'images à chaque fois que quelqu\'un réagit à tes messages.',
+      '💰 Le reste ne change pas : ta réaction te rapporte toujours tes JP$ et compte pour le Raid gratuit et le classement, toujours sur les messages des personnes inscrites à la liste de diffusion.',
+    ],
+  },
+  {
     version: '3.5.0',
     date: '2026-10-20',
     title: 'Rééquilibrage de l\'Arène',

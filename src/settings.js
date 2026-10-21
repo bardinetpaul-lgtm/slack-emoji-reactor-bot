@@ -11,7 +11,7 @@ const { readJson, writeJsonAtomic } = require('./storage');
 const SETTINGS_PATH = path.join(__dirname, '..', 'data', 'settings.json');
 
 // 💰 Crédits gagnés par Jeanpip envoyé : multiple de 0,5 entre MIN et MAX
-const DEFAULT_CREDITS_PER_JEANPIP = 0.5;
+const DEFAULT_CREDITS_PER_JEANPIP = 1;   // v3.6 : 1 JP$ (avec 20 Jeanpips max par jour)
 const CREDITS_PER_JEANPIP_MIN = 0.5;
 const CREDITS_PER_JEANPIP_MAX = 10;
 
@@ -134,7 +134,82 @@ function setTicketSettings({ price, limit }) {
   return { ok: true, price, limit, previous };
 }
 
+// ♻️ v3.6 : plafond de JP$ de revente de doublons, par personne et par semaine (entier)
+//    C'est le réglage de la croissance de la monnaie (objectif : +1 à +2 % par mois).
+const DEFAULT_RESALE_WEEKLY_CAP = 30;
+const RESALE_WEEKLY_CAP_MIN = 0;
+const RESALE_WEEKLY_CAP_MAX = 500;
+const isValidResaleWeeklyCap = (v) => isIntIn(v, RESALE_WEEKLY_CAP_MIN, RESALE_WEEKLY_CAP_MAX);
+
+function getResaleWeeklyCap() {
+  const value = load().resaleWeeklyCap;
+  return isValidResaleWeeklyCap(value) ? value : DEFAULT_RESALE_WEEKLY_CAP;
+}
+
+/** Change le plafond hebdomadaire de revente (effet immédiat). → { ok, value?, previous?, error? } */
+function setResaleWeeklyCap(value) {
+  if (!isValidResaleWeeklyCap(value)) return { ok: false, error: 'invalide' };
+  const data = load();
+  const previous = getResaleWeeklyCap();
+  data.resaleWeeklyCap = value;
+  try {
+    save(data);
+  } catch (e) {
+    return { ok: false, error: 'ecriture', detail: e.message };
+  }
+  return { ok: true, value, previous };
+}
+
+// 🎯 v3.6 : Jeanpips qui comptent par personne et par jour (entier), contre le spam
+const DEFAULT_DAILY_JEANPIP_LIMIT = 20;
+const DAILY_JEANPIP_LIMIT_MIN = 1;
+const DAILY_JEANPIP_LIMIT_MAX = 200;
+const isValidDailyJeanpipLimit = (v) => isIntIn(v, DAILY_JEANPIP_LIMIT_MIN, DAILY_JEANPIP_LIMIT_MAX);
+
+function getDailyJeanpipLimit() {
+  const value = load().dailyJeanpipLimit;
+  return isValidDailyJeanpipLimit(value) ? value : DEFAULT_DAILY_JEANPIP_LIMIT;
+}
+
+/** Change la limite de Jeanpips par jour (effet immédiat). → { ok, value?, previous?, error? } */
+function setDailyJeanpipLimit(value) {
+  if (!isValidDailyJeanpipLimit(value)) return { ok: false, error: 'invalide' };
+  const data = load();
+  const previous = getDailyJeanpipLimit();
+  data.dailyJeanpipLimit = value;
+  try {
+    save(data);
+  } catch (e) {
+    return { ok: false, error: 'ecriture', detail: e.message };
+  }
+  return { ok: true, value, previous };
+}
+
+/**
+ * 🎯 v3.6, une seule fois (au premier démarrage de la v3.6) : 20 Jeanpips par jour
+ * et 1 JP$ par Jeanpip (décision de Paul le 2026-10-21). Repérée par l'absence de
+ * dailyJeanpipLimit dans data/settings.json ; ensuite les réglages admin priment.
+ * → true si appliquée.
+ */
+function applyV36Defaults() {
+  const data = load();
+  if (data.dailyJeanpipLimit !== undefined) return false;
+  data.dailyJeanpipLimit = DEFAULT_DAILY_JEANPIP_LIMIT;
+  data.creditsPerJeanpip = 1;
+  save(data);
+  return true;
+}
+
 module.exports = {
+  applyV36Defaults,
+  getDailyJeanpipLimit,
+  setDailyJeanpipLimit,
+  DAILY_JEANPIP_LIMIT_MIN,
+  DAILY_JEANPIP_LIMIT_MAX,
+  getResaleWeeklyCap,
+  setResaleWeeklyCap,
+  RESALE_WEEKLY_CAP_MIN,
+  RESALE_WEEKLY_CAP_MAX,
   getTicketPrice,
   getTicketDailyLimit,
   setTicketSettings,

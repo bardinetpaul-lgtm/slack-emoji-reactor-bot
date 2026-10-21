@@ -27,11 +27,12 @@ const path = require('path');
 const { readJson, writeJsonAtomic } = require('./storage');
 const collections = require('./collections');
 const weekend = require('./weekend');
+const leave = require('./leave');
 const { parisDay, parisMinutes } = require('./octobreRose');
 
 const RAIDS_PATH = path.join(__dirname, '..', 'data', 'raids.json');
 
-const PRICE = 50;                 // sans Raid gratuit débloqué (100 Jeanpips dans la semaine)
+const PRICE = 50;                 // sans Raid gratuit débloqué (65 Jeanpips dans la semaine, v3.6)
 const BASE_TARGETS = 5;           // cibles incluses
 const EXTRA_TARGET_PRICE = 10;    // par cible au-delà de 5
 const MAX_TARGETS = 10;
@@ -60,9 +61,12 @@ function outcome(defense, style) {
   return 'tombe';
 }
 
-/** Pourquoi on ne peut pas lancer de raid maintenant : 'weekend' | 'hours' | null. */
-function launchBlock(now = Date.now()) {
-  if (weekend.isWeekend(now)) return 'weekend';
+/**
+ * Pourquoi on ne peut pas lancer de raid maintenant : 'weekend' | 'hours' | null.
+ * 'weekend' = toute pause (week-end, fermeture, ou congés de `userId` si donné, v3.6).
+ */
+function launchBlock(now = Date.now(), userId = null) {
+  if (weekend.pauseFor(userId, now)) return 'weekend';
   const m = parisMinutes(now);
   return m >= OPEN.from && m < OPEN.to ? null : 'hours';
 }
@@ -101,9 +105,10 @@ function receivedToday(userId, now = Date.now(), data = load()) {
     .filter((r) => parisDay(r.createdAt) === day && r.targets.some((t) => t.userId === userId)).length;
 }
 
-/** Pourquoi cette cible est refusée : 'self' | 'busy' | 'limit' | null. */
+/** Pourquoi cette cible est refusée : 'self' | 'leave' | 'busy' | 'limit' | null. */
 function targetProblem(attacker, target, now = Date.now(), data = load()) {
   if (target === attacker) return 'self';
+  if (leave.activeLeave(target, now)) return 'leave';   // 🌴 v3.6 : on ne raide pas quelqu'un en congés
   if (raidsAgainst(target, data).length) return 'busy';
   if (receivedToday(target, now, data) >= MAX_RECEIVED_PER_DAY) return 'limit';
   return null;
