@@ -73,6 +73,23 @@ function checkAndReset() {
 }
 
 // ─────────────────────────────────────────────
+// 🔓 Débloque le Raid gratuit si le seuil est atteint (et pas déjà débloqué
+//    cette semaine). → true si on vient de le débloquer.
+//    v3.6.1 : vérifié aussi à la lecture (hasAttack) : quand le seuil baisse
+//    (100 → 65 en v3.6), un joueur déjà au-dessus le reçoit tout de suite,
+//    sans attendre son prochain Jeanpip.
+// ─────────────────────────────────────────────
+
+function unlockIfDue(user) {
+  if (user.score >= ATTACK_THRESHOLD && !user.hasAttack && !user.notified) {
+    user.hasAttack = true;
+    user.notified = true;
+    return true;
+  }
+  return false;
+}
+
+// ─────────────────────────────────────────────
 // ➕ Incrémenter le score d'un user
 // Retourne { score, justUnlocked }
 // ─────────────────────────────────────────────
@@ -87,14 +104,8 @@ function incrementScore(userId) {
   const user = data.users[userId];
   user.score += 1;
 
-  // Vérifier si on vient de débloquer l'attaque
   // On débloque si on passe le seuil ET qu'on n'a pas déjà une attaque
-  let justUnlocked = false;
-  if (user.score >= ATTACK_THRESHOLD && !user.hasAttack && !user.notified) {
-    user.hasAttack = true;
-    user.notified = true;
-    justUnlocked = true;
-  }
+  const justUnlocked = unlockIfDue(user);
 
   saveScores(data);
   return { score: user.score, justUnlocked, hasAttack: user.hasAttack };
@@ -107,7 +118,9 @@ function incrementScore(userId) {
 function hasAttack(userId) {
   const data = checkAndReset();
   const user = data.users[userId];
-  return user ? user.hasAttack : false;
+  if (!user) return false;
+  if (unlockIfDue(user)) saveScores(data);   // v3.6.1 : seuil déjà dépassé (ex. seuil abaissé)
+  return user.hasAttack;
 }
 
 // ─────────────────────────────────────────────
