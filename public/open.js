@@ -519,7 +519,7 @@
       invalid:   ['🔒', 'Lien invalide', "Ce lien d'ouverture n'est pas valide. Utilise le bouton « Ouverture animée » reçu dans Slack."],
       not_found: ['🕵️', 'Booster introuvable', "Ce booster n'existe pas (ou plus). Vérifie ton DM Jeanpip dans Slack."],
       slack:     ['💬', 'Déjà ouvert dans Slack', 'Ce booster a déjà été ouvert dans Slack : tes cartes sont déjà dans ta collection !'],
-      weekend:   ['🏖️', "C'est le week-end", "Jeanpip est en pause jusqu'à lundi 0h : pas d'ouverture de booster le week-end. Ton booster t'attend, reviens lundi !"],
+      weekend:   ['🏖️', 'Jeanpip est en pause', "Week-end, fermeture de l'entreprise ou congés : pas d'ouverture de booster pour le moment. Ton booster t'attend, reviens à la reprise !"],
       network:   ['📡', 'Serveur injoignable', "Impossible de joindre le serveur Jeanpip. Réessaie dans un instant, ou ouvre ton booster directement dans Slack."],
     };
     const [emoji, title, text] = errors[kind] || errors.network;

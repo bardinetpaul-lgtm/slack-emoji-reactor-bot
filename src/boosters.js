@@ -201,7 +201,7 @@ function purchaseBlock(booster, now = Date.now(), userId = null) {
   booster = rulesOf(booster, now);
   if (!isOnSale(booster, now)) return 'closed';
   if (userId && boosterBans.activeBan(userId, booster.type, now)) return 'banned';
-  if (isWeekend(now)) return 'weekend';   // 🏖️ v3.3 : aucun booster le week-end
+  if (weekend.pauseFor(userId, now)) return 'weekend';   // 🏖️ v3.3 : aucun booster le week-end (ni pendant une fermeture ou ses congés : v3.6)
   if (booster.dailyStock && !octobreRose.hasDropped(now)) return 'not_yet';
   if (userId && booster.dailyPerUser && boughtToday(booster, userId, now) >= booster.dailyPerUser) return 'user_limit';
   if (stockLeft(booster, now) === 0) return 'sold_out';

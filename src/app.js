@@ -25,6 +25,10 @@ const boosterSpam = require('./boosterSpam');
 const boosterBans = require('./boosterBans');
 const octobreRose = require('./octobreRose');
 const weekend = require('./weekend');
+const leave = require('./leave');
+const closure = require('./closure');
+const resale = require('./resale');
+const dailyJeanpips = require('./dailyJeanpips');
 const raid = require('./raid');
 
 /**
@@ -32,8 +36,16 @@ const raid = require('./raid');
  * (seule la réponse directe à un clic du joueur part encore). → true = ne rien envoyer.
  */
 function weekendMuted(logger, what) {
-  if (!weekend.isWeekend()) return false;
-  (logger || console).info(`🏖️ Week-end : ${what} non envoyé`);
+  if (!weekend.isPaused()) return false;   // v3.6 : aussi pendant une fermeture de l'entreprise
+  (logger || console).info(`🏖️ Pause (week-end / fermeture) : ${what} non envoyé`);
+  return true;
+}
+
+/** 🌴 v3.6 : idem pour un seul joueur (pause pour tous, ou ses congés). → true = ne rien lui envoyer. */
+function userMuted(userId, logger, what) {
+  const p = weekend.pauseFor(userId);
+  if (!p) return false;
+  (logger || console).info(`${p.icon} Pause (${p.kind}) : ${what} non envoyé`);
   return true;
 }
 const weeklyGift = require('./weeklyGift');
@@ -54,6 +66,8 @@ try {
   console.error('   → vérifier `npm install` (better-sqlite3) et les droits sur data/.');
   process.exit(1);
 }
+// 🎯 v3.6 : au premier démarrage, 20 Jeanpips par jour à 1 JP$ (une seule fois, puis réglages admin)
+if (settings.applyV36Defaults()) console.log('🎯 v3.6 : réglages passés à 20 Jeanpips par jour et 1 JP$ par Jeanpip');
 // ⚔️ Liens de l'Arène (null si la page web est désactivée)
 const ARENA_LINKS = {
   arena: (matchId, userId) => web.buildArenaUrl(matchId, userId),
@@ -187,7 +201,7 @@ function scheduleFarmRelease(client, userId, logger, delayMs = farm.FARM_PENALTY
     farm.clear(userId);
     farmReleaseTimers.delete(userId);
     refreshHomeIfSeen(client, userId, logger); // pénalité terminée → quota à 0
-    if (weekendMuted(logger, `DM de fin de pénalité anti-farm à <@${userId}>`)) return;
+    if (userMuted(userId, logger, `DM de fin de pénalité anti-farm à <@${userId}>`)) return;
     try {
       await safeSendDM(client, userId, {
         text: `✅ Ton accès au Jeanpip est rétabli !`,
@@ -257,6 +271,11 @@ async function sendJeanpipDM(client, userId, { text, headerText, media, collect 
     logger.info(`🚜 <@${userId}> sous pénalité anti-farm → aucune image envoyée`);
     return false;
   }
+  // 🌴 v3.6 : en congés, on ne reçoit aucun Jeanpip
+  if (leave.activeLeave(userId)) {
+    logger.info(`🌴 <@${userId}> en congés → aucune image envoyée`);
+    return false;
+  }
   const nextCount = collect && media && media.url ? collections.getCount(userId, media.url) + 1 : 0;
   const ok = await safeSendDM(client, userId, {
     text,
@@ -302,6 +321,7 @@ function buildHomeFor(userId) {
     targetEmoji: TARGET_EMOJI,
     farmRemainingMs: getFarmPenaltyRemaining(userId),
     farmQuota: getFarmQuota(userId),
+    dailyJeanpips: { used: dailyJeanpips.countToday(userId), max: settings.getDailyJeanpipLimit() },
     formatRemaining,
     autoTargets: isAdmin ? adminActions.listAutoTargets() : undefined,
     collectionUrl: web.buildCollectionUrl(userId),
@@ -369,8 +389,8 @@ app.event('message', async ({ event, client, logger }) => {
     if (!authorId) return;
     // Cibles = env + dynamiques (via /jeanpip-auto)
     if (!targets.isTarget(authorId)) return;
-    // 🏖️ v3.3 : pas d'auto-react le week-end
-    if (weekend.isWeekend()) return;
+    // 🏖️ v3.3 : pas d'auto-react le week-end (v3.6 : ni pendant une fermeture ou ses congés)
+    if (weekend.pauseFor(authorId)) return;
 
     // 📮 Liste de diffusion : on ne cible que les personnes inscrites
     if (!broadcast.isSubscribed(authorId)) {
@@ -414,9 +434,11 @@ app.event('reaction_added', async ({ event, client, logger }) => {
     logger.info(`🎯 Réaction :${TARGET_EMOJI}: détectée par <@${reactingUserId}>`);
 
     // 🏖️ v3.3 : le week-end, une réaction ne fait rien (ni image, ni JP$, ni score)
-    if (weekend.isWeekend()) {
-      logger.info(`🏖️ Week-end : réaction de <@${reactingUserId}> ignorée, prévenu`);
-      await notifyReactor(client, channelId, reactingUserId, weekend.REACTION_TEXT, logger);
+    //    🌴 v3.6 : pareil pendant une fermeture de l'entreprise ou ses propres congés
+    const pause = weekend.pauseFor(reactingUserId);
+    if (pause) {
+      logger.info(`${pause.icon} Pause (${pause.kind}) : réaction de <@${reactingUserId}> ignorée, prévenu`);
+      await notifyReactor(client, channelId, reactingUserId, weekend.reactionText(pause), logger);
       return;
     }
 
@@ -460,9 +482,9 @@ app.event('reaction_added', async ({ event, client, logger }) => {
       return;
     }
 
-    // 📮 Liste de diffusion (OPT-IN) : l'auteur ne reçoit un Jeanpip que s'il
-    //    s'est inscrit via /jeanpip. Sinon le Jeanpip n'atteint personne → il ne
-    //    compte pas (ni crédit, ni score, ni compteur anti-farm).
+    // 📮 Liste de diffusion (OPT-IN) : une réaction ne compte que sur le message
+    //    d'une personne inscrite via /jeanpip (ni crédit, ni score, ni compteur
+    //    anti-farm sinon). v3.6 : l'auteur ne reçoit plus d'image, la règle reste.
     //    🚜 v3.0.2 : un auteur sous pénalité anti-farm ne reçoit rien non plus → même règle.
     //    🔕 v3.0.3 : dans ces deux cas le réacteur ne reçoit RIEN non plus (avant : une
     //    image qui n'entrait pas au classeur) ; il est prévenu, en éphémère dans le canal.
@@ -470,10 +492,26 @@ app.event('reaction_added', async ({ event, client, logger }) => {
     const delivers = broadcast.isSubscribed(originalAuthorId) && !authorPenalized;
     if (!delivers) {
       const why = authorPenalized
-        ? `🚜 <@${originalAuthorId}> est en pénalité anti-farm (encore ${formatRemaining(getFarmPenaltyRemaining(originalAuthorId))}) : cette personne ne peut rien recevoir pour le moment. Ton Jeanpip n'est pas envoyé et tu ne reçois rien.`
-        : `📮 <@${originalAuthorId}> n'est pas dans la liste de diffusion Jeanpip : ton Jeanpip ne lui est pas envoyé et tu ne reçois rien. Cette personne peut s'inscrire avec \`/jeanpip\`.`;
+        ? `🚜 <@${originalAuthorId}> est en pénalité anti-farm (encore ${formatRemaining(getFarmPenaltyRemaining(originalAuthorId))}) : cette personne ne peut rien recevoir pour le moment. Ta réaction ne compte pas : tu ne reçois rien.`
+        : `📮 <@${originalAuthorId}> n'est pas dans la liste de diffusion Jeanpip : ta réaction sur ses messages ne compte pas et tu ne reçois rien. Cette personne peut s'inscrire avec \`/jeanpip\`.`;
       logger.info(`${authorPenalized ? '🚜' : '📮'} <@${originalAuthorId}> ne reçoit pas de Jeanpip (${authorPenalized ? 'pénalité anti-farm' : 'hors liste de diffusion'}) → rien pour <@${reactingUserId}>, prévenu`);
       await notifyReactor(client, channelId, reactingUserId, why, logger);
+      return;
+    }
+
+    // 🌴 v3.6 : réagir au message de quelqu'un en congés ne compte pas (on le laisse tranquille)
+    const authorLeave = leave.activeLeave(originalAuthorId);
+    if (authorLeave) {
+      logger.info(`🌴 <@${originalAuthorId}> en congés → rien pour <@${reactingUserId}>, prévenu`);
+      await notifyReactor(client, channelId, reactingUserId, `🌴 <@${originalAuthorId}> est en congés jusqu'au ${weekend.longDay(authorLeave.end)} inclus : ta réaction ne compte pas et tu ne reçois rien. On le laisse se reposer 😉`, logger);
+      return;
+    }
+
+    // 🎯 v3.6 : limite de Jeanpips par jour atteinte → plus rien jusqu'à demain (ni image, ni JP$, ni point)
+    const dailyLimit = settings.getDailyJeanpipLimit();
+    if (dailyJeanpips.countToday(reactingUserId) >= dailyLimit) {
+      logger.info(`🎯 <@${reactingUserId}> a déjà ses ${dailyLimit} Jeanpips du jour → rien, prévenu`);
+      await notifyReactor(client, channelId, reactingUserId, `🎯 Tu as posé tes *${dailyLimit} Jeanpips du jour* : ta réaction ne compte plus et ne rapporte rien jusqu'à demain. Reviens demain 😉`, logger);
       return;
     }
 
@@ -514,6 +552,7 @@ app.event('reaction_added', async ({ event, client, logger }) => {
     if (!farmBlocked) {
       const result = scores.incrementScore(reactingUserId);
       justUnlocked = result.justUnlocked;
+      dailyJeanpips.recordToday(reactingUserId);   // 🎯 v3.6 : un Jeanpip du jour de plus
       logger.info(`📊 Score de <@${reactingUserId}> : ${result.score}`);
 
       // 📈 Compteur durable pour le classement JeanPip du dashboard (all-time + semaine)
@@ -528,7 +567,7 @@ app.event('reaction_added', async ({ event, client, logger }) => {
       refreshHomeIfSeen(client, reactingUserId, logger);
     }
 
-    // 🎉 Notification : Raid gratuit débloqué (v3.4 : 100 Jeanpips dans la semaine)
+    // 🎉 Notification : Raid gratuit débloqué (v3.6 : 65 Jeanpips dans la semaine)
     if (justUnlocked) {
       await safeSendDM(client, reactingUserId, {
         text: `🎉 Tu as débloqué un Raid gratuit !`,
@@ -559,18 +598,7 @@ app.event('reaction_added', async ({ event, client, logger }) => {
     }, logger);
     if (sentToReactor) logger.info(`📨 DM envoyé au réacteur <@${reactingUserId}>`);
 
-    // 📮 Envoi à l'auteur (inscrit, vérifié plus haut) si le réacteur n'est pas sous pénalité.
-    if (farmBlocked) {
-      logger.info(`🚜 Envoi à l'auteur bloqué (anti-farm) pour <@${reactingUserId}>`);
-    } else if (originalAuthorId && originalAuthorId !== reactingUserId) {
-      const mediaForAuthor = await getRandomMedia();
-      const sentToAuthor = await sendJeanpipDM(client, originalAuthorId, {
-        text: `Bonjour jeune, ${reactorName} t'a envoyé un Jeanpip !`,
-        headerText: `Bonjour jeune <@${originalAuthorId}>, <@${reactingUserId}> t'a envoyé un Jeanpip ! :${TARGET_EMOJI}:`,
-        media: mediaForAuthor,
-      }, logger);
-      if (sentToAuthor) logger.info(`📨 DM envoyé à l'auteur <@${originalAuthorId}>`);
-    }
+    // 🔕 v3.6 : une réaction n'envoie plus d'image à l'auteur du message, seul le réacteur reçoit.
 
     logger.info('✅ Flow terminé avec succès');
   } catch (error) {
@@ -588,7 +616,7 @@ const RAID_TARGET_TEXT = {
   self: 'toi-même',
   bot: 'un bot',
   unsubscribed: 'pas inscrit(e) à la liste de diffusion',
-  penalty: 'en pénalité anti-farm',
+  leave: 'en congés 🌴',
   busy: 'subit déjà un raid',
   limit: `a déjà subi ${raid.MAX_RECEIVED_PER_DAY} raids aujourd'hui`,
 };
@@ -647,8 +675,12 @@ app.view('raid_submit', async ({ ack, body, view, client, logger }) => {
   const targets = [...new Set((values.targets.value.selected_users || []))];
   const style = values.style.value.selected_option && values.style.value.selected_option.value;
 
-  const block = raid.launchBlock();
-  if (block) return ack(fieldError('targets', block === 'weekend' ? '🏖️ Pas de raid le week-end.' : `⏰ Les raids se lancent ${raid.OPEN.text}.`));
+  const block = raid.launchBlock(Date.now(), attacker);
+  if (block === 'weekend') {
+    const p = weekend.pauseFor(attacker);
+    return ack(fieldError('targets', `${p.icon} Pas de raid ${p.short} : ça reprend ${p.back}.`));
+  }
+  if (block) return ack(fieldError('targets', `⏰ Les raids se lancent ${raid.OPEN.text}.`));
   if (getFarmPenaltyRemaining(attacker) > 0) return ack(fieldError('targets', `🚜 Pénalité anti-farm : réessaie dans ${formatRemaining(getFarmPenaltyRemaining(attacker))}.`));
   if (!targets.length) return ack(fieldError('targets', 'Choisis au moins une cible.'));
   if (targets.length > raid.MAX_TARGETS) return ack(fieldError('targets', `${raid.MAX_TARGETS} cibles au maximum.`));
@@ -656,11 +688,11 @@ app.view('raid_submit', async ({ ack, body, view, client, logger }) => {
 
   // Cibles refusées (en parallèle : la modale doit répondre en moins de 3 s)
   const bots = await Promise.all(targets.map((t) => isBot(client, t)));
+  // 🚜 v3.6 : une cible en pénalité anti-farm peut être raidée (décision de Paul le 2026-10-21)
   const problemOf = (t, i) => (t === attacker ? 'self'
     : bots[i] ? 'bot'
       : !broadcast.isSubscribed(t) ? 'unsubscribed'
-        : getFarmPenaltyRemaining(t) > 0 ? 'penalty'
-          : raid.targetProblem(attacker, t));
+        : raid.targetProblem(attacker, t));
   let refused = targets.map((t, i) => [t, problemOf(t, i)]).filter(([, p]) => p);
   if (refused.length) {
     const names = await Promise.all(refused.map(([t, p]) => userName(client, t).then((n) => `${n} (${RAID_TARGET_TEXT[p]})`)));
@@ -796,11 +828,11 @@ async function rejectNonAdmin(client, userId, logger, commandName) {
 }
 
 // 🏖️ v3.3 : un cadeau admin notifie le joueur → pas le week-end
-const WEEKEND_GIFT_TEXT = '🏖️ C\'est le week-end : pas de cadeau (il notifierait la personne). Réessaie lundi.';
+const WEEKEND_GIFT_TEXT = '🏖️ Jeanpip est en pause (week-end ou fermeture de l\'entreprise) : pas de cadeau (il notifierait la personne). Réessaie à la reprise.';
 
 /** Slash command admin de cadeau tentée le week-end → DM à l'admin, true = arrêter. */
 async function weekendGiftRefused(client, adminId, logger) {
-  if (!weekend.isWeekend()) return false;
+  if (!weekend.isPaused()) return false;
   await sendAdminResult(client, adminId, { text: WEEKEND_GIFT_TEXT }, logger);
   return true;
 }
@@ -1234,7 +1266,10 @@ app.action(/^buy_booster_/, async ({ ack, body, action, client, logger }) => {
       const why = ban
         ? `🚫 *Tu ne peux pas acheter de Booster ${booster.emoji} ${booster.label} jusqu'au ${home.banEndText(ban.until)}* (sanction d'un admin${ban.reason ? ` : ${ban.reason}` : ''}).`
         : blocked === 'weekend'
-        ? `🏖️ *Pas de Booster ${booster.emoji} ${booster.label} le week-end !* Jeanpip est en pause jusqu'à lundi 0h.${booster.dailyStock ? ` ${boosters.restockText()}` : ''}`
+        ? (() => {
+          const p = weekend.pauseFor(userId);
+          return `${p.icon} *Pas de Booster ${booster.emoji} ${booster.label} ${p.short} !* Jeanpip est en pause ${p.until}.${booster.dailyStock && p.kind === 'weekend' ? ` ${boosters.restockText()}` : ''}`;
+        })()
         : blocked === 'user_limit'
         ? `🎀 *Tu as déjà eu ton Booster ${booster.emoji} ${booster.label} aujourd'hui !* C'est ${booster.dailyPerUser} par personne et par jour, pour en laisser aux autres. Reviens ${boosters.restockText().includes('lundi') ? 'lundi' : 'demain'} 😉`
         : blocked === 'not_yet'
@@ -1324,7 +1359,8 @@ app.action('open_booster', async ({ ack, body, action, client, logger }) => {
 
     // 🏖️ v3.3 : pas d'ouverture le week-end, le booster attend lundi
     if (result.status === 'weekend') {
-      const text = `${weekend.PAUSE_TEXT}\nPas d'ouverture de booster le week-end : le tien t'attend, ouvre-le lundi avec ce même bouton 😉`;
+      const p = weekend.pauseFor(userId);
+      const text = `${p.title}\nPas d'ouverture de booster ${p.short} : le tien t'attend, ouvre-le ${p.back} avec ce même bouton 😉`;
       await sendDM(client, userId, { text: plain(text), blocks: [{ type: 'section', text: { type: 'mrkdwn', text } }] });
       logger.info(`🏖️ Ouverture refusée (week-end) : <@${userId}> booster ${id}`);
       return;
@@ -1606,7 +1642,7 @@ app.view('weekly_gift_submit', async ({ ack, body, view, client, logger }) => {
   await ack();
   logger.info(`🎁 <@${userId}> a offert ${amount} JP$ du vendredi à <@${targetId}> (reste ${result.remaining})`);
   try {
-    if (!weekendMuted(logger, `DM de don à <@${targetId}>`)) await safeSendDM(client, targetId, {
+    if (!userMuted(targetId, logger, `DM de don à <@${targetId}>`)) await safeSendDM(client, targetId, {
       text: `🎁 <@${userId}> t'a offert ${amount} JP$ !`,
       blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `🎁 *<@${userId}> t'a offert ${amount} JP$ !* 💰\n\nNouveau solde : *${formatCredits(result.recipientBalance)}* JP$\n\nDépense-les avec \`/jeanpip-booster\` ou depuis l'onglet *Accueil* du bot ! 🎁` } }],
     }, logger);
@@ -1626,7 +1662,7 @@ async function runWeeklyGift(client, logger) {
   const text = `🎁 JeanPip vous donne ${weeklyGift.WEEKLY_AMOUNT} JP$ que vous ne pouvez pas garder pour vous, depuis votre dashboard accordez-les aux personnes de votre choix. Bonne fin de semaine !`;
   // 🏖️ v3.3 : rattrapé au redémarrage un week-end → JP$ versés, mais pas de DM (visibles dans l'Accueil)
   const muted = weekendMuted(logger, `DM du vendredi (${granted.length} inscrit(s))`);
-  for (const userId of muted ? [] : granted) {
+  for (const userId of muted ? [] : granted.filter((u) => !userMuted(u, logger, `DM du vendredi à <@${u}>`))) {
     try {
       await safeSendDM(client, userId, {
         text,
@@ -1677,6 +1713,9 @@ const ADMIN_MODALS = {
   admin_credit_value_open: home.buildCreditValueModal,
   admin_farm_limit_open: home.buildFarmLimitModal,
   admin_tickets_open: home.buildTicketsModal,
+  admin_closure_open: home.buildClosureModal,
+  admin_resale_cap_open: home.buildResaleCapModal,
+  admin_daily_limit_open: home.buildDailyLimitModal,
 };
 
 for (const [actionId, buildModal] of Object.entries(ADMIN_MODALS)) {
@@ -1691,7 +1730,7 @@ for (const [actionId, buildModal] of Object.entries(ADMIN_MODALS)) {
 app.view('admin_give_attack_submit', async ({ ack, body, view, client, logger }) => {
   const adminId = body.user.id;
   if (!isAdminUser(adminId, logger, 'admin_give_attack_submit')) return ack(fieldError('user', 'Réservé aux admins.'));
-  if (weekend.isWeekend()) return ack(fieldError('user', WEEKEND_GIFT_TEXT));
+  if (weekend.isPaused()) return ack(fieldError('user', WEEKEND_GIFT_TEXT));
 
   const targetId = view.state.values.user.value.selected_user;
   if (scores.hasAttack(targetId)) return ack(fieldError('user', 'Cette personne a déjà un Raid gratuit disponible.'));
@@ -1719,7 +1758,7 @@ app.view('admin_credits_submit', async ({ ack, body, view, client, logger }) => 
     return ack(fieldError('amount', 'Montant non nul attendu (ex. 50, 2,5 ou -20).'));
   }
   // 🏖️ v3.3 : un cadeau (montant positif) notifie la personne → pas le week-end ; une correction reste possible
-  if (amount > 0 && weekend.isWeekend()) return ack(fieldError('amount', WEEKEND_GIFT_TEXT));
+  if (amount > 0 && weekend.isPaused()) return ack(fieldError('amount', WEEKEND_GIFT_TEXT));
 
   await ack();
   try {
@@ -1795,7 +1834,7 @@ app.view('admin_card_type_submit', async ({ ack, body, view, client, logger }) =
 app.view('admin_give_card_submit', async ({ ack, body, view, client, logger }) => {
   const adminId = body.user.id;
   if (!isAdminUser(adminId, logger, 'admin_give_card_submit')) return ack(fieldError('card', 'Réservé aux admins.'));
-  if (weekend.isWeekend()) return ack(fieldError('user', WEEKEND_GIFT_TEXT));
+  if (weekend.isPaused()) return ack(fieldError('user', WEEKEND_GIFT_TEXT));
 
   const values = view.state.values;
   const targetId = values.user.value.selected_user;
@@ -1826,7 +1865,7 @@ app.view('admin_give_card_submit', async ({ ack, body, view, client, logger }) =
 app.view('admin_give_booster_submit', async ({ ack, body, view, client, logger }) => {
   const adminId = body.user.id;
   if (!isAdminUser(adminId, logger, 'admin_give_booster_submit')) return ack(fieldError('user', 'Réservé aux admins.'));
-  if (weekend.isWeekend()) return ack(fieldError('user', WEEKEND_GIFT_TEXT));
+  if (weekend.isPaused()) return ack(fieldError('user', WEEKEND_GIFT_TEXT));
 
   const values = view.state.values;
   const targetId = values.user.value.selected_user;
@@ -1865,7 +1904,7 @@ app.view('admin_booster_ban_submit', async ({ ack, body, view, client, logger })
   const days = Number(values.days.value.value);
   const reason = ((values.reason && values.reason.value.value) || '').trim();
   // 🏖️ v3.3 : pas de DM au joueur le week-end
-  const notify = !weekend.isWeekend() && ((values.notify && values.notify.value.selected_options) || []).some((o) => o.value === 'dm');
+  const notify = !weekend.isPaused() && ((values.notify && values.notify.value.selected_options) || []).some((o) => o.value === 'dm');
   const booster = boosters.getBooster(type);
   if (!targetId) return ack(fieldError('user', 'Choisis une personne.'));
   if (!booster) return ack(fieldError('booster', 'Choisis un booster.'));
@@ -2103,7 +2142,7 @@ app.command('/jeanpip-help', async ({ command, ack, client, logger }) => {
           type: 'section',
           text: {
             type: 'mrkdwn',
-            text: `🚨 *Anti-spam*\nSi tu réagis plusieurs fois avec :${TARGET_EMOJI}: sur le *même message* en moins de *8 secondes* :\n• La victime ne reçoit rien ✅\n• Toi tu reçois *10 images troll* en rafale toutes les 5 secondes 💀\n\n_Spammer c'est mal._`,
+            text: `🚨 *Anti-spam*\nSi tu réagis plusieurs fois avec :${TARGET_EMOJI}: sur le *même message* en moins de *8 secondes* :\n• La victime ne reçoit rien ✅\n• Toi tu reçois *10 images troll* en rafale toutes les 5 secondes 💀\n\n_Spammer c'est mal._\n\n🌴 *Congés* : déclare tes dates depuis l'onglet *Accueil* (« Déclarer mes congés ») et Jeanpip te laisse tranquille jusqu'à ton retour.`,
           },
         },
         { type: 'divider' },
@@ -2161,6 +2200,180 @@ function createCardLook(client, media, logger) {
 }
 
 // ─────────────────────────────────────────────
+// ♻️ REVENTE DE DOUBLONS (v3.6) — src/resale.js
+//    Bouton de l'Accueil → modale (quantité par rareté) → cartes retirées + JP$.
+// ─────────────────────────────────────────────
+app.action('resale_open', async ({ ack, body, client, logger }) => {
+  await ack();
+  await openModal(client, body, home.buildResaleModal(body.user.id), logger);
+});
+
+app.view('resale_submit', async ({ ack, body, view, client, logger }) => {
+  const userId = body.user.id;
+  const values = view.state.values;
+  const firstField = Object.keys(values)[0] || 'sell_common';
+  const pause = weekend.pauseFor(userId);
+  if (pause) return ack(fieldError(firstField, `${pause.icon} Pas de revente ${pause.short}.`));
+  if (raid.raidsAgainst(userId).length) return ack(fieldError(firstField, '🚨 Tu subis un raid : pas de revente avant sa fin.'));
+
+  const wanted = {};
+  for (const r of resale.RARITY_ORDER) {
+    const raw = values[`sell_${r}`] && values[`sell_${r}`].value && values[`sell_${r}`].value.value;
+    if (raw) wanted[r] = parseInt(raw, 10);
+  }
+  const res = resale.sell(userId, wanted);
+  if (!res.ok) {
+    if (res.error === 'empty') return ack(fieldError(firstField, 'Indique combien de cartes revendre.'));
+    if (res.error === 'too_many') return ack(fieldError(`sell_${res.rarity}`, `Tu n'en as que ${res.available} en double.`));
+    return ack(fieldError(firstField, `Ça dépasse ton plafond : tu peux encore toucher ${formatCredits(res.remaining)} JP$ cette semaine.`));
+  }
+  await ack();
+  events.record('cards_sold', userId, { sold: res.sold, gained: res.gained });
+  const detail = Object.entries(res.sold).map(([r, n]) => `${n} ${resale.LABELS[r].split(' ')[0]}`).join(' · ');
+  logger.info(`♻️ <@${userId}> revend ${detail} → +${res.gained} JP$`);
+  const text = `♻️ *Revente faite : +${formatCredits(res.gained)} JP$* (${detail}).\nNouveau solde : *${formatCredits(res.balance)} JP$* · encore ${formatCredits(res.remaining)} JP$ de revente possible cette semaine.`;
+  await safeSendDM(client, userId, { text: plain(text), blocks: [{ type: 'section', text: { type: 'mrkdwn', text } }] }, logger)
+    .catch((e) => logger.error('❌ DM de revente :', e.message));
+  await refreshHome(client, userId, logger);
+});
+
+// 🎯 v3.6 : Jeanpips par jour (admin)
+app.view('admin_daily_limit_submit', async ({ ack, body, view, client, logger }) => {
+  const adminId = body.user.id;
+  if (!isAdminUser(adminId, logger, 'admin_daily_limit_submit')) return ack(fieldError('value', 'Réservé aux admins.'));
+  const raw = (view.state.values.value.value.value || '').trim();
+  const result = settings.setDailyJeanpipLimit(/^\d+$/.test(raw) ? parseInt(raw, 10) : NaN);
+  if (!result.ok) {
+    return ack(fieldError('value', result.error === 'invalide'
+      ? `Nombre entier entre ${settings.DAILY_JEANPIP_LIMIT_MIN} et ${settings.DAILY_JEANPIP_LIMIT_MAX} attendu.`
+      : `Erreur d'écriture : ${result.detail}`));
+  }
+  await ack();
+  logger.info(`🎯 <@${adminId}> a réglé la limite à ${result.value} Jeanpips/jour (avant : ${result.previous})`);
+  await sendAdminResult(client, adminId, {
+    text: `🎯 *Limite enregistrée : ${result.value} Jeanpips par personne et par jour.*\nAvant : ${result.previous}. Effet immédiat.`,
+  }, logger);
+  await refreshAllHomes(client, logger, adminId);
+});
+
+app.view('admin_resale_cap_submit', async ({ ack, body, view, client, logger }) => {
+  const adminId = body.user.id;
+  if (!isAdminUser(adminId, logger, 'admin_resale_cap_submit')) return ack(fieldError('value', 'Réservé aux admins.'));
+  const raw = (view.state.values.value.value.value || '').trim();
+  const result = settings.setResaleWeeklyCap(/^\d+$/.test(raw) ? parseInt(raw, 10) : NaN);
+  if (!result.ok) {
+    return ack(fieldError('value', result.error === 'invalide'
+      ? `Nombre entier entre ${settings.RESALE_WEEKLY_CAP_MIN} et ${settings.RESALE_WEEKLY_CAP_MAX} attendu.`
+      : `Erreur d'écriture : ${result.detail}`));
+  }
+  await ack();
+  logger.info(`♻️ <@${adminId}> a réglé le plafond de revente à ${result.value} JP$/semaine (avant : ${result.previous})`);
+  await sendAdminResult(client, adminId, {
+    text: `♻️ *Plafond de revente enregistré : ${result.value} JP$ par personne et par semaine.*\nAvant : ${result.previous}. Effet immédiat.`,
+  }, logger);
+  await refreshAllHomes(client, logger, adminId);
+});
+
+// ─────────────────────────────────────────────
+// 🌴 CONGÉS (v3.6) — src/leave.js
+//    Bouton de l'Accueil → modale du … au … → pause pour ce joueur seul.
+// ─────────────────────────────────────────────
+const PERIOD_ERRORS = {
+  format: ['start', 'Choisis les deux dates.'],
+  past: ['end', 'Ces dates sont déjà passées.'],
+  order: ['end', 'Le dernier jour doit être après le premier.'],
+  too_long: ['end', `${leave.MAX_DAYS} jours au maximum.`],
+  overlap: ['start', 'Une fermeture est déjà prévue sur ces dates.'],
+};
+const periodError = (code) => fieldError(...(PERIOD_ERRORS[code] || ['start', 'Dates invalides.']));
+const dateValue = (values, id) => values[id] && values[id].value && values[id].value.selected_date;
+
+app.action('leave_open', async ({ ack, body, client, logger }) => {
+  await ack();
+  await openModal(client, body, home.buildLeaveModal(body.user.id), logger);
+});
+
+app.view('leave_submit', async ({ ack, body, view, client, logger }) => {
+  const userId = body.user.id;
+  const res = leave.declareLeave(userId, dateValue(view.state.values, 'start'), dateValue(view.state.values, 'end'));
+  if (!res.ok) return ack(periodError(res.error));
+  await ack();
+  // Déjà en congés : on sort de la file de combat rapide (les combats commencés vont au bout)
+  if (leave.activeLeave(userId)) require('./game/matchmaking').leaveQueue(userId);
+  logger.info(`🌴 <@${userId}> en congés du ${res.leave.start} au ${res.leave.end}`);
+  await refreshHome(client, userId, logger);
+});
+
+app.action('leave_end', async ({ ack, body, action, client, logger }) => {
+  await ack();
+  const userId = body.user.id;
+  if (leave.endLeave(userId)) logger.info(`🌴 <@${userId}> : congés ${action.value === 'back' ? 'terminés (de retour)' : 'annulés'}`);
+  await refreshHome(client, userId, logger);
+});
+
+// ─────────────────────────────────────────────
+// 🏢 FERMETURE DE L'ENTREPRISE (v3.6, admin) — src/closure.js
+//    Pause pour tout le monde ; DM à tous le 1er jour à 9h et à la reprise.
+// ─────────────────────────────────────────────
+app.view('closure_submit', async ({ ack, body, view, client, logger }) => {
+  const adminId = body.user.id;
+  if (!isAdminUser(adminId, logger, 'closure_submit')) return ack(fieldError('start', 'Réservé aux admins.'));
+  const values = view.state.values;
+  const res = closure.addClosure({
+    start: dateValue(values, 'start'),
+    end: dateValue(values, 'end'),
+    reason: values.reason && values.reason.value && values.reason.value.value,
+    by: adminId,
+  });
+  if (!res.ok) return ack(periodError(res.error));
+  await ack();
+  const c = res.closure;
+  logger.info(`🏢 <@${adminId}> déclare une fermeture du ${c.start} au ${c.end}${c.reason ? ` (${c.reason})` : ''}`);
+  await sendAdminResult(client, adminId, {
+    text: `🏢 *Fermeture enregistrée* du ${weekend.longDay(c.start)} au ${weekend.longDay(c.end)} inclus${c.reason ? ` (${c.reason})` : ''}.\nTout le monde sera prévenu en DM le premier jour à 9h, puis à la reprise.`,
+  }, logger);
+  await announceClosures(client, logger);   // fermeture qui commence aujourd'hui (après 9h) : annonce tout de suite
+  await refreshAllHomes(client, logger, adminId);
+});
+
+app.action('admin_closure_cancel', async ({ ack, body, action, client, logger }) => {
+  await ack();
+  const adminId = body.user.id;
+  if (!isAdminUser(adminId, logger, 'admin_closure_cancel')) return;
+  const c = closure.cancelClosure(action.value);
+  if (!c) return refreshHome(client, adminId, logger);
+  logger.info(`🏢 <@${adminId}> annule la fermeture du ${c.start} au ${c.end}`);
+  // Fermeture déjà annoncée → on prévient que Jeanpip rouvre (sauf si c'est le week-end)
+  if (c.startAnnounced && !weekend.isPaused()) await broadcastClosure(client, 'end', c, logger);
+  await refreshAllHomes(client, logger, adminId);
+});
+
+/** DM de début ou de reprise d'une fermeture, à tous les inscrits. */
+async function broadcastClosure(client, kind, c, logger) {
+  const text = kind === 'start'
+    ? `🏢 *L'entreprise est fermée${c.reason ? ` (${c.reason})` : ''} : Jeanpip est en pause pour tout le monde jusqu'au ${weekend.longDay(c.end)} inclus.*\nPas de Jeanpip, de raid, de booster, de ticket ni de combat. Ton classeur et ton deck restent ouverts. Bonnes vacances ! 🌴`
+    : `🎉 *Jeanpip est de retour !* La fermeture${c.reason ? ` (${c.reason})` : ''} est terminée : réactions, raids, boosters, tickets et Arène sont rouverts.`;
+  const users = broadcast.getSubscribers();
+  logger.info(`🏢 Annonce de ${kind === 'start' ? 'fermeture' : 'reprise'} à ${users.length} inscrit(s)`);
+  for (const userId of users) {
+    if (kind === 'end' && leave.activeLeave(userId)) continue;   // 🌴 encore en congés : on ne le dérange pas
+    try {
+      await safeSendDM(client, userId, { text: plain(text), blocks: [{ type: 'section', text: { type: 'mrkdwn', text } }] }, logger);
+    } catch (error) {
+      logger.error(`❌ Annonce de fermeture à <@${userId}> :`, error.message);
+    }
+  }
+}
+
+/** Annonces de fermeture dues (vérifié toutes les 5 min, et au démarrage). */
+async function announceClosures(client, logger) {
+  const now = Date.now();
+  const due = closure.takeDueAnnouncements(now, weekend.isPaused, octobreRose.parisMinutes(now));
+  for (const { kind, closure: c } of due) await broadcastClosure(client, kind, c, logger);
+  if (due.length) await refreshAllHomes(client, logger);
+}
+
+// ─────────────────────────────────────────────
 // ▶️  Démarrage
 // ─────────────────────────────────────────────
 (async () => {
@@ -2179,6 +2392,12 @@ function createCardLook(client, media, logger) {
     .catch((error) => console.error('❌ JP$ du vendredi :', error.message));
   weeklyGiftTick();
   setInterval(weeklyGiftTick, 5 * 60 * 1000);
+
+  // 🏢 v3.6 : annonces de fermeture de l'entreprise (1er jour 9h, reprise)
+  const closureTick = () => announceClosures(app.client, console)
+    .catch((error) => console.error('❌ Annonces de fermeture :', error.message));
+  closureTick();
+  setInterval(closureTick, 5 * 60 * 1000);
 
   // ⚔️ v3.4 : raids arrivés au bout de leurs 20 min (et ceux finis pendant une coupure)
   const raidTick = () => finishDueRaids(app.client, console)

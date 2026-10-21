@@ -24,6 +24,10 @@ const banDayFmt = new Intl.DateTimeFormat('fr-FR', { timeZone: 'Europe/Paris', w
 const banEndText = (ms) => `${banDayFmt.format(new Date(ms))} à ${spamLockTime(ms)}`;
 const boosterBans = require('./boosterBans');
 const weekend = require('./weekend');
+const leave = require('./leave');
+const closure = require('./closure');
+const resale = require('./resale');
+const { parisDay } = require('./octobreRose');
 const raid = require('./raid');
 const broadcast = require('./broadcast');
 const { RARITIES, getAllMedia, listCustomMedia, mediaNumber } = require('./media');
@@ -76,12 +80,15 @@ function buildHomeView(userId, ctx) {
   const pending = boosters.countPending(userId);
   const subscribed = broadcast.isSubscribed(userId);
   const now = Date.now();
-  const isWeekend = weekend.isWeekend(now);   // 🏖️ v3.3 : jeu en pause du samedi 0h au lundi 0h
+  // 🏖️ v3.3 : jeu en pause du samedi 0h au lundi 0h
+  // 🌴 v3.6 : … et pendant une fermeture de l'entreprise ou les congés du joueur
+  const pause = weekend.pauseFor(userId, now);
+  const isWeekend = Boolean(pause);
 
   const blocks = [
     { type: 'header', text: { type: 'plain_text', text: '🤖 Jeanpip', emoji: true } },
-    section(`💰 *Ton solde : ${formatCredits(balance)} JP$*\n_+${ctx.creditsPerJeanpipLabel} JP$ à chaque réaction :${ctx.targetEmoji}: que tu poses (Jeanpip délivré, hors spam/farm)._`),
-    ...(isWeekend ? [section(`${weekend.PAUSE_TEXT}\nPas de Jeanpip, de raid, de booster, de ticket ni de nouveau combat : on laisse les collègues tranquilles. Ton classeur et ton deck restent ouverts.`)] : []),
+    section(`💰 *Ton solde : ${formatCredits(balance)} JP$*\n_+${ctx.creditsPerJeanpipLabel} JP$ à chaque réaction :${ctx.targetEmoji}: que tu poses (Jeanpip délivré, hors spam/farm), ${settings.getDailyJeanpipLimit()} par jour au maximum._`),
+    ...(pause ? [section(`${pause.title}\nPas de Jeanpip, de raid, de booster, de ticket ni de nouveau combat : on ${pause.kind === 'leave' ? 'te laisse tranquille' : 'laisse les collègues tranquilles'}. Ton classeur et ton deck restent ouverts.`)] : []),
     { type: 'divider' },
   ];
 
@@ -96,7 +103,7 @@ function buildHomeView(userId, ctx) {
   }
 
   // 📊 Semaine + ⚔️ Raid (v3.4) : défenses à jouer, raid en cours, ou lancer un raid
-  blocks.push(...buildRaidBlocks(userId, { ...ctx, balance, score, isWeekend, now }));
+  blocks.push(...buildRaidBlocks(userId, { ...ctx, balance, score, pause, now }));
   blocks.push(buildFarmQuotaBlock(ctx));
   blocks.push({ type: 'divider' });
 
@@ -120,8 +127,8 @@ function buildHomeView(userId, ctx) {
 ${seasonal.emoji} *Booster ${seasonal.label}* : 1 ou 2 cartes exclusives qu'on ne trouve nulle part ailleurs, et 30 % de chances d'une légendaire. Seulement *${seasonal.dailyStock} par jour pour tout le monde*${seasonal.weekdaysOnly ? ', *du lundi au vendredi*' : ''}${seasonal.dailyPerUser ? `, *${seasonal.dailyPerUser} par personne*` : ''} !${seasonalStatus ? `
 ${seasonalStatus}` : ''}${spamLock ? `
 🚫 *Bloqué jusqu'à ${spamLockTime(spamLock)}* : tu as cliqué en rafale sur ce booster. Un seul clic suffit 😉` : ''}`
-    : ''}${isWeekend ? `
-🏖️ *Pas de booster le week-end*, ni achat ni ouverture : retour lundi 0h.` : ''}`));
+    : ''}${pause ? `
+${pause.icon} *Pas de booster ${pause.short}*, ni achat ni ouverture : retour ${pause.back}.` : ''}`));
   if (!isWeekend) blocks.push({
     type: 'actions',
     block_id: 'home_boosters',
@@ -137,7 +144,7 @@ ${seasonalStatus}` : ''}${spamLock ? `
       type: 'mrkdwn',
       text: pending > 0
         ? (isWeekend
-          ? `🎁 *${pending} booster(s) non ouvert(s)* : ils t'attendent, ouvre-les lundi depuis l'onglet *Messages*.`
+          ? `🎁 *${pending} booster(s) non ouvert(s)* : ils t'attendent, ouvre-les ${pause.back} depuis l'onglet *Messages*.`
           : `🎁 *${pending} booster(s) non ouvert(s)* → va dans l'onglet *Messages* et clique sur « Ouvrir le booster ».`)
         : `L'achat est débité tout de suite ; tu ouvres ton booster depuis l'onglet *Messages*.`,
     }],
@@ -146,6 +153,9 @@ ${seasonalStatus}` : ''}${spamLock ? `
 
   // 🎟️ Tickets à gratter « ESSAI ! » (page web)
   if (ctx.ticketsUrl) blocks.push(...buildTicketsBlocks(userId, ctx.ticketsUrl), { type: 'divider' });
+
+  // ♻️ v3.6 : revente des doublons
+  blocks.push(buildResaleBlock(userId, pause, now), { type: 'divider' });
 
   // 📒 Classeur Panini (page web, bureaux uniquement)
   if (ctx.collectionUrl) {
@@ -183,6 +193,10 @@ ${seasonalStatus}` : ''}${spamLock ? `
       ? button('🚪 Sortir de la liste', 'broadcast_leave', { value: 'leave' })
       : button('✅ Rejoindre la liste', 'broadcast_join', { value: 'join', style: 'primary' }),
   ));
+  blocks.push({ type: 'divider' });
+
+  // 🌴 v3.6 : Mes congés
+  blocks.push(buildLeaveBlock(userId, now));
   blocks.push({ type: 'divider' });
 
   // 📰 Nouveautés : release note du jeu (avant le panneau admin, pour rester visible)
@@ -228,7 +242,146 @@ _Le prochain Jeanpip avant ${ctx.formatRemaining(nextFreeMs)} déclenche 1 h de 
 _Ton plus ancien Jeanpip sort du compteur dans ${ctx.formatRemaining(nextFreeMs)}._`;
     }
   }
+  // 🎯 v3.6 : Jeanpips du jour
+  if (ctx.dailyJeanpips) {
+    const { used, max } = ctx.dailyJeanpips;
+    text = `🎯 *Aujourd'hui :* ${Math.min(used, max)}/${max} Jeanpips${used >= max ? ' — ✅ *c\'est tout pour aujourd\'hui*, reviens demain' : ''}\n${text}`;
+  }
   return { type: 'context', elements: [{ type: 'mrkdwn', text }] };
+}
+
+/** « ⚪ 0,5 · 🔵 2 · 🟣 5 · 🎀 10 · 🟡 20 JP$ » */
+const resalePriceLine = () => `${resale.RARITY_ORDER.map((r) => `${resale.LABELS[r].split(' ')[0]} ${formatCredits(resale.PRICES[r])}`).join(' · ')} JP$`;
+
+/** ♻️ v3.6 : bloc « Revendre mes doublons » de l'Accueil. */
+function buildResaleBlock(userId, pause, now = Date.now()) {
+  const cap = settings.getResaleWeeklyCap();
+  const earned = resale.earnedThisWeek(userId, now);
+  const head = `♻️ *Revendre mes doublons* — ${resalePriceLine()} l'exemplaire. Tu gardes toujours un exemplaire de chaque carte, et ceux de tes decks.`;
+  const week = `_Cette semaine : ${formatCredits(earned)}/${cap} JP$ de revente (remis à zéro le lundi)._`;
+  if (pause) return section(`${head}\n${pause.icon} Pas de revente ${pause.short} : retour ${pause.back}.`);
+  if (cap === 0) return section(`${head}\n_La revente est fermée pour le moment._`);
+  if (earned >= cap) return section(`${head}\n✅ *Plafond de la semaine atteint* (${cap} JP$) : reviens lundi 😉`);
+  return section(`${head}\n${week}`, button('♻️ Revendre', 'resale_open'));
+}
+
+/** ♻️ Modale « Revendre mes doublons » (ou une modale d'info si on ne peut pas). */
+function buildResaleModal(userId, now = Date.now()) {
+  const info = (text) => ({ type: 'modal', title: { type: 'plain_text', text: 'Revente' }, close: { type: 'plain_text', text: 'Fermer' }, blocks: [section(text)] });
+  const pause = weekend.pauseFor(userId, now);
+  if (pause) return info(`${pause.icon} *Pas de revente ${pause.short}.* Ça reprend ${pause.back}.`);
+  if (raid.raidsAgainst(userId).length) return info('🚨 *Tu subis un raid* : pas de revente avant sa fin. Défends-toi d\'abord !');
+  const remaining = resale.remainingThisWeek(userId, now);
+  if (remaining <= 0) return info(`✅ *Plafond de la semaine atteint* (${settings.getResaleWeeklyCap()} JP$). Reviens lundi 😉`);
+  const counts = resale.sellableCounts(userId);
+  const offered = resale.RARITY_ORDER.filter((r) => counts[r] > 0);
+  if (!offered.length) return info('🃏 *Aucun doublon à revendre* : tu gardes toujours un exemplaire de chaque carte, et ceux de tes decks.');
+  return modal('resale_submit', 'Revente', '♻️ Revendre', [
+    section(`Tu peux encore toucher *${formatCredits(remaining)} JP$* cette semaine.\nOn revend d'abord les cartes dont tu as le plus d'exemplaires. Tu gardes toujours un exemplaire de chaque carte, et ceux de tes decks d'Arène. _Les cartes troll de l'anti-spam ne se revendent pas._`),
+    ...offered.map((r) => ({
+      type: 'input',
+      block_id: `sell_${r}`,
+      optional: true,
+      label: { type: 'plain_text', text: `${resale.LABELS[r]} (${formatCredits(resale.PRICES[r])} JP$ l'unité)` },
+      element: {
+        type: 'number_input', action_id: 'value', is_decimal_allowed: false, min_value: '0',
+        max_value: String(counts[r]), placeholder: { type: 'plain_text', text: '0' },
+      },
+      hint: { type: 'plain_text', text: `${counts[r]} en double · au plus ${Math.min(counts[r], Math.floor(remaining / resale.PRICES[r]))} avec ton plafond` },
+    })),
+  ]);
+}
+
+/** 🎯 Modale admin « Jeanpips par jour ». */
+function buildDailyLimitModal() {
+  return modal('admin_daily_limit_submit', 'Jeanpips par jour', 'Enregistrer', [
+    {
+      type: 'input',
+      block_id: 'value',
+      label: { type: 'plain_text', text: 'Jeanpips qui comptent par personne et par jour' },
+      element: {
+        type: 'number_input', action_id: 'value', is_decimal_allowed: false,
+        min_value: String(settings.DAILY_JEANPIP_LIMIT_MIN), max_value: String(settings.DAILY_JEANPIP_LIMIT_MAX),
+        initial_value: String(settings.getDailyJeanpipLimit()),
+      },
+      hint: { type: 'plain_text', text: `Entier de ${settings.DAILY_JEANPIP_LIMIT_MIN} à ${settings.DAILY_JEANPIP_LIMIT_MAX}. Au-delà, une réaction ne donne plus rien jusqu'au lendemain. Effet immédiat.` },
+    },
+  ]);
+}
+
+/** ⚙️ Modale admin « Plafond de revente ». */
+function buildResaleCapModal() {
+  return modal('admin_resale_cap_submit', 'Plafond de revente', 'Enregistrer', [
+    section(`*Le réglage de la croissance de la monnaie.* Objectif : +1 à +2 % de JP$ en circulation par mois (page 📊 Stats). Au-dessus, baisse de 5 ; sous 0, monte de 5.\nPrix : ${resalePriceLine()}.`),
+    {
+      type: 'input',
+      block_id: 'value',
+      label: { type: 'plain_text', text: 'JP$ de revente max par personne et par semaine' },
+      element: {
+        type: 'number_input', action_id: 'value', is_decimal_allowed: false,
+        min_value: String(settings.RESALE_WEEKLY_CAP_MIN), max_value: String(settings.RESALE_WEEKLY_CAP_MAX),
+        initial_value: String(settings.getResaleWeeklyCap()),
+      },
+      hint: { type: 'plain_text', text: `Entier de ${settings.RESALE_WEEKLY_CAP_MIN} (revente fermée) à ${settings.RESALE_WEEKLY_CAP_MAX}. Effet immédiat.` },
+    },
+  ]);
+}
+
+/** 🌴 v3.6 : bloc « Mes congés » de l'Accueil (déclarer, ou revenir / annuler). */
+function buildLeaveBlock(userId, now = Date.now()) {
+  const l = leave.getLeave(userId, now);
+  if (!l) {
+    return section(
+      '🌴 *Mes congés* — tu pars ? Déclare tes dates : pendant tes congés, personne ne peut te raider ni te défier, tu ne reçois aucun Jeanpip ni notification. _Ta série et tes compteurs continuent de tourner._',
+      button('🌴 Déclarer mes congés', 'leave_open'),
+    );
+  }
+  const live = l.start <= parisDay(now);
+  return section(
+    live
+      ? `🌴 *En congés jusqu'au ${weekend.longDay(l.end)} inclus.* Bon repos ! Jeanpip reprend tout seul à ton retour.`
+      : `🌴 *Congés prévus* du ${weekend.longDay(l.start)} au ${weekend.longDay(l.end)} inclus.`,
+    live
+      ? button('👋 Je suis rentré(e)', 'leave_end', { value: 'back', style: 'primary' })
+      : button('✖️ Annuler mes congés', 'leave_end', { value: 'cancel' }),
+  );
+}
+
+/** Champ date d'une modale (block_id = `id`, action_id = 'value'). */
+function dateInput(id, label, initial) {
+  return {
+    type: 'input',
+    block_id: id,
+    label: { type: 'plain_text', text: label },
+    element: { type: 'datepicker', action_id: 'value', ...(initial ? { initial_date: initial } : {}) },
+  };
+}
+
+/** 🌴 Modale « Déclarer mes congés ». */
+function buildLeaveModal(userId, now = Date.now()) {
+  const today = parisDay(now);
+  return modal('leave_submit', 'Mes congés', '🌴 Valider', [
+    section(`Du premier au dernier jour de tes congés, inclus (${leave.MAX_DAYS} jours max). Tu pourras revenir plus tôt depuis l'Accueil.\n\n*Pendant tes congés :* pas de raid fait ni subi, pas d'Arène, de booster ni de ticket, aucun Jeanpip reçu, et réagir à tes messages ne rapporte rien. Un raid ou un combat déjà commencé se termine normalement.\n_Ta série de combats, ton Raid gratuit et tes JP$ du vendredi continuent comme d'habitude._`),
+    dateInput('start', 'Premier jour', today),
+    dateInput('end', 'Dernier jour', today),
+  ]);
+}
+
+/** 🏢 Modale admin « Fermeture de l'entreprise ». */
+function buildClosureModal(now = Date.now()) {
+  const today = parisDay(now);
+  return modal('closure_submit', 'Fermeture', '🏢 Déclarer', [
+    section(`Jeanpip sera en pause *pour tout le monde* ces jours-là, comme le week-end (${closure.MAX_DAYS} jours max). Tout le monde reçoit un DM le premier jour à 9h, puis à la reprise. Les jours de fermeture ne cassent pas la série de combats.`),
+    dateInput('start', 'Premier jour fermé', today),
+    dateInput('end', 'Dernier jour fermé', today),
+    {
+      type: 'input',
+      block_id: 'reason',
+      optional: true,
+      label: { type: 'plain_text', text: 'Motif' },
+      element: { type: 'plain_text_input', action_id: 'value', max_length: 100, placeholder: { type: 'plain_text', text: 'Fermeture de Noël, pont de l\'Ascension…' } },
+    },
+  ]);
 }
 
 function buildAdminBlocks(autoTargets, statsUrl = null) {
@@ -256,9 +409,12 @@ function buildAdminBlocks(autoTargets, statsUrl = null) {
         button('⚙️ JP$ par Jeanpip', 'admin_credit_value_open'),
         button('🚜 Limite anti-farm', 'admin_farm_limit_open'),
         button('🎟️ Tickets à gratter', 'admin_tickets_open'),
+        button('🎯 Jeanpips par jour', 'admin_daily_limit_open'),
+        button('♻️ Plafond de revente', 'admin_resale_cap_open'),
+        button('🏢 Fermeture de l\'entreprise', 'admin_closure_open'),
       ],
     },
-    { type: 'context', elements: [{ type: 'mrkdwn', text: `⚙️ Réglages actuels : *1 Jeanpip envoyé = ${formatCredits(settings.getCreditsPerJeanpip())} JP$* · 🚜 *anti-farm : ${settings.getFarmMaxPerHour()} Jeanpips/h max*` }] },
+    { type: 'context', elements: [{ type: 'mrkdwn', text: `⚙️ Réglages actuels : *1 Jeanpip envoyé = ${formatCredits(settings.getCreditsPerJeanpip())} JP$* · 🚜 *anti-farm : ${settings.getFarmMaxPerHour()} Jeanpips/h max* · 🎯 *${settings.getDailyJeanpipLimit()} Jeanpips/jour max* · ♻️ *revente : ${settings.getResaleWeeklyCap()} JP$/semaine max*` }] },
   ];
 
   // 🚫 v3.2 : sanctions boosters en cours
@@ -268,6 +424,14 @@ function buildAdminBlocks(autoTargets, statsUrl = null) {
       const def = boosters.BOOSTERS[b.type];
       return `• <@${b.userId}> : ${def ? `${def.emoji} ${def.label}` : b.type} jusqu'au ${banEndText(b.until)}${b.reason ? ` _(${b.reason})_` : ''}`;
     }).join('\n')}\n_Pour lever une sanction : 🚫 Sanction booster avec 0 jour._`));
+  }
+  // 🏢 v3.6 : fermetures de l'entreprise en cours ou à venir
+  for (const c of closure.listUpcoming()) {
+    const live = c.start <= parisDay(Date.now());
+    blocks.push(section(
+      `🏢 *Fermeture ${live ? 'en cours' : 'prévue'}* du ${weekend.longDay(c.start)} au ${weekend.longDay(c.end)} inclus${c.reason ? ` _(${c.reason})_` : ''} : Jeanpip en pause pour tout le monde.`,
+      button(live ? 'Rouvrir maintenant' : 'Annuler', 'admin_closure_cancel', { value: c.id }),
+    ));
   }
   blocks.push(section(`🎪 *Cibles auto-react (${autoTargets.length})*${autoTargets.length ? '' : '\n_Aucune cible auto-react configurée._'}`));
 
@@ -356,8 +520,8 @@ function buildRaidBlocks(userId, ctx) {
   if (mine) {
     const answered = mine.targets.filter((t) => t.defense).length;
     text = `⚔️ *Ton raid est en cours* (${styleText(mine.style)}) : ${answered}/${mine.targets.length} défense${mine.targets.length > 1 ? 's' : ''} reçue${answered > 1 ? 's' : ''}, fin au plus tard à ${raidTime(mine.endsAt)}.`;
-  } else if (ctx.isWeekend) {
-    text = '🏖️ *Pas de raid le week-end* : ça reprend lundi à 9h.';
+  } else if (ctx.pause) {
+    text = `${ctx.pause.icon} *Pas de raid ${ctx.pause.short}* : ça reprend ${ctx.pause.back} à 9h.`;
   } else if (block === 'hours') {
     text = `⏰ *Raid :* ils se lancent ${raid.OPEN.text}, pour que tout soit fini à 18h.${free ? ' Ton raid gratuit t\'attend.' : ''}`;
   } else if (ctx.farmRemainingMs > 0) {
@@ -377,8 +541,11 @@ function buildRaidBlocks(userId, ctx) {
 /** ⚔️ Modale « Lancer un raid » (ou une modale d'info si on ne peut pas lancer). */
 function buildRaidModal(userId, now = Date.now()) {
   const info = (text) => ({ type: 'modal', title: { type: 'plain_text', text: 'Raid Jeanpip' }, close: { type: 'plain_text', text: 'Fermer' }, blocks: [section(text)] });
-  const block = raid.launchBlock(now);
-  if (block === 'weekend') return info('🏖️ *Pas de raid le week-end.* Ça reprend lundi à 9h.');
+  const block = raid.launchBlock(now, userId);
+  if (block === 'weekend') {
+    const p = weekend.pauseFor(userId, now);
+    return info(`${p.icon} *Pas de raid ${p.short}.* Ça reprend ${p.back} à 9h.`);
+  }
   if (block === 'hours') return info(`⏰ *Les raids se lancent ${raid.OPEN.text}*, pour que tout soit fini à 18h.`);
   if (raid.activeRaidOf(userId)) return info('⚔️ *Tu as déjà un raid en cours.* Attends son résultat avant d\'en lancer un autre.');
 
@@ -788,11 +955,12 @@ function buildTicketsBlocks(userId, url) {
       ? `✅ *${used}/${limit} aujourd'hui* : reviens demain 😉`
       : `_${used}/${limit} ticket${used > 1 ? 's' : ''} aujourd'hui._`;
   // 🏖️ v3.3 : Kiosque fermé le week-end (un ticket acheté avant samedi 0h peut encore être gratté)
-  if (weekend.isWeekend() && !pending) {
-    return [section('🏉 *Tickets à gratter ESSAI !* — 🏖️ le Kiosque est fermé le week-end, retour lundi 0h.')];
+  const pause = weekend.pauseFor(userId);   // + fermeture, congés (v3.6)
+  if (pause && !pending) {
+    return [section(`🏉 *Tickets à gratter ESSAI !* — ${pause.icon} le Kiosque est fermé ${pause.short}, retour ${pause.back}.`)];
   }
   return [section(
-    `🏉 *Tickets à gratter ESSAI !* — ${formatCredits(price)} JP$ le ticket, 9 ballons à gratter : *3 symboles identiques = le lot*. 🏆 Coupe = *carte légendaire*, 🥅 Poteaux = *${formatCredits(jackpot)} JP$* !
+    `🏉 *Tickets à gratter ESSAI !* — ${formatCredits(price)} JP$ le ticket, 9 ballons à gratter : *3 symboles identiques = le lot*. 🏆 Coupe = *carte légendaire*, 🥅 Poteaux = *${formatCredits(jackpot)} JP$* ! Et si ton *score* bat le score adverse : *mise remboursée*.
 ${status}`,
     { ...button(pending ? '🎟️ Gratter mon ticket' : '🎟️ Jouer', 'open_tickets_web', { style: 'primary' }), url },
   )];
@@ -809,7 +977,7 @@ function buildTicketsModal() {
   });
   return modal('admin_tickets_submit', 'Tickets à gratter', 'Enregistrer', [
     numberInput('price', "Prix d'un ticket (JP$)", settings.TICKET_PRICE_MIN, settings.TICKET_PRICE_MAX, settings.getTicketPrice(),
-      `Entier de ${settings.TICKET_PRICE_MIN} à ${settings.TICKET_PRICE_MAX}. Les lots JP$ suivent le prix (×1 à ×40) et la chance de légendaire = prix ÷ 300 : la rentabilité ne change pas.`),
+      `Entier de ${settings.TICKET_PRICE_MIN} à ${settings.TICKET_PRICE_MAX}. Les lots JP$ suivent le prix (×1 à ×40) et la chance de légendaire = prix ÷ 500 : la rentabilité ne change pas.`),
     numberInput('limit', 'Tickets max par jour et par joueur', settings.TICKET_DAILY_LIMIT_MIN, settings.TICKET_DAILY_LIMIT_MAX, settings.getTicketDailyLimit(),
       `Entier de ${settings.TICKET_DAILY_LIMIT_MIN} à ${settings.TICKET_DAILY_LIMIT_MAX}. Jour de Paris, effet immédiat.`),
   ]);
@@ -857,6 +1025,11 @@ module.exports = {
   buildGiveBoosterModal,
   GIVE_BOOSTER_MAX,
   buildBoosterBanModal,
+  buildLeaveModal,
+  buildResaleModal,
+  buildResaleCapModal,
+  buildDailyLimitModal,
+  buildClosureModal,
   banEndText,
   cardFromValue,
 };

@@ -6,6 +6,7 @@
 // ═══════════════════════════════════════════════════════════
 
 const { bucketsBetween, bucketBounds, sum, round, median, indexer } = require('./time');
+const { fortunes } = require('./live');
 
 const itemKey = (m) => (m.item ? `${m.source}/${m.item}` : m.source);
 const sorted = (obj) => Object.entries(obj).map(([key, credits]) => ({ key, credits: round(credits) })).sort((a, b) => b.credits - a.credits);
@@ -102,7 +103,7 @@ function economy(f, { db, boosterPrice = 20 }) {
       mean,
       median: med,
     },
-    tables: { bySource: sorted(bySource), byUse: sorted(byUse) },
+    tables: { bySource: sorted(bySource), byUse: sorted(byUse), fortunes: fortunes(db) },
     since: firstMoveAt(db),
   };
 }

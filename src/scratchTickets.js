@@ -12,7 +12,8 @@
 //
 //  DB = data/scratch.json
 //    { tickets: { <id>: { owner, price, createdAt, grid: [9 symboles], score: { us, them },
-//        outcome: { kind, symbol, amount }, card?, count?, scratchedAt? } } }
+//        outcome: { kind, symbol, amount }, scoreWin: { win, amount } (v3.6), card?, count?, scratchedAt? } } }
+//  (un ticket d'avant la v3.6 n'a pas de scoreWin : son score ne rapporte rien)
 // ═══════════════════════════════════════════════════════════
 
 const path = require('path');
@@ -66,7 +67,7 @@ function pendingTicket(userId, data = loadStore()) {
 function purchaseBlock(userId, now = Date.now(), data = loadStore()) {
   if (farm.getPenaltyRemaining(userId, now) > 0) return 'penalty';
   if (pendingTicket(userId, data)) return 'pending';
-  if (weekend.isWeekend(now)) return 'weekend';
+  if (weekend.pauseFor(userId, now)) return 'weekend';   // + fermeture, congés (v3.6)
   if (boughtToday(userId, now, data) >= settings.getTicketDailyLimit()) return 'limit';
   if (credits.getBalance(userId) < settings.getTicketPrice()) return 'balance';
   return null;
@@ -88,13 +89,15 @@ function buy(userId, now = Date.now(), rand = Math.random) {
   }
 
   const outcome = scratch.drawOutcome(price, rand);
+  const scoreWin = scratch.drawScore(price, rand);   // 🏉 v3.6 : 2e jeu, tiré à part des ballons
   const ticket = {
     owner: userId,
     price,
     createdAt: new Date(now).toISOString(),
     grid: scratch.buildGrid(outcome, rand),
-    score: scratch.buildScore(outcome, rand),
+    score: scratch.buildScore(scoreWin.win, rand),
     outcome,
+    scoreWin,
   };
 
   // 🏆 La carte légendaire est choisie dès l'achat (ajoutée au classeur au grattage)
@@ -137,12 +140,15 @@ function markScratched(id, userId, now = Date.now()) {
     [ticket.count] = collections.addCards(userId, [ticket.card]);
     try { saveStore(data); } catch (e) { console.error('[scratch] écriture:', e.message); }   // nb d'exemplaires (affichage)
   }
+  const scoreAmount = ticket.scoreWin && ticket.scoreWin.win ? ticket.scoreWin.amount : 0;
+  if (scoreAmount) credits.addCredit(userId, scoreAmount, { source: 'scratch', item: 'score', ref: id });
   events.record('scratch_ticket', userId, {
     ticketId: id,
     price: ticket.price,
     outcome: outcome.kind,
     symbol: outcome.symbol,
     amount: outcome.amount,
+    scoreAmount,
     card: ticket.card ? { url: ticket.card.url, title: ticket.card.title, rarity: ticket.card.rarity } : null,
   }, { at: ticket.scratchedAt, dedup: `scratch_ticket:${id}` });
 

@@ -8,8 +8,9 @@ const { getDb } = require('../db');
 const { normalizeFilters } = require('./time');
 const { economy, purchases } = require('./economy');
 const game = require('./game');
+const live = require('./live');
 
-const IMPL = { economy, purchases, boosters: game.boosters, cards: game.cards, arena: game.arena, activity: game.activity };
+const IMPL = { economy, purchases, boosters: game.boosters, cards: game.cards, arena: game.arena, activity: game.activity, scratch: live.scratch, live: live.live };
 const BLOCKS = Object.keys(IMPL);
 
 function run(block, rawFilters, opts = {}) {
@@ -22,6 +23,7 @@ function run(block, rawFilters, opts = {}) {
   const ctx = { ...opts, db: opts.db || getDb() };
   const f = normalizeFilters(rawFilters, opts.now);
   const current = impl(f, ctx);
+  if (impl.noPrev) return { ...current, filters: f };
   const span = Date.parse(f.to) - Date.parse(f.from);
   const prev = impl({ ...f, from: new Date(Date.parse(f.from) - span).toISOString(), to: f.from }, ctx);
   return { ...current, prevKpis: prev.kpis, filters: f };

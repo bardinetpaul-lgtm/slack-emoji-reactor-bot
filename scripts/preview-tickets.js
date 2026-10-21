@@ -5,9 +5,10 @@
 //  Démarre le serveur web sur une COPIE temporaire du projet
 //  (aucune donnée réelle touchée), crédite 500 JP$ à un joueur de
 //  test et affiche son lien personnel.
-//  Option --win=legendary|posts|whistle : force le lot des tickets achetés.
+//  Option --win=legendary|posts|whistle|lose : force le lot des ballons ;
+//  --score : la zone SCORE gagne toujours (mise remboursée, v3.6).
 //
-//  Usage : node scripts/preview-tickets.js [port] [--win=legendary]
+//  Usage : node scripts/preview-tickets.js [port] [--win=lose] [--score]
 // ═══════════════════════════════════════════════════════════
 
 const fs = require('fs');
@@ -40,6 +41,10 @@ if (WIN) {
     return { kind: p.kind, symbol: p.symbol, amount: p.amount || 0 };
   };
 }
+
+if (WIN === 'lose') scratch.drawOutcome = () => ({ kind: 'lose', symbol: null, amount: 0 });
+// 🏉 --score : la zone SCORE gagne toujours (v3.6)
+if (process.argv.includes('--score')) scratch.drawScore = (price) => ({ win: true, amount: scratch.prizeAmount(price, scratch.SCORE_PRIZE.multiplier) });
 
 credits.addCredit('U_PREVIEW', 500, { source: 'preview' });
 web.startWebServer({ client: { users: { info: async () => ({ user: {} }) } }, port: PORT });

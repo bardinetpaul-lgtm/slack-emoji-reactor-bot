@@ -32,6 +32,10 @@ data/arena.json
 data/bugs.json
 data/booster-bans.json
 data/raids.json
+data/leaves.json
+data/closures.json
+data/resale.json
+data/daily-jeanpips.json
 data/web-secret
 data/card-cache/
 data/card-looks.json

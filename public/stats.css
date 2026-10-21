@@ -39,6 +39,7 @@ section h2 { margin: 0 0 4px; font-size: 17px; }
 figure { margin: 0; min-width: 0; }
 figcaption { font-size: 13px; color: var(--muted); margin-bottom: 6px; }
 canvas { width: 100% !important; height: 260px !important; }
+canvas.tall { height: 460px !important; }   /* une ligne par source : toutes les étiquettes visibles */
 .table { max-height: 300px; overflow: auto; }
 table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
 th, td { text-align: left; padding: 5px 6px; border-bottom: 1px solid var(--line); }

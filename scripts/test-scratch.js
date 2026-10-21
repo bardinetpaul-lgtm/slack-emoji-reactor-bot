@@ -65,14 +65,14 @@ const count = (grid, s) => grid.filter((x) => x === s).length;
 (async () => {
   console.log('\n🧪 Tickets à gratter — logique\n');
 
-  await test('lots = multiples du prix, légendaire = prix ÷ 300', () => {
+  await test('lots = multiples du prix, légendaire = prix ÷ 500 (1/100 à 5 JP$, v3.6)', () => {
     const t5 = scratch.prizeTable(5);
     assert.deepStrictEqual(t5.map((p) => p.amount || 0), [0, 200, 50, 20, 10, 5]);
     assert.strictEqual(t5[0].kind, 'legendary');
-    assert.ok(Math.abs(t5[0].chance - 1 / 60) < 1e-12);
+    assert.ok(Math.abs(t5[0].chance - 1 / 100) < 1e-12);
     assert.deepStrictEqual(scratch.prizeTable(10).map((p) => p.amount || 0), [0, 400, 100, 40, 20, 10]);
-    assert.strictEqual(scratch.legendaryChance(150), 0.5);
-    assert.strictEqual(scratch.legendaryChance(300), 0.5, 'plafond 50 %');
+    assert.strictEqual(scratch.legendaryChance(250), 0.5);
+    assert.strictEqual(scratch.legendaryChance(500), 0.5, 'plafond 50 %');
   });
 
   await test('chaque grille montre son lot, et jamais 3 identiques quand on perd', () => {
@@ -88,32 +88,38 @@ const count = (grid, s) => grid.filter((x) => x === s).length;
     }
   });
 
-  await test('simulation 1 million de tickets : retour JP$ ≈ 64 %, légendaire ≈ 1/60, gagnant ≈ 1/2,8', () => {
+  await test('simulation 1 million de tickets : retour JP$ ≈ 64 % (ballons 39 % + score 25 %), légendaire ≈ 1/100, gagnant ≈ 1/2,7', () => {
     const rand = seeded(7);
     const N = 1e6;
-    let paid = 0; let legendary = 0; let wins = 0; let refunds = 0;
+    let paid = 0; let paidScore = 0; let legendary = 0; let wins = 0; let scoreWins = 0; let scoreOnly = 0;
     for (let i = 0; i < N; i++) {
       const o = scratch.drawOutcome(5, rand);
+      const sc = scratch.drawScore(5, rand);
       paid += o.amount;
+      paidScore += sc.amount;
       if (o.kind === 'legendary') legendary++;
-      if (o.kind !== 'lose') wins++;
-      if (o.amount === 5) refunds++;
+      if (o.kind !== 'lose' || sc.win) wins++;
+      if (sc.win) scoreWins++;
+      if (sc.win && o.kind === 'lose') scoreOnly++;
     }
-    const rtp = paid / (5 * N);
+    const rtp = (paid + paidScore) / (5 * N);
     assert.ok(Math.abs(rtp - 0.64) < 0.01, `retour JP$ ${(rtp * 100).toFixed(1)} %`);
-    assert.ok(Math.abs(legendary / N - 1 / 60) < 0.001, `légendaire ${(legendary / N * 100).toFixed(2)} %`);
-    assert.ok(Math.abs(N / wins - 2.84) < 0.1, `1 gagnant sur ${(N / wins).toFixed(2)}`);
-    assert.ok(Math.abs(refunds / N - 0.22) < 0.005, `mise remboursée ${(refunds / N * 100).toFixed(1)} %`);
-    console.log(`     → retour JP$ ${(rtp * 100).toFixed(1)} %, légendaire 1/${(N / legendary).toFixed(1)}, 1 gagnant sur ${(N / wins).toFixed(2)}`);
+    assert.ok(Math.abs(paid / (5 * N) - 0.39) < 0.01, `ballons ${(paid / (5 * N) * 100).toFixed(1)} %`);
+    assert.ok(Math.abs(scoreWins / N - 0.25) < 0.005, `score gagnant ${(scoreWins / N * 100).toFixed(1)} %`);
+    assert.ok(Math.abs(legendary / N - 1 / 100) < 0.001, `légendaire ${(legendary / N * 100).toFixed(2)} %`);
+    assert.ok(Math.abs(N / wins - 2.66) < 0.1, `1 gagnant sur ${(N / wins).toFixed(2)}`);
+    assert.ok(scoreOnly / N > 0.2, 'les ballons peuvent perdre et le score gagner');
+    console.log(`     → retour JP$ ${(rtp * 100).toFixed(1)} %, légendaire 1/${(N / legendary).toFixed(1)}, 1 gagnant sur ${(N / wins).toFixed(2)}, score gagnant ${(scoreWins / N * 100).toFixed(1)} %`);
   });
 
-  await test('score : victoire si gagnant, jamais si perdant', () => {
+  await test('score (v3.6) : « Votre score » plus grand si et seulement si le score gagne', () => {
     const rand = seeded(11);
     for (let i = 0; i < 20000; i++) {
-      const o = scratch.drawOutcome(5, rand);
-      const { us, them } = scratch.buildScore(o, rand);
+      const sc = scratch.drawScore(5, rand);
+      const { us, them } = scratch.buildScore(sc.win, rand);
       assert.ok(us >= 0 && them >= 0);
-      assert.strictEqual(us > them, o.kind !== 'lose');
+      assert.strictEqual(us > them, sc.win);
+      assert.strictEqual(sc.amount, sc.win ? 5 : 0, 'gagné = mise remboursée');
     }
   });
 
@@ -129,15 +135,15 @@ const count = (grid, s) => grid.filter((x) => x === s).length;
   console.log('\n🧪 Tickets à gratter — achat\n');
 
   const T0 = Date.UTC(2026, 9, 13, 10, 0);   // mardi 13/10, 12h à Paris
-  const alwaysWin = (kind) => {
-    // rand qui tombe dans la tranche du lot voulu, puis aléatoire pour la grille
+  const alwaysWin = (kind, scoreWin = false) => {
+    // rand qui tombe dans la tranche du lot voulu, puis le score (gagné ou perdu), puis aléatoire pour la grille
     const table = scratch.prizeTable(5);
     let start = 0;
     for (const p of table) { if (p.kind === kind && (kind === 'legendary' || p.amount === 5)) break; start += p.chance; }
     if (kind === 'lose') start = 0.99;
     const rest = seeded(1);
-    let first = true;
-    return () => { if (first) { first = false; return start + 1e-9; } return rest(); };
+    let n = 0;
+    return () => { n += 1; if (n === 1) return start + 1e-9; if (n === 2) return scoreWin ? 0.01 : 0.99; return rest(); };
   };
 
   await test('solde insuffisant → refus, rien débité', () => {
@@ -185,6 +191,23 @@ const count = (grid, s) => grid.filter((x) => x === s).length;
     assert.strictEqual(done.ticket.count, 1);
     assert.strictEqual(total(), before + 1);
     assert.strictEqual(credits.getBalance('U_A'), 95);
+  });
+
+  await test('score gagnant, ballons perdants : mise remboursée au grattage (v3.6)', () => {
+    const before = credits.getBalance('U_A');
+    const r = tickets.buy('U_A', T0, alwaysWin('lose', true));
+    assert.strictEqual(r.ticket.outcome.kind, 'lose');
+    assert.ok(r.ticket.scoreWin.win && r.ticket.score.us > r.ticket.score.them);
+    assert.strictEqual(credits.getBalance('U_A'), before - 5, 'rien versé avant le grattage');
+    tickets.markScratched(r.ticket.id, 'U_A', T0);
+    assert.strictEqual(credits.getBalance('U_A'), before, 'mise remboursée par le score');
+  });
+
+  await test('ballons ET score gagnants : les deux lots s\'additionnent', () => {
+    const before = credits.getBalance('U_A');
+    const r = tickets.buy('U_A', T0, alwaysWin('jp', true));
+    tickets.markScratched(r.ticket.id, 'U_A', T0);
+    assert.strictEqual(credits.getBalance('U_A'), before - 5 + r.ticket.outcome.amount + 5);
   });
 
   await test('limite du jour (10 par défaut), puis ça repart le lendemain', () => {
@@ -269,7 +292,7 @@ const count = (grid, s) => grid.filter((x) => x === s).length;
 
     const s2 = await (await api(`/${s1.ticket.id}/scratched`, t, 'POST')).json();
     assert.ok(s2.result && ['legendary', 'jp', 'lose'].includes(s2.result.kind));
-    assert.strictEqual(s2.balance, 15 + s2.result.amount, 'lot versé au grattage');
+    assert.strictEqual(s2.balance, 15 + s2.result.amount + (s2.result.score || 0), 'lot (ballons + score) versé au grattage');
     assert.strictEqual(s2.ticket, null);
     assert.strictEqual(s2.boughtToday, 1);
   });

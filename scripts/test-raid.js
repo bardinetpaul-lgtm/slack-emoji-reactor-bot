@@ -139,7 +139,7 @@ const card = (key, rarity) => ({ url: `https://example.test/${key}`, title: `Car
   check(raid.launchBlock(tue(17, 39)) === null && raid.launchBlock(tue(17, 40)) === 'hours', '17h39 : ouvert · 17h40 : fermé (tout fini à 18h)');
   check(raid.launchBlock(RealDate.parse('2026-10-24T09:00:00Z')) === 'weekend', 'samedi : pas de raid');
   check(raid.cost(5) === 50 && raid.cost(7) === 70 && raid.cost(10) === 100 && raid.cost(5, true) === 0 && raid.cost(7, true) === 20, 'prix : 50 JP$ pour 5 cibles, +10 par cible en plus ; gratuit = seulement les cibles en plus');
-  check(scores.ATTACK_THRESHOLD === 100, 'raid gratuit à 100 Jeanpips dans la semaine');
+  check(scores.ATTACK_THRESHOLD === 65, 'raid gratuit à 65 Jeanpips dans la semaine (v3.6)');
 
   // ── Butin ──
   collections.addCards('LOOT1', [card('leg', 'legendary'), card('leg', 'legendary'), card('rose', 'rose'), card('rose', 'rose'), card('spam', 'spam'), card('spam', 'spam'), card('u1', 'common'), card('d1', 'rare'), card('d1', 'rare')]);
@@ -162,7 +162,7 @@ const card = (key, rarity) => ({ url: `https://example.test/${key}`, title: `Car
 
   // ── Accueil et modale ──
   let h = homeOf('UA');
-  check(h.includes('⚔️ Lancer un raid (50 JP$)') && h.includes('home_attack_open') && h.includes('encore 100 pour un raid gratuit'), 'Accueil : « ⚔️ Lancer un raid (50 JP$) », encore 100 Jeanpips pour un raid gratuit');
+  check(h.includes('⚔️ Lancer un raid (50 JP$)') && h.includes('home_attack_open') && h.includes('encore 65 pour un raid gratuit'), 'Accueil : « ⚔️ Lancer un raid (50 JP$) », encore 65 Jeanpips pour un raid gratuit');
   await find(actions, 'home_attack_open')({ ack, body: { user: { id: 'UA' }, trigger_id: 'T1' }, client: fakeClient, logger });
   check(opened.at(-1).view.callback_id === 'raid_submit' && flat(opened.at(-1).view).includes('multi_users_select') && flat(opened.at(-1).view).includes('radio_buttons'), 'bouton ⚔️ : modale avec cibles (jusqu\'à 10) et style secret');
   await find(commands, '/jeanpip-attack')({ ack, command: { user_id: 'UA', trigger_id: 'T2' }, client: fakeClient, logger });
@@ -181,7 +181,9 @@ const card = (key, rarity) => ({ url: `https://example.test/${key}`, title: `Car
 
   // ── Lancement ──
   const before = posted.length;
-  check(await submit('UA', ['UB', 'UC', 'UD'], 'ruse') === null, 'UA lance un raid en 🦊 Ruse sur UB, UC et UD');
+  req('farm.js').record('UD', 0);   // 🚜 UD en pénalité anti-farm : raidable quand même (v3.6)
+  check(req('farm.js').getPenaltyRemaining('UD') > 0, 'UD est en pénalité anti-farm');
+  check(await submit('UA', ['UB', 'UC', 'UD'], 'ruse') === null, 'UA lance un raid en 🦊 Ruse sur UB, UC et UD (UD en pénalité anti-farm : accepté, v3.6)');
   const r1 = raid.activeRaidOf('UA');
   check(r1 && credits.getBalance('UA') === 150 && r1.price === 50, '50 JP$ débités (200 → 150)');
   const alerts = posted.slice(before).filter((m) => ['D_UB', 'D_UC', 'D_UD'].includes(m.channel));
