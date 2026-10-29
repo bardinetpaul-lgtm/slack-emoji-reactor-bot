@@ -5,7 +5,7 @@
 //  Dans une COPIE temporaire du projet (aucune donnée réelle touchée),
 //  avec une horloge simulée (mardi 20/10, heure de Paris) :
 //    • pierre-feuille-ciseaux : 9 combinaisons + pas de réponse
-//    • horaires (9h → 17h40 en semaine), prix (50 JP$ ou gratuit, +10/cible)
+//    • horaires (9h → 17h40 en semaine), prix (30 JP$ ou gratuit, +10/cible)
 //    • butin : doublon d'abord, jamais légendaire / hors série
 //    • modale : cibles refusées, solde insuffisant, style manquant
 //    • lancement : débit, alertes en DM avec 3 boutons, Accueil
@@ -138,16 +138,16 @@ const card = (key, rarity) => ({ url: `https://example.test/${key}`, title: `Car
   check(raid.launchBlock(tue(8, 59)) === 'hours' && raid.launchBlock(tue(9, 0)) === null, 'mardi 8h59 : fermé · 9h00 : ouvert');
   check(raid.launchBlock(tue(17, 39)) === null && raid.launchBlock(tue(17, 40)) === 'hours', '17h39 : ouvert · 17h40 : fermé (tout fini à 18h)');
   check(raid.launchBlock(RealDate.parse('2026-10-24T09:00:00Z')) === 'weekend', 'samedi : pas de raid');
-  check(raid.cost(5) === 50 && raid.cost(7) === 70 && raid.cost(10) === 100 && raid.cost(5, true) === 0 && raid.cost(7, true) === 20, 'prix : 50 JP$ pour 5 cibles, +10 par cible en plus ; gratuit = seulement les cibles en plus');
-  check(scores.ATTACK_THRESHOLD === 65, 'raid gratuit à 65 Jeanpips dans la semaine (v3.6)');
-  // 🐛 v3.6.1 : 90 Jeanpips gagnés avant la baisse du seuil (100 → 65) = raid gratuit tout de suite, sans attendre un Jeanpip de plus
+  check(raid.cost(5) === 30 && raid.cost(7) === 50 && raid.cost(10) === 80 && raid.cost(5, true) === 0 && raid.cost(7, true) === 20, 'prix : 30 JP$ pour 5 cibles (v3.7), +10 par cible en plus ; gratuit = seulement les cibles en plus');
+  check(scores.ATTACK_THRESHOLD === 40, 'raid gratuit à 40 Jeanpips dans la semaine (v3.7)');
+  // 🐛 v3.6.1 : 90 Jeanpips gagnés avant la baisse du seuil (100 → 65 → 40) = raid gratuit tout de suite, sans attendre un Jeanpip de plus
   {
     const file = path.join(TMP, 'data', 'scores.json');
     scores.incrementScore('UOLD');   // crée le fichier des scores
     const data = JSON.parse(fs.readFileSync(file, 'utf8'));
     data.users.UOLD = { score: 90, hasAttack: false, notified: false };
     fs.writeFileSync(file, JSON.stringify(data));
-    check(scores.hasAttack('UOLD') === true && !homeOf('UOLD').includes('encore 0 pour un raid gratuit') && homeOf('UOLD').includes('Raid gratuit débloqué'), 'v3.6.1 : 90/65 sans raid gratuit → débloqué dès l\'Accueil');
+    check(scores.hasAttack('UOLD') === true && !homeOf('UOLD').includes('encore 0 pour un raid gratuit') && homeOf('UOLD').includes('Raid gratuit débloqué'), 'v3.6.1 : 90/40 sans raid gratuit → débloqué dès l\'Accueil');
     scores.consumeAttack('UOLD');
     check(scores.hasAttack('UOLD') === false && scores.getScore('UOLD') === 0, 'v3.6.1 : une fois utilisé, pas de 2e raid gratuit dans la semaine');
   }
@@ -164,7 +164,7 @@ const card = (key, rarity) => ({ url: `https://example.test/${key}`, title: `Car
   for (const u of ['UA', 'UB', 'UC', 'UD', 'UE', 'UF', 'UG', 'UH', 'UI', 'UJ']) broadcast.subscribe(u);
   credits.setBalance('UA', 200);
   credits.setBalance('UE', 200);
-  credits.setBalance('UP', 60);
+  credits.setBalance('UP', 40);
   broadcast.subscribe('UP');
   collections.addCards('UA', [card('a', 'common'), card('a', 'common')]);
   collections.addCards('UB', [card('x', 'common'), card('x', 'common'), card('x', 'common'), card('legB', 'legendary')]);
@@ -173,7 +173,7 @@ const card = (key, rarity) => ({ url: `https://example.test/${key}`, title: `Car
 
   // ── Accueil et modale ──
   let h = homeOf('UA');
-  check(h.includes('⚔️ Lancer un raid (50 JP$)') && h.includes('home_attack_open') && h.includes('encore 65 pour un raid gratuit'), 'Accueil : « ⚔️ Lancer un raid (50 JP$) », encore 65 Jeanpips pour un raid gratuit');
+  check(h.includes('⚔️ Lancer un raid (30 JP$)') && h.includes('home_attack_open') && h.includes('encore 40 pour un raid gratuit'), 'Accueil : « ⚔️ Lancer un raid (30 JP$) », encore 40 Jeanpips pour un raid gratuit');
   await find(actions, 'home_attack_open')({ ack, body: { user: { id: 'UA' }, trigger_id: 'T1' }, client: fakeClient, logger });
   check(opened.at(-1).view.callback_id === 'raid_submit' && flat(opened.at(-1).view).includes('multi_users_select') && flat(opened.at(-1).view).includes('radio_buttons'), 'bouton ⚔️ : modale avec cibles (jusqu\'à 10) et style secret');
   await find(commands, '/jeanpip-attack')({ ack, command: { user_id: 'UA', trigger_id: 'T2' }, client: fakeClient, logger });
@@ -188,7 +188,7 @@ const card = (key, rarity) => ({ url: `https://example.test/${key}`, title: `Car
   check((await submit('UA', ['UB'], null)).errors.style, 'pas de style choisi : erreur');
   const refusedSelf = await submit('UA', ['UA', 'UBOT', 'UZ'], 'ruse');
   check(/Nom UA \(toi-même\)/.test(refusedSelf.errors.targets) && /Nom UBOT \(un bot\)/.test(refusedSelf.errors.targets) && /Nom UZ \(pas inscrit/.test(refusedSelf.errors.targets), 'cibles refusées et nommées : soi-même, un bot, un non-inscrit');
-  check(/Il te faut 70 JP\$/.test((await submit('UP', ['UB', 'UC', 'UD', 'UE', 'UF', 'UG', 'UH'], 'ruse')).errors.targets) && credits.getBalance('UP') === 60, '7 cibles avec 60 JP$ : « il te faut 70 JP$ », rien débité');
+  check(/Il te faut 50 JP\$/.test((await submit('UP', ['UB', 'UC', 'UD', 'UE', 'UF', 'UG', 'UH'], 'ruse')).errors.targets) && credits.getBalance('UP') === 40, '7 cibles avec 40 JP$ : « il te faut 50 JP$ », rien débité');
 
   // ── Lancement ──
   const before = posted.length;
@@ -196,11 +196,11 @@ const card = (key, rarity) => ({ url: `https://example.test/${key}`, title: `Car
   check(req('farm.js').getPenaltyRemaining('UD') > 0, 'UD est en pénalité anti-farm');
   check(await submit('UA', ['UB', 'UC', 'UD'], 'ruse') === null, 'UA lance un raid en 🦊 Ruse sur UB, UC et UD (UD en pénalité anti-farm : accepté, v3.6)');
   const r1 = raid.activeRaidOf('UA');
-  check(r1 && credits.getBalance('UA') === 150 && r1.price === 50, '50 JP$ débités (200 → 150)');
+  check(r1 && credits.getBalance('UA') === 170 && r1.price === 30, '30 JP$ débités (200 → 170)');
   const alerts = posted.slice(before).filter((m) => ['D_UB', 'D_UC', 'D_UD'].includes(m.channel));
   check(alerts.length === 3 && alerts.every((m) => /RAID EN COURS/.test(flat(m)) && ['bouclier', 'piege', 'esquive'].every((d) => flat(m).includes(`raid_defend_${d}`))), 'alerte en DM aux 3 cibles, avec les 3 boutons de défense');
   check(!alerts.some((m) => flat(m).includes('Ruse*') || /attaque en 🦊/.test(flat(m))), 'l\'alerte ne trahit pas le style choisi');
-  check(/Raid lancé/.test(flat(dmsTo('UA').at(-1))) && /50 JP\$ débités/.test(flat(dmsTo('UA').at(-1))), 'DM de confirmation à UA');
+  check(/Raid lancé/.test(flat(dmsTo('UA').at(-1))) && /30 JP\$ débités/.test(flat(dmsTo('UA').at(-1))), 'DM de confirmation à UA');
   check(homeOf('UA').includes('Ton raid est en cours') && homeOf('UB').includes('te raide !') && homeOf('UB').includes('raid_defend_bouclier'), 'Accueil : « ton raid est en cours » côté UA, boutons de défense côté UB');
   check(/subit déjà un raid/.test((await submit('UE', ['UB'], 'assaut')).errors.targets), 'UE ne peut pas raider UB en même temps (« subit déjà un raid »)');
   check(/déjà un raid en cours/.test(flat(home.buildRaidModal('UA'))), 'UA ne peut pas lancer un 2e raid en même temps');

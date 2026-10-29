@@ -10,6 +10,7 @@
 //
 //  Intercalaire « Hors série » (compté dans le total et le pourcentage depuis la v2.1.2) :
 //    • les 6 cartes 🎀 Octobre Rose (emplacements OR1 → OR6, rareté 'rose')
+//    • les 6 cartes 🎃 Halloween (emplacements HW1 → HW6, rareté 'halloween')
 //    • les 10 photos anti-spam #62 → #71 (emplacements toujours affichés)
 //    • les cartes possédées qui ne sont plus dans la banque
 //
@@ -23,6 +24,7 @@ const { getAllMedia, RARITIES } = require('./media');
 const { cardThumbUrl } = require('./cardImages');
 const { SPAM_CARDS } = require('./spamCards');
 const { ROSE_CARDS } = require('./octobreRose');
+const { HALLOWEEN_CARDS } = require('./halloween');
 
 const SECTION_ORDER = ['common', 'rare', 'epic', 'legendary'];
 
@@ -102,6 +104,13 @@ function buildAlbum(userId) {
     const sticker = card ? ownedSticker(c.number, 'rose', card, c) : { n: c.number, rarity: 'rose', owned: false };
     return { ...sticker, code: `OR${c.number}` };
   });
+  // 🎃 … les cartes Halloween (une fois leurs liens renseignés)…
+  extra.push(...HALLOWEEN_CARDS.filter((c) => c.url && !seen.has(c.url)).map((c) => {
+    seen.add(c.url);
+    const card = owned.get(c.url);
+    const sticker = card ? ownedSticker(c.number, 'halloween', card, c) : { n: c.number, rarity: 'halloween', owned: false };
+    return { ...sticker, code: `HW${c.number}` };
+  }));
   // 🚨 … les photos anti-spam (emplacements fixes)…
   extra.push(...SPAM_CARDS.filter((c) => !seen.has(c.url)).map((c) => {
     seen.add(c.url);

@@ -34,9 +34,10 @@
     legendary: { label: 'Légendaires', short: 'LÉGENDAIRE' },
     extra:     { label: 'Hors série',  short: 'HORS SÉRIE' },
     rose:      { label: 'Octobre Rose', short: 'OCT. ROSE' },   // cartes 🎀 (rangées dans « Hors série »)
+    halloween: { label: 'Halloween',   short: 'HALLOWEEN' },    // cartes 🎃 (rangées dans « Hors série »)
   };
-  const RARITY_LABEL = { common: 'Commune', rare: 'Rare', epic: 'Épique', legendary: 'Légendaire', extra: 'Hors série', rose: 'Octobre Rose' };
-  // Numéro affiché : « OR3 » pour les cartes Octobre Rose, sinon le n° de la banque
+  const RARITY_LABEL = { common: 'Commune', rare: 'Rare', epic: 'Épique', legendary: 'Légendaire', extra: 'Hors série', rose: 'Octobre Rose', halloween: 'Halloween' };
+  // Numéro affiché : « OR3 » / « HW2 » pour les cartes hors série, sinon le n° de la banque
   const numLabel = (st) => st.code || String(st.n);
 
   const $ = (sel) => document.querySelector(sel);

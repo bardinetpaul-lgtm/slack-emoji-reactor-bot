@@ -19,7 +19,7 @@
   const LABELS = {
     reaction: 'Réactions', weekly_gift: 'Cadeaux du vendredi', arena_reward: 'Récompenses arène', arena_streak: 'Séries arène', bug_bounty: 'Bugs signalés', media_author: 'Auteurs de médias',
     admin_gift: 'Dons admin', unknown: '❓ Inconnu', booster: 'Boosters', arena_shop: 'Boutique arène', attack: 'Attaques', raid: 'Raids', resale: '♻️ Revente de doublons', scratch: 'Tickets à gratter', ticket: 'achat', win: 'gains',
-    common: 'Commun', rare: 'Rare', epic: 'Épique', legendary: 'Légendaire', rose: 'Octobre Rose', octobre_rose: '🎀 Octobre Rose',
+    common: 'Commun', rare: 'Rare', epic: 'Épique', legendary: 'Légendaire', rose: 'Octobre Rose', octobre_rose: '🎀 Octobre Rose', halloween: '🎃 Halloween',
   };
   const label = (key) => String(key).split('/').map((k) => LABELS[k] || k).join(' · ');
   const who = (id) => names[id] || id;
@@ -206,7 +206,7 @@
     },
     boosters(d) {
       kpis('boosters', [{ key: 'bought', text: 'Achetés' }, { key: 'granted', text: 'Gagnés (arène)' }, { key: 'opened', text: 'Ouverts' }, { key: 'stock', text: 'Non ouverts (stock)' },
-        { key: 'roseCards', text: '🎀 Cartes Octobre Rose reçues' }], d);
+        { key: 'roseCards', text: '🎀🎃 Cartes exclusives reçues' }], d);
       const types = d.tables.boughtTypes;
       table('t-buyers', [['#', 1], ['Joueur'], ...types.map((t) => [label(t), 1]), ['Total', 1], ['JP$', 1]],
         d.tables.topBuyers.map((b, i) => [['🥇', '🥈', '🥉'][i] || String(i + 1), who(b.userId), ...types.map((t) => fmt(b.byType[t] || 0, 0)), fmt(b.total, 0), fmt(b.credits)]));
@@ -223,7 +223,7 @@
       const s = d.series;
       chart('c-newcards', { data: { labels: s.labels, datasets: [bar('Ajoutées au catalogue', s.added, 1), line('Découvertes', s.discovered, 0)] } });
       chart('c-cardsavg', { data: { labels: s.labels, datasets: [line('Moyenne', s.mean, 0), line('Médiane', s.median, 1)] } });
-      table('t-perplayer', [['Joueur'], ['Classeur', 1], ['% classeur', 1], ['dont Hors série', 1], ['🎀 Octobre Rose reçues', 1], ['Obtenues un jour', 1]],
+      table('t-perplayer', [['Joueur'], ['Classeur', 1], ['% classeur', 1], ['dont Hors série', 1], ['🎀🎃 Exclusives reçues', 1], ['Obtenues un jour', 1]],
         d.tables.perPlayer.map((p) => [who(p.userId), `${fmt(p.cards, 0)} / ${fmt(p.total, 0)}`, `${fmt(p.pct)} %`, fmt(p.extra, 0), fmt(p.rose, 0), fmt(p.discovered, 0)]));
     },
     arena(d) {

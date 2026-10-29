@@ -38,6 +38,7 @@ const collections = require('../collections');
 const { getAllMedia, getRemovedMedia } = require('../media');
 const { SPAM_CARDS } = require('../spamCards');
 const { ROSE_CARDS } = require('../octobreRose');
+const { HALLOWEEN_CARDS } = require('../halloween');
 const { cardImageUrl } = require('../cardImages');
 const wire = require('../../public/arena-wire');
 const { CAPTAINS } = require('./captains');
@@ -99,10 +100,10 @@ function imageFor(card, prefix) {
 }
 
 // Banque + tout le « Hors série » du classeur, jouable dans l'Arène (v3.4) :
-// 🎀 Octobre Rose, 🚨 photos anti-spam et cartes retirées de la banque
+// 🎀 Octobre Rose, 🎃 Halloween, 🚨 photos anti-spam et cartes retirées de la banque
 const arenaMedia = () => {
   const seen = new Set();
-  return [...getAllMedia(), ...ROSE_CARDS.filter((c) => c.url), ...SPAM_CARDS, ...getRemovedMedia()]
+  return [...getAllMedia(), ...ROSE_CARDS.filter((c) => c.url), ...HALLOWEEN_CARDS.filter((c) => c.url), ...SPAM_CARDS, ...getRemovedMedia()]
     .filter((m) => m && m.url && !seen.has(m.url) && seen.add(m.url));
 };
 

@@ -24,6 +24,7 @@ const farm = require('./farm');
 const boosterSpam = require('./boosterSpam');
 const boosterBans = require('./boosterBans');
 const octobreRose = require('./octobreRose');
+const halloween = require('./halloween');
 const weekend = require('./weekend');
 const leave = require('./leave');
 const closure = require('./closure');
@@ -567,7 +568,7 @@ app.event('reaction_added', async ({ event, client, logger }) => {
       refreshHomeIfSeen(client, reactingUserId, logger);
     }
 
-    // 🎉 Notification : Raid gratuit débloqué (v3.6 : 65 Jeanpips dans la semaine)
+    // 🎉 Notification : Raid gratuit débloqué (v3.7 : 40 Jeanpips dans la semaine)
     if (justUnlocked) {
       await safeSendDM(client, reactingUserId, {
         text: `🎉 Tu as débloqué un Raid gratuit !`,
@@ -1271,7 +1272,7 @@ app.action(/^buy_booster_/, async ({ ack, body, action, client, logger }) => {
           return `${p.icon} *Pas de Booster ${booster.emoji} ${booster.label} ${p.short} !* Jeanpip est en pause ${p.until}.${booster.dailyStock && p.kind === 'weekend' ? ` ${boosters.restockText()}` : ''}`;
         })()
         : blocked === 'user_limit'
-        ? `🎀 *Tu as déjà eu ton Booster ${booster.emoji} ${booster.label} aujourd'hui !* C'est ${booster.dailyPerUser} par personne et par jour, pour en laisser aux autres. Reviens ${boosters.restockText().includes('lundi') ? 'lundi' : 'demain'} 😉`
+        ? `🎀 *Tu as déjà eu ton Booster ${booster.emoji} ${booster.label} aujourd'hui !* C'est ${booster.dailyPerUser} par personne et par jour, pour en laisser aux autres. ${boosters.comeBackDay(booster) ? `Reviens ${boosters.comeBackDay(booster)} 😉` : "C'était le dernier jour de la saison 😢"}`
         : blocked === 'not_yet'
         ? `⏳ *Pas encore de Booster ${booster.emoji} ${booster.label} aujourd'hui !* ${boosters.DROP_TEXT} Reviens un peu plus tard 😉`
         : blocked === 'sold_out'
@@ -2429,7 +2430,7 @@ async function announceClosures(client, logger) {
 
   // 🎭 Personnages d'Arène : cartes sans look (ou aux règles périmées) faites en fond
   //    (banque + Hors série jouable dans l'Arène depuis la v3.4 : Octobre Rose, anti-spam, cartes retirées)
-  looks.backfill([...getAllMedia(), ...octobreRose.ROSE_CARDS.filter((c) => c.url), ...SPAM_CARDS, ...getRemovedMedia()], { client: app.client, logger: console })
+  looks.backfill([...getAllMedia(), ...octobreRose.ROSE_CARDS.filter((c) => c.url), ...halloween.HALLOWEEN_CARDS.filter((c) => c.url), ...SPAM_CARDS, ...getRemovedMedia()], { client: app.client, logger: console })
     .then((r) => { if (r.done) console.log(`🎭 Personnages d'Arène : ${r.done} créé(s) — ${r.haiku} analysé(s) par Haiku, ${r.pixels} par leurs couleurs`); })
     .catch((error) => console.error('❌ Personnages d\'Arène :', error.message));
 

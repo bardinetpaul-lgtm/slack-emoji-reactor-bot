@@ -30,10 +30,10 @@ const arenaStore = require('./game/arenaStore');
 const RESALE_PATH = path.join(__dirname, '..', 'data', 'resale.json');
 
 /** JP$ par exemplaire revendu. Une rareté absente (spam) ne se revend pas. */
-const PRICES = { common: 0.5, rare: 2, epic: 5, legendary: 20, rose: 10 };
-const RARITY_ORDER = ['common', 'rare', 'epic', 'rose', 'legendary'];
+const PRICES = { common: 0.5, rare: 2, epic: 5, legendary: 20, rose: 10, halloween: 10 };
+const RARITY_ORDER = ['common', 'rare', 'epic', 'rose', 'halloween', 'legendary'];
 const LABELS = {
-  common: '⚪ Communes', rare: '🔵 Rares', epic: '🟣 Épiques', rose: '🎀 Octobre Rose', legendary: '🟡 Légendaires',
+  common: '⚪ Communes', rare: '🔵 Rares', epic: '🟣 Épiques', rose: '🎀 Octobre Rose', halloween: '🎃 Halloween', legendary: '🟡 Légendaires',
 };
 
 const DAY_MS = 24 * 3600 * 1000;
