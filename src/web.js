@@ -30,7 +30,7 @@ const crypto = require('crypto');
 const boosters = require('./boosters');
 const { openOnce } = require('./openBooster');
 const { getCardImage, getCardThumb, cardImageUrl } = require('./cardImages');
-const { buildWebOpenedBlocks } = require('./blocks');
+const { buildWebOpenedBlocks, buildWebOpeningBlocks } = require('./blocks');
 const { buildAlbum } = require('./album');
 const arenaWeb = require('./game/arenaWeb');
 const arenaMatches = require('./game/matches');
@@ -251,19 +251,42 @@ function toPublicCard(card, count) {
   };
 }
 
-async function updatePurchaseMessage(client, pending, cards, counts, logger) {
+async function updateDm(client, pending, text, blocks, logger) {
   if (!pending.message) return;
   try {
-    const booster = boosters.getBooster(pending.type);
-    await client.chat.update({
-      channel: pending.message.channel,
-      ts: pending.message.ts,
-      text: `${booster ? booster.emoji : '🎁'} Booster ouvert avec l'animation !`,
-      blocks: buildWebOpenedBlocks(booster, cards, counts),
-    });
+    await client.chat.update({ channel: pending.message.channel, ts: pending.message.ts, text, blocks });
   } catch (e) {
     logger.error('[web] mise à jour du DM d\'achat:', e.message);
   }
+}
+
+// 🕶 v3.8 : récaps déjà écrits dans Slack (anti-doubleécriture ; perdu au redémarrage,
+//    sans conséquence : réécrire le même message est sans effet visible).
+const recapWritten = new Set();
+const RECAP_FALLBACK_MS = 4 * 60 * 1000;
+
+/** Écrit le récap des cartes dans le DM d'achat (une seule fois par booster). */
+async function writeRecap(client, id, logger) {
+  if (recapWritten.has(id)) return;
+  const pending = boosters.getPending(id);
+  if (!pending || !pending.cards || pending.openedVia !== 'web') return;   // jamais sur une ouverture Slack
+  recapWritten.add(id);
+  const booster = boosters.getBooster(pending.type);
+  await updateDm(
+    client, pending,
+    `${booster ? booster.emoji : '🎁'} Booster ouvert avec l'animation !`,
+    buildWebOpenedBlocks(booster, pending.cards, pending.counts),
+    logger,
+  );
+}
+
+/** 🏁 L'animation est terminée côté page : on peut montrer les cartes dans Slack. */
+function handleFinish(res, id, token, { client, logger }) {
+  const pending = boosters.getPending(id);
+  if (!pending) return sendJson(res, 404, { status: 'not_found' });
+  if (!verifyToken(id, pending.owner, token)) return sendJson(res, 403, { status: 'invalid' });
+  writeRecap(client, id, logger).catch((e) => logger.error('[web] récap:', e.message));
+  return sendJson(res, 200, { status: 'ok' });
 }
 
 function handleOpen(res, id, token, { client, logger, onOpened }) {
@@ -289,7 +312,12 @@ function handleOpen(res, id, token, { client, logger, onOpened }) {
 
   if (result.status === 'opened') {
     logger.info(`🎬 <@${pending.owner}> ouvre le booster ${pending.type} avec l'animation (id ${id})`);
-    updatePurchaseMessage(client, pending, result.cards, result.counts, logger);
+    // 🕶 v3.8 : d'abord un DM neutre (pas de spoil si Slack reste ouvert à côté) ;
+    //    le récap des cartes arrive quand la page signale la fin de l'animation.
+    updateDm(client, pending, `${boosterInfo.emoji} Ouverture en cours…`, buildWebOpeningBlocks(booster), logger);
+    // Filet : si la page est fermée en route, le récap s'écrit quand même.
+    const t = setTimeout(() => { writeRecap(client, id, logger).catch(() => {}); }, RECAP_FALLBACK_MS);
+    if (typeof t.unref === 'function') t.unref();
     // 🏠 Prévient le bot (ex. rafraîchir l'onglet Accueil) — jamais bloquant
     if (onOpened) {
       Promise.resolve()
@@ -378,6 +406,11 @@ function createHandler(deps) {
       if ((m = /^\/api\/open\/([\w-]+)$/.exec(pathname))) {
         if (req.method !== 'POST') return send(res, 405, 'Method not allowed', { Allow: 'POST' });
         return handleOpen(res, m[1], url.searchParams.get('t'), deps);
+      }
+      // 🏁 v3.8 : la page prévient que l'animation est finie → récap des cartes dans le DM
+      if ((m = /^\/api\/finish\/([\w-]+)$/.exec(pathname))) {
+        if (req.method !== 'POST') return send(res, 405, 'Method not allowed', { Allow: 'POST' });
+        return handleFinish(res, m[1], url.searchParams.get('t'), deps);
       }
       if (req.method === 'GET' && (m = /^\/api\/card-image\/([A-Z0-9]+)$/.exec(pathname))) {
         return await handleCardImage(res, m[1], deps);

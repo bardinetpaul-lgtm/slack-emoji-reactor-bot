@@ -131,6 +131,48 @@ function buildMediaBlocks({ headerText, media }) {
  * @param {Array} cards    - cartes tirées { title, rarity, url, type }
  * @param {Array} counts   - exemplaires possédés après ajout (1 = nouvelle)
  */
+/**
+ * DM pendant l'animation (v3.8) : les boutons disparaissent, mais SURTOUT
+ * aucune carte n'est listée — sinon Slack resté ouvert à côté spoile le pack
+ * avant que la page ne l'ait révélé. Le récap arrive à la fin de l'animation.
+ */
+function buildWebOpeningBlocks(booster) {
+  const emoji = booster ? booster.emoji : '🎁';
+  const label = booster ? booster.label : '';
+  return [
+    {
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: `${emoji} *Booster ${label} — 🎬 ouverture en cours…*\n\n`
+          + 'Tes cartes sont déjà dans ta collection. Le détail s’affiche ici dès que '
+          + 'l’animation est terminée — on ne te gâche pas la surprise 🤫',
+      },
+    },
+  ];
+}
+
+/**
+ * DM pendant l'animation (v3.8) : les boutons disparaissent, mais SURTOUT
+ * aucune carte n'est listée — sinon Slack resté ouvert à côté spoile le pack
+ * avant que la page ne l'ait révélé. Le récap arrive à la fin de l'animation.
+ */
+function buildWebOpeningBlocks(booster) {
+  const emoji = booster ? booster.emoji : '🎁';
+  const label = booster ? booster.label : '';
+  return [
+    {
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: `${emoji} *Booster ${label} — 🎬 ouverture en cours…*\n\n`
+          + 'Tes cartes sont déjà dans ta collection. Le détail s’affiche ici dès que '
+          + 'l’animation est terminée — on ne te gâche pas la surprise 🤫',
+      },
+    },
+  ];
+}
+
 function buildWebOpenedBlocks(booster, cards, counts) {
   const emoji = booster ? booster.emoji : '🎁';
   const label = booster ? booster.label : '';
@@ -157,4 +199,5 @@ function buildWebOpenedBlocks(booster, cards, counts) {
   ];
 }
 
-module.exports = { buildMediaBlocks, buildWebOpenedBlocks };
+module.exports = { buildMediaBlocks, buildWebOpenedBlocks,
+  buildWebOpeningBlocks, buildWebOpeningBlocks };

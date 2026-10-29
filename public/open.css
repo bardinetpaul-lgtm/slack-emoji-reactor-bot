@@ -275,6 +275,8 @@ body.has-beams .beams { opacity: 1; }
 }
 .pack[data-type='rare'] { --pack: var(--rare); --pack-deep: var(--rare-deep); }
 .pack[data-type='epic'] { --pack: var(--epic); --pack-deep: var(--epic-deep); }
+.pack[data-type='halloween'] { --pack: var(--halloween); --pack-deep: var(--halloween-deep); }
+.pack[data-type='octobre_rose'] { --pack: var(--rose); --pack-deep: var(--rose-deep); }
 
 @keyframes float {
   0%, 100% { translate: 0 0; }
@@ -699,4 +701,108 @@ body.has-beams .beams { opacity: 1; }
   .bg { animation: none; }
   .beams { display: none; }
   .card-inner { transition: opacity 0.2s ease !important; }
+}
+
+/* ─────────────────────────────────────────────
+   🎃🎀 Ouvertures thématiques (v3.8)
+   Le thème vient du TYPE de booster, pas de la carte tirée :
+   un pack Halloween est sombre du début à la fin.
+   Le fond de Lorient est gardé, mais retravaillé (nuit / rose).
+   ───────────────────────────────────────────── */
+
+.scenery {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  opacity: 0;
+  transition: opacity 1.2s ease;
+  z-index: 1;
+}
+body.is-themed .scenery { opacity: 1; }
+
+/* 🎃 Halloween — Lorient de nuit */
+body.theme-halloween .bg {
+  filter: brightness(0.34) saturate(0.5) contrast(1.2) hue-rotate(205deg);
+}
+body.theme-halloween.is-focus .bg { filter: blur(6px) brightness(0.26) saturate(0.5) hue-rotate(205deg); }
+body.theme-halloween.is-dark .bg  { filter: blur(10px) brightness(0.12) saturate(0.4) hue-rotate(205deg); }
+body.theme-halloween .veil {
+  background:
+    radial-gradient(ellipse at 50% 38%, rgba(26, 14, 52, 0) 0%, rgba(14, 7, 30, 0.72) 70%),
+    linear-gradient(180deg, rgba(20, 10, 44, 0.45) 0%, rgba(10, 5, 22, 0.6) 55%, rgba(4, 2, 10, 0.96) 100%);
+}
+
+.sc-moon {
+  position: absolute;
+  top: 7%;
+  right: 12%;
+  width: 11vmin;
+  height: 11vmin;
+  border-radius: 50%;
+  background: radial-gradient(circle at 36% 34%, #fffdf2 0%, #ece5c6 60%, #cdc49a 100%);
+  box-shadow: 0 0 7vmin 2.5vmin rgba(255, 250, 224, 0.22), 0 0 20vmin 9vmin rgba(130, 120, 255, 0.14);
+}
+.sc-moon::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 68% 30%, rgba(0, 0, 0, 0.1) 0 8%, transparent 9%),
+    radial-gradient(circle at 42% 66%, rgba(0, 0, 0, 0.09) 0 11%, transparent 12%),
+    radial-gradient(circle at 27% 41%, rgba(0, 0, 0, 0.08) 0 6%, transparent 7%);
+}
+
+.sc-bat { position: absolute; left: -16%; will-change: transform; }
+.sc-bat svg { display: block; filter: drop-shadow(0 0 6px rgba(255, 140, 43, 0.45)); }
+.sc-bat .w { transform-origin: 50% 46%; animation: bat-flap 0.34s ease-in-out infinite alternate; }
+.sc-bat .w.r { animation-delay: 0.03s; }
+@keyframes bat-flap { from { transform: scaleY(1); } to { transform: scaleY(0.4); } }
+@keyframes bat-cross {
+  from { transform: translate(0, 0); }
+  50%  { transform: translate(66vw, -8vh); }
+  to   { transform: translate(132vw, 3vh); }
+}
+
+.sc-ghost { position: absolute; bottom: -22%; will-change: transform, opacity; }
+.sc-ghost svg { display: block; filter: drop-shadow(0 0 16px rgba(190, 210, 255, 0.45)); }
+@keyframes ghost-rise {
+  0%   { transform: translateY(0) scale(0.9); opacity: 0; }
+  18%  { opacity: 0.9; }
+  70%  { opacity: 0.75; }
+  100% { transform: translateY(-125vh) scale(1.15); opacity: 0; }
+}
+
+/* 🎀 Octobre Rose — inondation de rose */
+body.theme-rose .bg { filter: saturate(1.7) contrast(1.05) brightness(0.86) hue-rotate(-16deg); }
+body.theme-rose.is-focus .bg { filter: blur(6px) saturate(1.7) brightness(0.6) hue-rotate(-16deg); }
+body.theme-rose.is-dark .bg  { filter: blur(10px) saturate(1.8) brightness(0.42) hue-rotate(-16deg); }
+body.theme-rose .veil {
+  background:
+    radial-gradient(ellipse at 50% 34%, rgba(255, 143, 192, 0.3) 0%, rgba(196, 21, 94, 0.62) 68%),
+    linear-gradient(180deg, rgba(255, 95, 162, 0.42) 0%, rgba(190, 20, 92, 0.6) 52%, rgba(93, 10, 45, 0.94) 100%);
+}
+.sc-wash {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at 50% 120%, rgba(255, 95, 162, 0.55) 0%, rgba(255, 46, 133, 0.22) 45%, transparent 72%);
+  mix-blend-mode: screen;
+  animation: wash-breathe 5s ease-in-out infinite alternate;
+}
+@keyframes wash-breathe { from { opacity: 0.6; } to { opacity: 1; } }
+
+.sc-ribbon {
+  position: absolute;
+  top: -12%;
+  will-change: transform;
+  filter: drop-shadow(0 2px 8px rgba(120, 10, 55, 0.35));
+}
+@keyframes ribbon-fall {
+  from { transform: translateY(0) rotate(0deg); }
+  to   { transform: translateY(124vh) rotate(430deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scenery { display: none; }
 }
