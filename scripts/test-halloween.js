@@ -3,14 +3,14 @@
 //  🧪 Test du Booster 🎃 Halloween (v3.7)
 //
 //  Dans une COPIE temporaire du projet (aucune donnée réelle touchée),
-//  avec 6 cartes de test injectées dans src/halloween.js et une horloge
+//  avec des cartes de test injectées dans src/halloween.js et une horloge
 //  simulée :
 //    • fenêtre de vente : vendredi 30/10 14h → lundi 2/11 14h (Paris)
 //    • pas de stock partagé ni de limite par personne, 80 JP$
 //    • fermé le week-end (pause du jeu), rouvert le lundi
 //    • mêmes probabilités qu'Octobre Rose (tirages en masse)
 //    • 🌗 vagues : les cartes « lundi » sont IMPOSSIBLES à obtenir le vendredi
-//    • classeur (Hors série, HW1 → HW6), Arène, deck, revente
+//    • classeur (Hors série, HW1 → HWn), Arène, deck, revente
 //    • 🎀 promo du dernier jour d'Octobre Rose : 10/jour, 2 par personne
 //
 //  Usage : node scripts/test-halloween.js
@@ -31,12 +31,12 @@ fs.copyFileSync(path.join(ROOT, 'data', 'media-bank.json'), path.join(TMP, 'data
 // 🖼️ Liens de test (les vrais seront collés dans src/halloween.js) : on garde
 //    la répartition des vagues du fichier réel, seules les URL sont injectées.
 const HW_PATH = path.join(TMP, 'src', 'halloween.js');
-const TEST_URLS = [1, 2, 3, 4, 5, 6].map((n) => `https://slack-files.com/T6EFSEHCN-F0TESTHW${n}0-00000000${n}0`);
 {
   const src = fs.readFileSync(HW_PATH, 'utf8');
   let i = 0;
-  const patched = src.replace(/\{ url: '[^']*', name: '', wave: (\d) \}/g, (_, w) => `{ url: '${TEST_URLS[i++]}', name: '', wave: ${w} }`);
-  if (i !== TEST_URLS.length) { console.error(`❌ ${i} carte(s) remplacée(s) sur ${TEST_URLS.length} : src/halloween.js a changé de forme`); process.exit(1); }
+  const patched = src.replace(/\{ url: '[^']*', name: '[^']*', wave: (\d) \}/g,
+    (_, w) => `{ url: 'https://slack-files.com/T6EFSEHCN-F0TESTHW${++i}0-00000000${i}0', name: '', wave: ${w} }`);
+  if (!i) { console.error('❌ aucune carte trouvée : src/halloween.js a changé de forme'); process.exit(1); }
   fs.writeFileSync(HW_PATH, patched);
 }
 
@@ -119,9 +119,13 @@ const at = (iso) => { NOW = RealDate.parse(iso); };
   check(hw.slots.every((s) => Object.values(s).reduce((a, b) => a + b, 0) === 100), 'chaque slot totalise 100 %');
   const rose = boosters.getBooster('octobre_rose');
   check(JSON.stringify(hw.slots).replace(/halloween/g, 'rose') === JSON.stringify(rose.slots), 'mêmes probabilités qu\'Octobre Rose');
-  check(halloween.isReady() && new Set(CARDS.map((c) => c.url)).size === 6, 'les 6 cartes Halloween sont renseignées');
-  check(WAVE1.length === 3 && WAVE2.length === 3, `3 cartes dès vendredi (${CARDS.filter((c) => c.wave === 1).map((c) => c.number).join('-')}), 3 réservées au lundi (${CARDS.filter((c) => c.wave === 2).map((c) => c.number).join('-')})`);
-  check(CARDS[0].title === '🎃 Halloween 1/6', `titre : « ${CARDS[0].title} »`);
+  const n1 = CARDS.filter((c) => c.wave === 1).map((c) => c.number);
+  const n2 = CARDS.filter((c) => c.wave === 2).map((c) => c.number);
+  check(halloween.isReady() && new Set(CARDS.map((c) => c.url)).size === CARDS.length, `les ${CARDS.length} cartes Halloween sont renseignées, toutes différentes`);
+  check(WAVE1.length > 0 && WAVE2.length > 0 && Math.abs(WAVE1.length - WAVE2.length) <= 1,
+    `moitié/moitié : ${WAVE1.length} dès vendredi (n° ${n1.join('-')}), ${WAVE2.length} réservées au lundi (n° ${n2.join('-')})`);
+  check(n1.join('-') !== CARDS.slice(0, WAVE1.length).map((c) => c.number).join('-'), 'les numéros des deux vagues sont entremêlés (pas à la suite)');
+  check(CARDS[0].title === `🎃 Halloween 1/${CARDS.length}`, `titre : « ${CARDS[0].title} »`);
 
   // ── Fenêtre de vente (heure d'hiver depuis le 25/10 : Paris = UTC+1) ──
   at('2026-10-30T12:59:00Z'); // vendredi 13h59 Paris
@@ -173,7 +177,7 @@ const at = (iso) => { NOW = RealDate.parse(iso); };
   at('2026-11-02T08:00:00Z');
   const seenMonday = new Set();
   for (let i = 0; i < 2000; i++) boosters.openBooster('halloween').filter((c) => c.rarity === 'halloween').forEach((c) => seenMonday.add(c.url));
-  check(seenMonday.size === 6, `🌗 lundi matin : les 6 cartes sortent (${seenMonday.size}/6)`);
+  check(seenMonday.size === CARDS.length, `🌗 lundi matin : toutes les cartes sortent (${seenMonday.size}/${CARDS.length})`);
   check(!boosters.getBooster('common').slots.some((sl) => sl.halloween) && !boosters.getBooster('epic').slots.some((sl) => sl.halloween) && !rose.slots.some((sl) => sl.halloween),
     'aucune carte Halloween dans les autres boosters');
 
@@ -214,9 +218,9 @@ const at = (iso) => { NOW = RealDate.parse(iso); };
   const home = JSON.stringify(req('home.js').buildHomeView('U_HOME', homeArgs));
   check(home.includes('buy_booster_halloween') && /Halloween \(80\)/.test(home), 'Accueil : bouton « 🎃 Halloween (80) »');
   check(/Sans limite par personne/.test(home) && /lundi 2\/11 à 14h/.test(home), 'Accueil : « sans limite par personne », fin annoncée');
-  check(/n'arrive que lundi matin/.test(home), 'Accueil : la moitié des cartes n\'arrive que lundi matin');
+  check(/cartes Halloween n'arrivent que lundi matin/.test(home), 'Accueil : les cartes de la 2e vague n\'arrivent que lundi matin');
   at('2026-11-02T08:00:00Z');
-  check(!/n'arrive que lundi matin/.test(JSON.stringify(req('home.js').buildHomeView('U_HOME', homeArgs))), 'Accueil le lundi : l\'avertissement disparaît');
+  check(!/n'arrivent que lundi matin/.test(JSON.stringify(req('home.js').buildHomeView('U_HOME', homeArgs))), 'Accueil le lundi : l\'avertissement disparaît');
 
   // ── Classeur ──
   const card3 = CARDS[2];
@@ -224,7 +228,7 @@ const at = (iso) => { NOW = RealDate.parse(iso); };
   const album = buildAlbum('U_ALB');
   const extra = album.sections.find((x) => x.key === 'extra');
   const stickers = extra.stickers.filter((st) => st.rarity === 'halloween');
-  check(stickers.length === 6 && stickers.map((st) => st.code).join() === 'HW1,HW2,HW3,HW4,HW5,HW6', 'classeur : 6 emplacements HW1 → HW6 dans « Hors série »');
+  check(stickers.length === CARDS.length && stickers.map((st) => st.code).join() === CARDS.map((c) => `HW${c.number}`).join(), `classeur : ${CARDS.length} emplacements HW1 → HW${CARDS.length} dans « Hors série »`);
   check(stickers[2].owned && !stickers[0].owned && !stickers[0].image, 'carte possédée visible, les autres cachées');
   check(album.stats.total === album.sections.reduce((n, x) => n + x.stickers.length, 0), 'comptée dans la complétion (Hors série inclus dans le total)');
   check(extra.stickers.filter((st) => st.link === card3.url).length === 1, 'pas de doublon « carte retirée »');

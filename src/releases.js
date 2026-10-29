@@ -22,8 +22,8 @@ const RELEASES = [
     changes: [
       '⚔️ Le Raid coûte maintenant *30 JP$* au lieu de 50, et le Raid gratuit se débloque dès *40 Jeanpips* dans la semaine (au lieu de 65). Les cibles en plus restent à 10 JP$.',
       '🎃 Nouveau : le *Booster Halloween* (80 JP$), en vente du vendredi 30/10 à 14h au lundi 2/11 à 14h. Mêmes chances qu’Octobre Rose, mais *sans limite par personne* : prends-en autant que tu veux. Comme tous les boosters, il est fermé samedi et dimanche : en clair, vendredi après-midi, puis lundi matin.',
-      '🌑 Attention : la moitié des cartes Halloween n’arrive que *le lundi matin*. Impossible de compléter la série dès le vendredi — il faudra revenir.',
-      '🃏 Les cartes Halloween sont rangées dans le « Hors série » de ton classeur (HW1 → HW6), jouables dans l’Arène et dans ton deck (puissance d’une épique), et revendables 10 JP$ l’exemplaire en double.',
+      '🌑 Attention : 4 des 7 cartes Halloween sortent dès le vendredi, les *3 autres seulement le lundi matin*. Impossible de compléter la série dès le vendredi — il faudra revenir.',
+      '🃏 Les cartes Halloween sont rangées dans le « Hors série » de ton classeur (HW1 → HW7), jouables dans l’Arène et dans ton deck (puissance d’une épique), et revendables 10 JP$ l’exemplaire en double.',
       '🎀 Dernier jour d’Octobre Rose le vendredi 30/10 : exceptionnellement *10 boosters pour tout le monde*, *2 par personne*. Le prix ne change pas (80 JP$).',
     ],
   },

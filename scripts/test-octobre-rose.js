@@ -107,7 +107,9 @@ const at = (iso) => { NOW = RealDate.parse(iso); };
   at('2026-10-31T23:00:00Z'); // minuit Paris → 1/11
   check(!boosters.listBoosters().some((b) => b.type === 'octobre_rose'), 'plus en vente le 1er novembre');
   check(boosters.purchaseBlock(rose) === 'closed', 'achat hors saison → closed');
-  check(boosters.listBoosters().map((b) => b.type).join() === 'common,rare,epic', 'les 3 boosters classiques restent en vente');
+  // 🎃 v3.7 : le 1er novembre, Halloween est encore dans sa fenêtre (jusqu'au lundi 2/11 14h)
+  const types = boosters.listBoosters().map((b) => b.type);
+  check(['common', 'rare', 'epic'].every((t) => types.includes(t)) && !types.includes('octobre_rose'), "les 3 boosters classiques restent en vente, Octobre Rose non");
   at('2026-10-08T08:00:00Z');
 
   // ── Répartition (tirages en masse, sans rien persister) ──

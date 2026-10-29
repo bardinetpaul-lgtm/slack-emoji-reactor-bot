@@ -38,12 +38,13 @@ const WAVES = {
 //    Ne jamais modifier une URL une fois distribuée : c'est l'identifiant
 //    de la carte dans les collections.
 const HALLOWEEN_CARD_DEFS = [
-  { url: '', name: '', wave: 1 },
-  { url: '', name: '', wave: 2 },
-  { url: '', name: '', wave: 1 },
-  { url: '', name: '', wave: 2 },
-  { url: '', name: '', wave: 2 },
-  { url: '', name: '', wave: 1 },
+  { url: 'https://slack-files.com/T6EFSEHCN-F0CD3LFP414-6d2bfd1f08', name: '', wave: 1 },
+  { url: 'https://slack-files.com/T6EFSEHCN-F0CD3LH9GDC-b09ce6fcf0', name: '', wave: 2 },
+  { url: 'https://slack-files.com/T6EFSEHCN-F0CD7GD6CPK-3eaa1a1513', name: '', wave: 1 },
+  { url: 'https://slack-files.com/T6EFSEHCN-F0CE00Z10BS-f813ce801a', name: '', wave: 1 },
+  { url: 'https://slack-files.com/T6EFSEHCN-F0CD3LS39C6-ab236168a5', name: '', wave: 2 },
+  { url: 'https://slack-files.com/T6EFSEHCN-F0CD9AQP0JY-6e9e3d268d', name: '', wave: 1 },
+  { url: 'https://slack-files.com/T6EFSEHCN-F0CD3LUDJLW-c05bf50601', name: '', wave: 2 },
 ];
 
 const HALLOWEEN_CARDS = HALLOWEEN_CARD_DEFS.map((d, i) => ({
@@ -94,7 +95,13 @@ function drawHalloweenCard(drawn, exclude = new Set(), now = Date.now()) {
   return least[Math.floor(Math.random() * least.length)];
 }
 
+/** Combien de cartes ne sont pas encore sorties (vague suivante). */
+const lockedCount = (now = Date.now()) => HALLOWEEN_CARDS.filter((c) => c.url && !waveOpen(c.wave, now)).length;
+
+/** Combien de cartes compte la série (liens renseignés). */
+const cardCount = () => HALLOWEEN_CARDS.filter((c) => c.url).length;
+
 module.exports = {
   HALLOWEEN_CARDS, OPEN, CLOSE, WAVES,
-  isReady, inSeason, waveOpen, releasedCards, drawHalloweenCard,
+  isReady, inSeason, waveOpen, releasedCards, drawHalloweenCard, lockedCount, cardCount,
 };

@@ -97,7 +97,8 @@ const wait = (ms) => new Promise((r) => realSetTimeout(r, ms));
   const { SPAM_CARDS } = require(path.join(TMP, 'src', 'spamCards.js'));
   // « Hors série » du classeur, sans les cartes 🎀 Octobre Rose (rangées en tête)
   const ROSE = require(path.join(TMP, 'src', 'octobreRose.js')).ROSE_CARDS.filter((c) => c.url).length;
-  const spamOnly = (album) => album.sections.find((s) => s.key === 'extra').stickers.filter((st) => st.rarity !== 'rose');
+  const HW = require(path.join(TMP, 'src', 'halloween.js')).HALLOWEEN_CARDS.filter((c) => c.url).length;
+  const spamOnly = (album) => album.sections.find((s) => s.key === 'extra').stickers.filter((st) => st.rarity !== 'rose' && st.rarity !== 'halloween');
 
   const react = (user, ts = '111.222') => events.reaction_added({
     event: { reaction: 'jeanpip', user, item: { channel: 'C1', ts } }, client: fakeClient, logger,
@@ -143,7 +144,7 @@ const wait = (ms) => new Promise((r) => realSetTimeout(r, ms));
     assert.deepStrictEqual(extra.map((s) => s.n), SPAM_CARDS.map((c) => c.number));
     assert.ok(extra.every((s) => s.owned && s.rarity === 'extra'));
     assert.match(extra[0].image, /^api\/card-thumb\/F[A-Z0-9]+$/);
-    assert.deepStrictEqual(album.stats.byRarity.extra, { total: 10 + ROSE, owned: 10 });   // + emplacements Octobre Rose vides
+    assert.deepStrictEqual(album.stats.byRarity.extra, { total: 10 + ROSE + HW, owned: 10 });   // + emplacements Octobre Rose et Halloween vides
     const byKey = Object.values(album.stats.byRarity);
     assert.strictEqual(album.stats.owned, byKey.reduce((n, r) => n + r.owned, 0), 'possédées = toutes les sections, Hors série compris');
     assert.strictEqual(album.stats.total, byKey.reduce((n, r) => n + r.total, 0));
