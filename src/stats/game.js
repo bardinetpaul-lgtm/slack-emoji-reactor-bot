@@ -22,8 +22,9 @@ function firstAt(db, type, extra = '') {
 const countBy = (list, keyOf) => list.reduce((acc, x) => { const k = keyOf(x); acc[k] = (acc[k] || 0) + 1; return acc; }, {});
 
 const LAST_PURCHASES = 20;
-// 🎀 Cartes Octobre Rose (rareté interne « rose ») sorties d'un booster
-const roseCount = (cards) => (cards || []).filter((c) => c && c.rarity === 'rose').length;
+// 🎀🎃 Cartes exclusives (hors série : Octobre Rose, Halloween) sorties d'un booster
+const EXCLUSIVE = new Set(['rose', 'halloween']);
+const roseCount = (cards) => (cards || []).filter((c) => c && EXCLUSIVE.has(c.rarity)).length;
 
 // 🎁 Boosters
 function boosters(f, { db }) {

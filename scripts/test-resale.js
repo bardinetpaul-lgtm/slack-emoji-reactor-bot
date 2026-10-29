@@ -117,7 +117,7 @@ const WED = Date.parse('2026-11-04T10:00:00Z');   // mercredi 4 novembre, 11h à
   origLog('\n🧪 Revente des doublons (v3.6)\n');
 
   await test('revendables : dernier exemplaire et cartes des decks protégés, troll exclues', () => {
-    assert.deepStrictEqual(resale.sellableCounts('U_A'), { common: 9 + 1, rare: 1, epic: 1, rose: 0, legendary: 1 });
+    assert.deepStrictEqual(resale.sellableCounts('U_A'), { common: 9 + 1, rare: 1, epic: 1, rose: 0, halloween: 0, legendary: 1 });
     assert.strictEqual(resale.sellable('U_A').common[0].url, 'c1', 'la plus fournie d\'abord');
   });
 

@@ -118,11 +118,17 @@ function buildHomeView(userId, ctx) {
   const seasonalStatus = {
     banned: ban && `🚫 *Booster interdit jusqu'au ${banEndText(ban.until)}* (sanction d'un admin${ban.reason ? ` : ${ban.reason}` : ''}).`,
     weekend: boosters.restockText(now),   // « Pas de booster le week-end » : ligne commune plus bas
-    user_limit: `✅ *Tu as déjà eu le tien aujourd'hui.* Reviens ${boosters.restockText(now).includes('lundi') ? 'lundi' : 'demain'} 😉`,
+    user_limit: `✅ *Tu as déjà eu le tien aujourd'hui.* ${boosters.comeBackDay(seasonal, now) ? `Reviens ${boosters.comeBackDay(seasonal, now)} 😉` : "C'était le dernier jour de la saison 😢"}`,
     sold_out: seasonal && `😢 *Épuisé pour aujourd'hui* : les ${seasonal.dailyStock} boosters du jour sont partis. ${boosters.restockText(now)}`,
     not_yet: `⏳ ${boosters.DROP_TEXT} *Le bouton d'achat apparaîtra ici à leur arrivée.*`,
   }[seasonalBlock] || '';
-  blocks.push(section(`🎁 *Boosters* — 8 cartes chacun, plus il est cher, plus les cartes rares sont probables.${seasonal
+  // 🎃 v3.7 : saisonnier SANS stock du jour (Halloween) — sa propre ligne, et son bouton
+  //    reste dans la liste comme un booster normal (ni limite par personne, ni stock partagé).
+  const special = boosters.listBoosters(now).find((b) => b.seasonal && !b.dailyStock);
+  const specialLine = special ? `
+${special.emoji} *Booster ${special.label}* (${special.price} JP$) : 1 ou 2 cartes exclusives qu'on ne trouve nulle part ailleurs, et 30 % de chances d'une légendaire. *Sans limite par personne*, jusqu'à *${special.season.CLOSE.text}* (fermé samedi et dimanche, comme tout le reste).${special.season.waveOpen(2, now) ? '' : `
+🌑 _${special.season.lockedCount(now)} des ${special.season.cardCount()} cartes Halloween n'arrivent que ${special.season.WAVES[2].label} : impossible de les avoir avant._`}` : '';
+  blocks.push(section(`🎁 *Boosters* — 8 cartes chacun, plus il est cher, plus les cartes rares sont probables.${specialLine}${seasonal
     ? `
 ${seasonal.emoji} *Booster ${seasonal.label}* : 1 ou 2 cartes exclusives qu'on ne trouve nulle part ailleurs, et 30 % de chances d'une légendaire. Seulement *${seasonal.dailyStock} par jour pour tout le monde*${seasonal.weekdaysOnly ? ', *du lundi au vendredi*' : ''}${seasonal.dailyPerUser ? `, *${seasonal.dailyPerUser} par personne*` : ''} !${seasonalStatus ? `
 ${seasonalStatus}` : ''}${spamLock ? `

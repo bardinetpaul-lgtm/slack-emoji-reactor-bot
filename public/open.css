@@ -18,6 +18,8 @@
   --legendary-deep: #a8650b;
   --rose: #ff5fa2;
   --rose-deep: #a3134f;
+  --halloween: #ff8c2b;
+  --halloween-deep: #7a2d00;
 
   --glow: var(--common);
   --display: 'Bebas Neue', Impact, 'Arial Narrow', sans-serif;
@@ -404,6 +406,7 @@ body.has-beams .beams { opacity: 1; }
 .card.r-epic      { --c: var(--epic); --c-deep: var(--epic-deep); }
 .card.r-legendary { --c: var(--legendary); --c-deep: var(--legendary-deep); }
 .card.r-rose      { --c: var(--rose); --c-deep: var(--rose-deep); }
+.card.r-halloween { --c: var(--halloween); --c-deep: var(--halloween-deep); }
 
 .card-inner {
   position: relative;
@@ -531,7 +534,7 @@ body.has-beams .beams { opacity: 1; }
   text-align: center;
   color: #0b1422;
 }
-.card.r-epic .card-info, .card.r-rare .card-info, .card.r-rose .card-info { color: #fff; }
+.card.r-epic .card-info, .card.r-rare .card-info, .card.r-rose .card-info, .card.r-halloween .card-info { color: #fff; }
 .card-name {
   font-family: var(--display);
   font-size: calc(var(--w) * 0.11);

@@ -32,7 +32,7 @@ const { parisDay, parisMinutes } = require('./octobreRose');
 
 const RAIDS_PATH = path.join(__dirname, '..', 'data', 'raids.json');
 
-const PRICE = 50;                 // sans Raid gratuit débloqué (65 Jeanpips dans la semaine, v3.6)
+const PRICE = 30;                 // v3.7 : 50 → 30 (sans Raid gratuit débloqué : 40 Jeanpips dans la semaine)
 const BASE_TARGETS = 5;           // cibles incluses
 const EXTRA_TARGET_PRICE = 10;    // par cible au-delà de 5
 const MAX_TARGETS = 10;

@@ -111,7 +111,7 @@ function brief(type, d) {
     case 'scratch_ticket': return { price: d.price, outcome: d.outcome, symbol: d.symbol, amount: d.amount, score: d.scoreAmount || 0, card: d.card && { title: d.card.title, rarity: d.card.rarity } };
     case 'booster_bought': return { boosterType: d.boosterType, price: d.price };
     case 'booster_opened': {
-      const rank = { common: 0, rare: 1, epic: 2, rose: 2, legendary: 3 };
+      const rank = { common: 0, rare: 1, epic: 2, rose: 2, halloween: 2, legendary: 3 };
       const best = (d.cards || []).reduce((b, c) => (!b || (rank[c.rarity] || 0) > (rank[b.rarity] || 0) ? c : b), null);
       return { boosterType: d.boosterType, best: best && { title: best.title, rarity: best.rarity } };
     }

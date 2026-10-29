@@ -7,7 +7,7 @@
 //    • premier démarrage : 20 Jeanpips par jour, 1 JP$ par Jeanpip (une fois) ;
 //    • 20 Jeanpips comptent, le 21e ne donne plus rien (prévenu) ;
 //    • compteur de l'Accueil, réglage admin, remise à zéro le lendemain ;
-//    • Raid gratuit à 65 Jeanpips dans la semaine.
+//    • Raid gratuit à 40 Jeanpips dans la semaine.
 //
 //  Usage : node scripts/test-daily-jeanpips.js
 // ═══════════════════════════════════════════════════════════
@@ -115,7 +115,7 @@ const req = (m) => require(path.join(TMP, 'src', m));
     settings.setCreditsPerJeanpip(1);
   });
 
-  await test('Raid gratuit à 65 Jeanpips dans la semaine', () => assert.strictEqual(scores.ATTACK_THRESHOLD, 65));
+  await test('Raid gratuit à 40 Jeanpips dans la semaine', () => assert.strictEqual(scores.ATTACK_THRESHOLD, 40));
 
   let n = 0;
   const react = async (user, author) => {

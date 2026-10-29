@@ -35,6 +35,9 @@ function buildRarityLine(media) {
   if (rarity === 'rose') {
     return `${info.emoji} *Carte Octobre Rose !* — _exclusive au booster Octobre Rose_`;
   }
+  if (rarity === 'halloween') {
+    return `${info.emoji} *Carte Halloween !* — _exclusive au booster Halloween_`;
+  }
   if (rarity === 'legendary') {
     return `${info.emoji} *🎉 JEANPIP LÉGENDAIRE ! 🎉* — _seulement 0.5% de chance !_`;
   }
