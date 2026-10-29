@@ -134,11 +134,43 @@
   // ✨ Particules (canvas)
   // ─────────────────────────────────────────────
 
+  // Formes de particules : éclat, étoile, cœur 🎀, chauve-souris 🎃
+  function drawParticle(ctx, shape, s) {
+    if (shape === 'star') {
+      ctx.beginPath();
+      for (let k = 0; k < 4; k++) {
+        ctx.rotate(Math.PI / 2);
+        ctx.lineTo(0, -s * 1.6);
+        ctx.lineTo(s * 0.35, -s * 0.35);
+      }
+      ctx.fill();
+    } else if (shape === 'heart') {
+      ctx.beginPath();
+      ctx.moveTo(0, s * 0.55);
+      ctx.bezierCurveTo(s * 1.1, -s * 0.35, s * 0.5, -s * 1.2, 0, -s * 0.5);
+      ctx.bezierCurveTo(-s * 0.5, -s * 1.2, -s * 1.1, -s * 0.35, 0, s * 0.55);
+      ctx.fill();
+    } else if (shape === 'bat') {
+      ctx.beginPath();
+      ctx.moveTo(0, -s * 0.1);
+      ctx.quadraticCurveTo(-s * 0.9, -s * 1.1, -s * 1.7, -s * 0.35);
+      ctx.quadraticCurveTo(-s * 1.1, -s * 0.1, -s * 0.9, s * 0.5);
+      ctx.quadraticCurveTo(-s * 0.4, s * 0.1, 0, s * 0.7);
+      ctx.quadraticCurveTo(s * 0.4, s * 0.1, s * 0.9, s * 0.5);
+      ctx.quadraticCurveTo(s * 1.1, -s * 0.1, s * 1.7, -s * 0.35);
+      ctx.quadraticCurveTo(s * 0.9, -s * 1.1, 0, -s * 0.1);
+      ctx.fill();
+    } else {
+      ctx.fillRect(-s / 2, -s / 2, s, s * 0.6);
+    }
+  }
+
   const fx = (() => {
     const canvas = $('#fx');
     const ctx = canvas.getContext('2d');
     const parts = [];
-    let raining = null;
+    let raining = null;      // couleur de la pluie en cours
+    let rainOpts = {};       // { shape, up, dense } — habillage du thème
     let running = false;
     let dpr = 1;
 
@@ -158,10 +190,14 @@
     function tick() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       if (raining && Math.random() < 0.9) {
-        for (let k = 0; k < 3; k++) {
+        const up = rainOpts.up;
+        for (let k = 0; k < (rainOpts.dense ? 7 : 3); k++) {
           spawn({
-            x: Math.random() * innerWidth, y: -10, vx: (Math.random() - 0.5) * 1.2, vy: 2 + Math.random() * 3,
-            g: 0.02, life: 0, max: 220, size: 2 + Math.random() * 4, color: raining, spin: Math.random() * 6, star: Math.random() < 0.3,
+            x: Math.random() * innerWidth, y: up ? innerHeight + 12 : -10,
+            vx: (Math.random() - 0.5) * 1.2, vy: up ? -(1 + Math.random() * 2.2) : 2 + Math.random() * 3,
+            g: up ? -0.012 : 0.02, life: 0, max: 220, size: 2 + Math.random() * (rainOpts.dense ? 6 : 4),
+            color: raining, spin: Math.random() * 6,
+            shape: rainOpts.shape || (Math.random() < 0.3 ? 'star' : 'bit'),
           });
         }
       }
@@ -174,7 +210,7 @@
         p.y += p.vy;
         p.spin += 0.1;
         const alpha = Math.max(0, 1 - p.life / p.max);
-        if (alpha <= 0 || p.y > innerHeight + 20) { parts.splice(i, 1); continue; }
+        if (alpha <= 0 || p.y > innerHeight + 20 || p.y < -60) { parts.splice(i, 1); continue; }
         ctx.save();
         ctx.globalAlpha = alpha;
         ctx.translate(p.x * dpr, p.y * dpr);
@@ -182,18 +218,7 @@
         ctx.fillStyle = p.color;
         ctx.shadowColor = p.color;
         ctx.shadowBlur = 8 * dpr;
-        const s = p.size * dpr;
-        if (p.star) {
-          ctx.beginPath();
-          for (let k = 0; k < 4; k++) {
-            ctx.rotate(Math.PI / 2);
-            ctx.lineTo(0, -s * 1.6);
-            ctx.lineTo(s * 0.35, -s * 0.35);
-          }
-          ctx.fill();
-        } else {
-          ctx.fillRect(-s / 2, -s / 2, s, s * 0.6);
-        }
+        drawParticle(ctx, p.shape, p.size * dpr);
         ctx.restore();
       }
       if (parts.length || raining) requestAnimationFrame(tick);
@@ -201,20 +226,26 @@
     }
 
     return {
-      burst(x, y, color, n = 60, power = 9) {
+      burst(x, y, color, n = 60, power = 9, shape = null) {
         if (reducedMotion) return;
         for (let i = 0; i < n; i++) {
           const a = Math.random() * Math.PI * 2;
           const v = power * (0.3 + Math.random() * 0.7);
           spawn({
             x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 2, g: 0.16, life: 0, max: 70 + Math.random() * 50,
-            size: 2 + Math.random() * 5, color, spin: Math.random() * 6, star: Math.random() < 0.35,
+            size: 2 + Math.random() * 5, color, spin: Math.random() * 6,
+            shape: shape && Math.random() < 0.55 ? shape : (Math.random() < 0.35 ? 'star' : 'bit'),
           });
         }
       },
-      rain(color) { if (!reducedMotion) { raining = color; if (!running) { running = true; requestAnimationFrame(tick); } } },
+      rain(color, opts = {}) {
+        if (reducedMotion) return;
+        raining = color;
+        rainOpts = opts;
+        if (!running) { running = true; requestAnimationFrame(tick); }
+      },
       stopRain() { raining = null; },
-      clear() { parts.length = 0; raining = null; },
+      clear() { parts.length = 0; raining = null; rainOpts = {}; },
     };
   })();
 
@@ -324,7 +355,75 @@
   // 🎁 Séquence complète
   // ─────────────────────────────────────────────
 
-  let state = null; // { booster, cards, replay }
+  // 🎃🎀 Thèmes : le décor vient du TYPE de booster, pas de la carte tirée.
+  //    Un pack Halloween est sombre du premier au dernier écran.
+  const THEMES = {
+    halloween:    { cls: 'theme-halloween', rarity: 'halloween', text: 'HALLOWEEN',    rain: { shape: 'bat', up: true }, build: buildHalloween },
+    octobre_rose: { cls: 'theme-rose',      rarity: 'rose',      text: 'OCTOBRE ROSE', rain: { shape: 'heart', dense: true }, build: buildRose },
+  };
+
+  const BAT_SVG = '<svg width="W" height="H" viewBox="0 0 64 34"><g fill="#07040f">'
+    + '<path class="w l" d="M32 18 C24 6 12 4 2 10 c6 2 8 8 6 14 c6-6 14-8 24-6Z"/>'
+    + '<path class="w r" d="M32 18 C40 6 52 4 62 10 c-6 2-8 8-6 14 c-6-6-14-8-24-6Z"/>'
+    + '<path d="M32 10 c4 0 6 4 6 9 c0 6-3 11-6 13 c-3-2-6-7-6-13 c0-5 2-9 6-9Z"/>'
+    + '<path d="M27 9 l-2-6 l5 4Z M37 9 l2-6 l-5 4Z"/></g></svg>';
+  const GHOST_SVG = '<svg width="W" height="H" viewBox="0 0 60 78">'
+    + '<path d="M30 2 C14 2 6 14 6 30 v40 l8-8 l8 8 l8-8 l8 8 l8-8 l8 8 V30 C54 14 46 2 30 2Z" fill="rgba(226,236,255,.72)"/>'
+    + '<circle cx="21" cy="30" r="4.5" fill="#160f2e"/><circle cx="39" cy="30" r="4.5" fill="#160f2e"/>'
+    + '<ellipse cx="30" cy="46" rx="6" ry="8" fill="#160f2e" opacity=".7"/></svg>';
+
+  const rnd = (a, b) => a + Math.random() * (b - a);
+
+  function sceneryNode(cls, html, css) {
+    const node = document.createElement('div');
+    node.className = cls;
+    if (html) node.innerHTML = html;
+    Object.assign(node.style, css);
+    return node;
+  }
+
+  function buildHalloween(host) {
+    host.appendChild(sceneryNode('sc-moon', '', {}));
+    for (let i = 0; i < 7; i++) {
+      const w = rnd(30, 70);
+      host.appendChild(sceneryNode('sc-bat', BAT_SVG.replace('W', w.toFixed(0)).replace('H', (w * 0.53).toFixed(0)), {
+        top: rnd(8, 60) + '%',
+        animation: `bat-cross ${rnd(10, 20).toFixed(1)}s linear ${(-rnd(0, 20)).toFixed(1)}s infinite`,
+      }));
+    }
+    for (let i = 0; i < 3; i++) {
+      const w = rnd(38, 72);
+      host.appendChild(sceneryNode('sc-ghost', GHOST_SVG.replace('W', w.toFixed(0)).replace('H', (w * 1.3).toFixed(0)), {
+        left: rnd(6, 86) + '%',
+        animation: `ghost-rise ${rnd(12, 19).toFixed(1)}s ease-in-out ${(-rnd(0, 15)).toFixed(1)}s infinite`,
+      }));
+    }
+  }
+
+  function buildRose(host) {
+    host.appendChild(sceneryNode('sc-wash', '', {}));
+    for (let i = 0; i < 18; i++) {
+      host.appendChild(sceneryNode('sc-ribbon', '', {
+        left: rnd(-2, 97) + '%',
+        fontSize: rnd(18, 44).toFixed(0) + 'px',
+        animation: `ribbon-fall ${rnd(7, 14).toFixed(1)}s linear ${(-rnd(0, 14)).toFixed(1)}s infinite`,
+      })).textContent = Math.random() < 0.55 ? '🎀' : '💗';
+    }
+  }
+
+  /** Applique le décor du booster (ou l'enlève) → le thème, ou null. */
+  function applyTheme(type) {
+    const theme = THEMES[type] || null;
+    const host = $('#scenery');
+    document.body.classList.toggle('theme-halloween', !!theme && theme.cls === 'theme-halloween');
+    document.body.classList.toggle('theme-rose', !!theme && theme.cls === 'theme-rose');
+    document.body.classList.toggle('is-themed', !!theme);
+    host.innerHTML = '';
+    if (theme && !reducedMotion) theme.build(host);
+    return theme;
+  }
+
+  let state = null; // { booster, cards, replay, theme }
 
   function bestRarity(cards) {
     return cards.reduce((best, c) => ((SHOW_RANK[c.rarity] || 0) > SHOW_RANK[best] ? c.rarity : best), 'common');
@@ -337,6 +436,7 @@
     const label = `BOOSTER\n${(state.booster.label || '').toUpperCase()}`;
     pack.querySelectorAll('.pack-face').forEach((f) => { f.dataset.label = label; });
     $('.replay-tag').hidden = !state.replay;
+    state.theme = applyTheme(state.booster.type);
     atmosphere();
     fx.clear();
     $('#btn-skip').hidden = true;
@@ -370,6 +470,7 @@
 
   async function walkout(r) {
     const best = bestRarity(state.cards);
+    const theme = state.theme;
     const text = $('#walkout-text');
     text.classList.remove('go');
     show('screen-walkout');
@@ -382,11 +483,29 @@
       atmosphere({ dark: true, beams: true });
       sound.fanfare();
       flash('legendary');
-      fx.rain(RARITY.legendary.color);
+      // 🎃🎀 dans un pack à thème, la pluie dorée garde la forme du thème
+      fx.rain(RARITY.legendary.color, theme ? theme.rain : {});
       text.textContent = 'LÉGENDAIRE';
       void text.offsetWidth;
       text.classList.add('go');
       await sleep(r, 3000);
+      fx.stopRain();
+    } else if (theme) {
+      // 🎃🎀 Pack à thème : le walkout est celui du booster, quelle que soit la carte
+      const color = RARITY[theme.rarity].color;
+      atmosphere({ dark: true });
+      await sleep(r, 700);
+      if (r.dead) return;
+      atmosphere({ dark: true, beams: true });
+      setGlow(theme.rarity);
+      sound.reveal(theme.rarity);
+      flash(theme.rarity);
+      fx.rain(color, theme.rain);
+      fx.burst(innerWidth / 2, innerHeight / 2, color, 110, 12, theme.rain.shape);
+      text.textContent = theme.text;
+      void text.offsetWidth;
+      text.classList.add('go');
+      await sleep(r, 2800);
       fx.stopRain();
     } else if (best === 'epic' || best === 'rose' || best === 'halloween') {
       atmosphere({ dark: true, beams: true });
@@ -466,7 +585,17 @@
     }
   }
 
+  // 🏁 v3.8 : l'animation est finie → Slack peut afficher les cartes (plus de spoil)
+  function tellFinished() {
+    if (!state || state.replay || state.toldFinished) return;
+    state.toldFinished = true;
+    const url = new URL(`api/finish/${encodeURIComponent(boosterId)}`, BASE);
+    url.searchParams.set('t', token);
+    fetch(url, { method: 'POST', keepalive: true }).catch(() => { /* sans conséquence */ });
+  }
+
   function showRecap() {
+    tellFinished();
     if (run) run.dead = true;
     fx.stopRain();
     atmosphere({ focus: true });

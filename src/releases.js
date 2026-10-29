@@ -16,6 +16,18 @@
 
 const RELEASES = [
   {
+    version: '3.8.0',
+    date: '2026-10-29',
+    title: 'Les boosters ont leur propre ambiance',
+    changes: [
+      '🎬 L’ouverture animée d’un booster 🎃 *Halloween* se passe maintenant à Lorient de nuit : la lune, des chauves-souris qui traversent l’écran et des fantômes qui montent entre les faisceaux. Au moment du walkout, une nuée de chauves-souris monte du bas de l’écran.',
+      '🎀 Le booster *Octobre Rose* noie l’écran sous le rose, avec une pluie de cœurs et de rubans.',
+      '✨ L’ambiance vient du booster que tu ouvres, pas de la carte que tu tires : un pack Halloween est sombre du premier au dernier écran. Une légendaire garde sa fanfare dorée, mais dans le décor du pack.',
+      '🕶 Correctif : quand tu lances l’ouverture animée, Slack n’affiche plus tes cartes pendant que la page les révèle. Le DM dit simplement « ouverture en cours », et le récap arrive une fois l’animation terminée. Plus de spoil si tu gardes Slack ouvert à côté.',
+      '♿ Si ton système est réglé sur « animations réduites », le décor ne s’affiche pas : l’ouverture reste sobre, comme avant.',
+    ],
+  },
+  {
     version: '3.7.0',
     date: '2026-10-29',
     title: 'Halloween, raids moins chers',

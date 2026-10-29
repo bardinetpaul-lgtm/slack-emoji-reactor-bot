@@ -61,6 +61,8 @@ async function test(name, fn) {
   const base = `http://127.0.0.1:${server.address().port}`;
   const tokenOf = (id, owner) => new URL(web.buildOpenUrl(id, owner)).searchParams.get('t');
   const post = (id, t) => fetch(`${base}/api/open/${id}?t=${t}`, { method: 'POST' });
+  const finish = (id, t) => fetch(`${base}/api/finish/${id}?t=${t}`, { method: 'POST' });
+  const dmText = (u) => JSON.stringify(u.blocks) + ' ' + (u.text || '');
   const totalCards = (u) => collections.getCollection(u).reduce((s, c) => s + c.count, 0);
 
   console.log('\n🧪 Page d\'ouverture animée\n');
@@ -124,12 +126,38 @@ async function test(name, fn) {
     firstCards = data.cards;
   });
 
+  // 🕶 v3.8 : Slack resté ouvert à côté de la page ne doit pas spoiler le pack
+  await test('anti-spoil : le DM d\'ouverture ne nomme aucune carte', () => {
+    const dm = dmText(updates[0]);
+    assert.ok(/ouverture en cours/i.test(dm), 'le DM annonce que l\'ouverture est en cours');
+    for (const c of firstCards) {
+      assert.ok(!dm.includes(c.title), `la carte « ${c.title} » ne doit pas apparaître avant la fin`);
+    }
+  });
+
+  await test('fin de l\'animation → le récap des cartes arrive dans le DM', async () => {
+    assert.strictEqual((await finish(idA, tokenOf(idA, 'U_A'))).status, 200);
+    await new Promise((r) => setTimeout(r, 30));
+    assert.strictEqual(updates.length, 2, 'un 2e message : le récap');
+    const dm = dmText(updates[1]);
+    for (const c of firstCards) {
+      assert.ok(dm.includes(c.title), `la carte « ${c.title} » est listée après l'animation`);
+    }
+  });
+
+  await test('fin signalée deux fois → un seul récap, et token invalide refusé', async () => {
+    assert.strictEqual((await finish(idA, tokenOf(idA, 'U_A'))).status, 200);
+    assert.strictEqual((await finish(idA, 'f'.repeat(64))).status, 403);
+    await new Promise((r) => setTimeout(r, 30));
+    assert.strictEqual(updates.length, 2, 'le récap n\'est pas réécrit');
+  });
+
   await test('rejeu → mêmes cartes, collection non doublée, pas de 2e mise à jour DM', async () => {
     const data = await (await post(idA, tokenOf(idA, 'U_A'))).json();
     assert.strictEqual(data.status, 'replay');
     assert.deepStrictEqual(data.cards, firstCards);
     assert.strictEqual(totalCards('U_A'), 8);
-    assert.strictEqual(updates.length, 1);
+    assert.strictEqual(updates.length, 2, 'ouverture + récap, rien de plus');
     await new Promise((r) => setTimeout(r, 20));
     assert.deepStrictEqual(openedFor, ['U_A'], 'onOpened rappelé sur un rejeu');
   });
