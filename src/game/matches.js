@@ -125,10 +125,11 @@ function setDeck(id, userId, urls, captain = null) {
   const side = match && sideOf(match, userId);
   if (!side) return { ok: false, reason: 'not_player' };
   if (match.status !== 'preparing') return { ok: false, reason: 'not_preparing' };
-  const check = deckRules.validateDeck(collections.getCollection(userId), urls);
+  const available = collections.getAvailableCollection(userId);   // sans les cartes réservées par un échange
+  const check = deckRules.validateDeck(available, urls);
   if (!check.ok) return check;
   match.players[side].deckUrls = urls.slice();
-  match.players[side].captain = captainOf(collections.getCollection(userId), urls, captain);
+  match.players[side].captain = captainOf(available, urls, captain);
   match.players[side].replaced = [];
   arenaStore.setDeck(userId, urls.filter((u) => !shop.isToken(u)), match.players[side].captain);   // devient le deck par défaut (sans les achats)
   broadcast(match);

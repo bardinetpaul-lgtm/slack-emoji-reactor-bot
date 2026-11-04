@@ -109,7 +109,7 @@ const arenaMedia = () => {
 
 // Seulement les cartes POSSÉDÉES : une carte qu'on n'a pas n'apparaît nulle part (ni envoyée)
 function catalogueFor(userId, prefix) {
-  const owned = Object.fromEntries(collections.getCollection(userId).map((c) => [c.url, c.count]));
+  const owned = Object.fromEntries(collections.getAvailableCollection(userId).map((c) => [c.url, c.count]));
   return arenaMedia().filter((m) => owned[m.url] > 0).map((m) => {
     const s = getCardStats(m);
     return {

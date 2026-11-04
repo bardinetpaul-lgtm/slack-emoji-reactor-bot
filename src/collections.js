@@ -131,6 +131,18 @@ function getCollection(userId) {
   return Object.entries(user.cards).map(([url, card]) => ({ url, ...card }));
 }
 
+/**
+ * v3.9 : la collection moins les exemplaires réservés par un échange ou une enchère
+ * en cours. C'est elle que voient l'éditeur de deck et l'enregistrement d'un deck
+ * (jamais le combat : après un transfert, le deck se complète tout seul).
+ */
+function getAvailableCollection(userId) {
+  const reserved = require('./trades').reservedCounts(userId);   // require tardif : pas de cycle au chargement
+  return getCollection(userId)
+    .map((c) => ({ ...c, count: c.count - (reserved.get(c.url) || 0) }))
+    .filter((c) => c.count > 0);
+}
+
 // ─────────────────────────────────────────────
 // ➖ Retirer des cartes (Arène : cartes perdues au combat)
 //    Un exemplaire par URL de la liste (une URL répétée = plusieurs).
@@ -175,4 +187,5 @@ module.exports = {
   copyPhrase,
   getCount,
   getCollection,
+  getAvailableCollection,
 };

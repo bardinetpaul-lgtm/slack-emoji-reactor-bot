@@ -23,6 +23,12 @@ const overrides = {};
 for (const a of ARCHS) for (let i = 1; i <= 5; i += 1) overrides[`${a}${i}`] = { archetype: a };
 fs.writeFileSync(path.join(TMP, 'data', 'card-overrides.json'), JSON.stringify(overrides));
 
+// v3.9 : faux module d'échanges (cartes réservées pilotées par le test)
+const reservedByUser = {};
+const tradesPath = path.join(TMP, 'src', 'trades.js');
+if (!fs.existsSync(tradesPath)) fs.writeFileSync(tradesPath, '');   // le vrai module est remplacé par le faux ci-dessous
+require.cache[tradesPath] = { id: tradesPath, filename: tradesPath, loaded: true, exports: { reservedCounts: (u) => new Map(Object.entries(reservedByUser[u] || {})) } };
+
 const deck = require(path.join(TMP, 'src', 'game', 'deck.js'));
 const { getCardStats } = require(path.join(TMP, 'src', 'game', 'cards.js'));
 
@@ -88,6 +94,27 @@ check('5 cartes ×2 → deck auto de 8 avec des doublons', autoDupes && autoDupe
 check('deck auto : d’abord des cartes différentes', new Set(autoDupes.slice(0, 5)).size === 5);
 const kept = deck.resolveDeck(['tank1', 'tank1', 'tank1', 'sort1'], dupes);
 check('deck sauvegardé : le 3e tank1 (non possédé) est remplacé', kept.urls.filter((u) => u === 'tank1').length === 2 && kept.replaced.join() === 'tank1' && deck.validateDeck(dupes, kept.urls).ok);
+
+// 🔒 v3.9 : une carte réservée par un échange / une enchère ne peut pas entrer dans un deck
+{
+  const collections = require(path.join(TMP, 'src', 'collections.js'));
+  const matches = require(path.join(TMP, 'src', 'game', 'matches.js'));
+  const base = ['tank1', 'guerrier2', 'guerrier3', 'tireur2', 'tireur3', 'essaim1', 'sort1'];
+  collections.addCards('UR', [...base, 'vigie1', 'vigie1'].map((u) => ({ url: u, title: u, rarity: 'common' })));
+  collections.addCards('UO', ['a1', 'a2', 'a3', 'a4', 'a5', 'a6', 'a7', 'a8'].map((u) => ({ url: u, title: u, rarity: 'common' })));
+  const twice = [...base, 'vigie1', 'vigie1'].slice(1);   // vigie1 ×2 + 6 autres = 8
+  const m = matches.createMatchFor('UR', 'UO', Date.now());
+  check('sans réservation : vigie1 ×2 acceptée', m.id && matches.setDeck(m.id, 'UR', twice).ok);
+  reservedByUser.UR = { vigie1: 1 };
+  const avail = collections.getAvailableCollection('UR');
+  check('1 des 2 vigie1 réservée : la collection disponible n’en montre qu’1', avail.find((x) => x.url === 'vigie1').count === 1);
+  check('enregistrer un deck avec vigie1 ×2 est refusé (copies)', matches.setDeck(m.id, 'UR', twice).reason === 'copies');
+  check('vigie1 ×1 reste acceptée', matches.setDeck(m.id, 'UR', [...base, 'vigie1']).ok);
+  reservedByUser.UR = { vigie1: 2 };
+  check('toutes les copies réservées : la carte disparaît de la collection disponible', !collections.getAvailableCollection('UR').some((x) => x.url === 'vigie1'));
+  check('toutes réservées : deck avec cette carte refusé (not_owned)', matches.setDeck(m.id, 'UR', [...base, 'vigie1']).reason === 'not_owned');
+  check('la collection réelle est inchangée', collections.getCollection('UR').find((x) => x.url === 'vigie1').count === 2);
+}
 
 try { require(path.join(TMP, 'src', 'db.js')).close(); } catch { /* base jamais ouverte */ }   // Windows : fichier ouvert = non supprimable
 fs.rmSync(TMP, { recursive: true, force: true });
