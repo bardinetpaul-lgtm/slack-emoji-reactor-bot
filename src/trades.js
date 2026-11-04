@@ -176,7 +176,7 @@ function createDirect({ buyer, seller, code, jp = 0, cards = [], now = Date.now(
   if (!seller || blockReason(seller, now)) return { ok: false, error: 'blocked_seller' };
 
   const data = _load();
-  const card = cardIndex.byCode(code);
+  const card = cardIndex.byCode(code, seller);
   if (!card || _cessibleCount(seller, card.url, data) < 1) return { ok: false, error: 'unavailable' };
 
   const amount = _amount(jp);
@@ -344,7 +344,7 @@ function createAuction({ seller, code, startPrice, now = Date.now() }) {
   if (weekend.isPausedDay(parisDay(endsAt))) return { ok: false, error: 'ends_in_pause' };
 
   const data = _load();
-  const card = cardIndex.byCode(code);
+  const card = cardIndex.byCode(code, seller);
   if (!card || _cessibleCount(seller, card.url, data) < 1) return { ok: false, error: 'unavailable' };
   const price = startPrice == null ? floor(card.rarity) : Number(startPrice);
   if (!Number.isInteger(price) || price < floor(card.rarity)) return { ok: false, error: 'floor' };

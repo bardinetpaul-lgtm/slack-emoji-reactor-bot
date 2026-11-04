@@ -114,10 +114,15 @@ const actionIds = (x) => (flat(x).match(/"action_id":"trade_[a-z_]+"/g) || []);
   const HW2 = cardIndex.byCode('HW2');
   const C1 = cardIndex.listCards().find((c) => c.rarity === 'common');
 
-  for (const u of ['UA', 'UB']) broadcast.subscribe(u);
+  for (const u of ['UA', 'UB', 'UC']) broadcast.subscribe(u);
   credits.addCredit('UA', 100, { source: 'test' });
   collections.addCards('UB', [{ ...HW1 }]);
   collections.addCards('UA', [{ ...C1 }]);
+  // Cartes retirées de la banque : restent échangeables (numéro du titre, sinon le titre)
+  const RB = { url: 'https://x.test/retiree-b', title: 'Vieille carte #999', rarity: 'rare', type: 'image' };
+  const RA = { url: 'https://x.test/retiree-a', title: 'Souvenir sans numéro', rarity: 'common', type: 'image' };
+  collections.addCards('UB', [RB]);
+  collections.addCards('UA', [RA]);
   // Accueils « déjà ouverts » : refreshHome ne republie que ceux-là
   for (const u of ['UA', 'UB']) await find(events, 'app_home_opened')({ event: { tab: 'home', user: u }, client: fakeClient, logger });
 
@@ -125,7 +130,7 @@ const actionIds = (x) => (flat(x).match(/"action_id":"trade_[a-z_]+"/g) || []);
   const pickSeller = (user, seller) => find(actions, 'trade_direct_seller')({
     ack,
     body: { user: { id: user }, view: { id: 'V1', hash: 'h1', private_metadata: '' } },
-    action: { action_id: 'trade_direct_seller', selected_user: seller },
+    action: { action_id: 'trade_direct_seller', selected_option: { value: seller } },
     client: fakeClient, logger,
   });
   const submit = async (user, { seller, code, jp, cards = [] }) => {
@@ -137,7 +142,7 @@ const actionIds = (x) => (flat(x).match(/"action_id":"trade_[a-z_]+"/g) || []);
         private_metadata: '',
         state: {
           values: {
-            seller: { trade_direct_seller: { selected_user: seller } },
+            seller: { trade_direct_seller: { selected_option: seller ? { value: seller } : null } },
             card: { value: { selected_option: code ? { value: code } : null } },
             jp: { value: { value: jp == null ? null : String(jp) } },
             cards: { value: { selected_options: cards.map((c) => ({ value: c })) } },
@@ -167,7 +172,10 @@ const actionIds = (x) => (flat(x).match(/"action_id":"trade_[a-z_]+"/g) || []);
   // ── Modale de demande ──
   await directOpen('UA');
   const v0 = opened.at(-1).view;
-  check(v0.callback_id === 'trade_direct_submit' && flat(v0).includes('users_select') && flat(v0).includes('trade_direct_seller'), 'bouton « Demander une carte » : modale avec le choix du joueur');
+  check(v0.callback_id === 'trade_direct_submit' && flat(v0).includes('trade_direct_seller'), 'bouton « Demander une carte » : modale avec le choix du joueur');
+  const sellerEl = v0.blocks.find((b) => b.block_id === 'seller').element;
+  const sellerValues = sellerEl.options.map((o) => o.value).sort();
+  check(sellerEl.type === 'static_select' && flat(sellerValues) === flat(['UB', 'UC']) && sellerEl.options.some((o) => o.text.text === 'Nom UB'), 'choix du joueur : seulement les inscrits (UB, UC, par leur nom), ni moi ni un non-inscrit');
   await pickSeller('UA', 'UB');
   const v1 = viewUpdates.at(-1);
   check(v1 && v1.view_id === 'V1' && v1.view.callback_id === 'trade_direct_submit', 'choix de B : la modale est mise à jour (views.update)');
@@ -175,6 +183,8 @@ const actionIds = (x) => (flat(x).match(/"action_id":"trade_[a-z_]+"/g) || []);
   check(text1.includes('*HW1*') && text1.includes('~HW2~') && !text1.includes('*HW2*'), 'liste des numéros : HW1 disponible (gras), HW2 barré');
   check(text1.includes('static_select') && text1.includes('option_groups') && text1.includes('"value":"HW1"') && !text1.includes('"value":"HW2"'), 'menu : seulement les codes disponibles, groupés par rareté');
   check(text1.includes('number_input') && text1.includes('multi_static_select') && text1.includes(`"value":"${C1.code}"`), 'offre : JP$ (number_input) + mes cartes cessibles (multi_static_select)');
+  check(text1.includes('*#999*') && text1.includes('"value":"#999"'), 'carte retirée de B : listée (#999 tiré du titre) et demandable');
+  check(text1.includes('"value":"Souvenir sans numéro"'), 'carte retirée de A (sans numéro) : proposable, désignée par son titre');
 
   // ── Soumission ──
   const low = await submit('UA', { seller: 'UB', code: 'HW1', jp: 5 });
@@ -213,6 +223,14 @@ const actionIds = (x) => (flat(x).match(/"action_id":"trade_[a-z_]+"/g) || []);
   check(trades.getTrade(t2.id).status === 'refused' && credits.getBalance('UA') === 88, 'B refuse : A est remboursé (88 JP$)');
   check(/refus/i.test(flat(dmsTo('UA').at(-1))), 'DM de résultat à A (refusée)');
 
+  // ── Cartes retirées de la banque, des deux côtés ──
+  check(await submit('UA', { seller: 'UB', code: '#999', cards: ['Souvenir sans numéro'] }) === null, 'A demande la carte retirée #999 de B contre sa carte retirée « Souvenir sans numéro »');
+  const tr = trades.openTradesOf('UA')[0];
+  check(tr && tr.card.url === RB.url && flat(tr.offer.cards) === flat([RA.url]), 'échange ouvert sur les bonnes cartes');
+  check(flat(dmsTo('UB').at(-1)).includes('Souvenir sans numéro'), 'DM de B : la carte proposée est nommée par son titre');
+  await click('trade_accept', 'UB', tr.id);
+  check(collections.getCount('UA', RB.url) === 1 && collections.getCount('UB', RA.url) === 1 && collections.getCount('UA', RA.url) === 0, 'B accepte : les deux cartes retirées ont changé de main');
+
   // ── Samedi : pause ──
   at('2026-11-06T22:30:00Z');   // vendredi 23h30
   check(await submit('UA', { seller: 'UB', code: 'HW1', jp: 20 }) === null, 'vendredi 23h30 : demande envoyée');
@@ -233,8 +251,22 @@ const actionIds = (x) => (flat(x).match(/"action_id":"trade_[a-z_]+"/g) || []);
 
   // ── Désinscription ──
   at('2026-11-10T09:00:00Z');   // mardi suivant
+  const balBefore = credits.getBalance('UA');
+  check(await submit('UA', { seller: 'UB', code: 'HW1', jp: 11 }) === null && credits.getBalance('UA') === balBefore - 11, 'mardi : nouvelle demande de 11 JP$');
+  const t4 = trades.openTradesOf('UA').find((t) => t.offer.jp === 11);
+  const t3Held = trades.getTrade(t3.id).status === 'open' ? 20 : 0;   // la demande du vendredi, si encore ouverte
+  const leavePosted = posted.length;
+  const leaveUpd = updated.length;
+  const leavePub = published.length;
   await find(actions, 'broadcast_leave')({ ack, body: { user: { id: 'UB' } }, action: { action_id: 'broadcast_leave' }, client: fakeClient, logger });
-  check(!broadcast.isSubscribed('UB'), 'B se désinscrit sans erreur (hook onUnsubscribe)');
+  check(!broadcast.isSubscribed('UB'), 'B se désinscrit');
+  check(trades.getTrade(t4.id).status === 'cancelled' && credits.getBalance('UA') === balBefore + t3Held, 'ses demandes en cours sont annulées, A remboursé');
+  const leaveDM = posted.slice(leavePosted).find((m) => m.channel === 'D_UA');
+  check(leaveDM && /annulée/.test(flat(leaveDM)) && /rendus/.test(flat(leaveDM)), 'DM à A : « annulée », JP$ rendus');
+  const leaveU = updated.slice(leaveUpd).find((m) => m.channel === 'D_UB');
+  check(leaveU && !actionIds(leaveU).length && /annulé/.test(flat(leaveU)), 'le DM de B passe à « échange annulé », sans boutons');
+  const lp = published.slice(leavePub).map((p) => p.user_id);
+  check(lp.includes('UA') && lp.includes('UB'), 'Accueils de A et B rafraîchis');
 
   // ── Table des erreurs ──
   const codes = ['self', 'blocked_buyer', 'blocked_seller', 'unavailable', 'cards_unavailable', 'floor', 'empty', 'balance', 'bad_amount', 'expired', 'closed', 'not_seller', 'not_subscribed', 'pause', 'raid', 'farm'];

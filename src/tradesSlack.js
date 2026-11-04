@@ -50,6 +50,7 @@ const ERROR_TEXT = {
   pause: 'Jeanpip est en pause : pas d\'échange pour le moment.',
   raid: 'Tu subis un raid : pas d\'échange avant sa fin.',
   farm: 'Tu es sous pénalité anti-farm : pas d\'échange avant sa fin.',
+  unsubscribed: 'un des deux joueurs a quitté la liste de diffusion /jeanpip.',
 };
 
 const section = (text, accessory) => ({ type: 'section', text: { type: 'mrkdwn', text }, ...(accessory ? { accessory } : {}) });
@@ -84,7 +85,8 @@ function byRarity(cards) {
 }
 
 /** Menu (static_select ou multi_static_select) groupé par rareté, ou champ texte au-delà de 100 options. */
-function cardPicker(cards, { multi, placeholder, textHint }) {
+function cardPicker(allCards, { multi, placeholder, textHint }) {
+  const cards = allCards.filter((c) => c.code.length <= 150);   // limite Slack de la valeur d'une option
   if (cards.length > MAX_OPTIONS) {
     return {
       element: { type: 'plain_text_input', action_id: 'value', placeholder: plainText(textHint) },
@@ -98,7 +100,7 @@ function cardPicker(cards, { multi, placeholder, textHint }) {
       placeholder: plainText(placeholder),
       option_groups: byRarity(cards).map(([r, list]) => ({
         label: plainText(RARITY_LABEL[r]),
-        options: list.map((c) => option(multi && c.title ? `${c.code} · ${c.title}` : c.code, c.code)),
+        options: list.map((c) => option(multi && c.title && c.title !== c.code ? `${c.code} · ${c.title}` : c.code, c.code)),
       })),
     },
   };
@@ -116,11 +118,20 @@ function chunkSections(lines) {
   return out;
 }
 
-/** « 12 JP$ + #3, HW1 » */
-function describeOffer(offer) {
+/** Code d'une carte (`url`) : index, sinon carte retirée chez l'un des `holders`. */
+function urlCode(url, holders = []) {
+  for (const h of holders) {
+    const c = h && cardIndex.listCardsFor(h).find((x) => x.url === url);
+    if (c) return c.code;
+  }
+  return cardIndex.codeOf(url) || '?';
+}
+
+/** « 12 JP$ + #3, HW1 » (`holders` : où chercher les cartes retirées de la banque) */
+function describeOffer(offer, holders = []) {
   const parts = [];
   if (offer.jp > 0) parts.push(`*${offer.jp} JP$*`);
-  if (offer.cards && offer.cards.length) parts.push(offer.cards.map((url) => `*${cardIndex.codeOf(url)}*`).join(', '));
+  if (offer.cards && offer.cards.length) parts.push(offer.cards.map((url) => `*${urlCode(url, holders)}*`).join(', '));
   return parts.join(' + ') || 'rien';
 }
 
@@ -181,6 +192,36 @@ function infoModal(title, text) {
 
 const buildSoonModal = (title) => infoModal(title, '🚧 *Bientôt disponible !* Cette façon d\'échanger arrive dans quelques jours.');
 
+// Noms des joueurs (users.info), gardés en mémoire pour le menu des inscrits
+const names = new Map();
+
+/** Charge les noms manquants, sans attendre plus de `ms` (le trigger_id d'une modale expire en 3 s). */
+async function loadNames(client, ids, ms = 1500) {
+  const missing = ids.filter((id) => !names.has(id));
+  if (!missing.length) return;
+  const all = Promise.all(missing.map((id) => client.users.info({ user: id })
+    .then((r) => { const u = (r && r.user) || {}; names.set(id, (u.profile && u.profile.display_name) || u.real_name || u.name || id); })
+    .catch(() => {})));
+  let timer;
+  await Promise.race([all, new Promise((r) => { timer = setTimeout(r, ms); if (timer.unref) timer.unref(); })]);
+  clearTimeout(timer);
+}
+
+/** Choix du vendeur : menu des seuls inscrits (sauf l'acheteur) ; au-delà de 100, sélecteur Slack. */
+function sellerElement(buyer, seller) {
+  const subs = broadcast.getSubscribers().filter((u) => u && u !== buyer);
+  if (subs.length > MAX_OPTIONS) {
+    return { type: 'users_select', action_id: 'trade_direct_seller', placeholder: plainText('Choisis un joueur'), ...(seller ? { initial_user: seller } : {}) };
+  }
+  if (!subs.length) return null;
+  const options = subs.map((u) => option(names.get(u) || u, u)).sort((a, b) => a.text.text.localeCompare(b.text.text, 'fr'));
+  const initial = seller && options.find((o) => o.value === seller);
+  return { type: 'static_select', action_id: 'trade_direct_seller', placeholder: plainText('Choisis un joueur inscrit'), options, ...(initial ? { initial_option: initial } : {}) };
+}
+
+/** Vendeur choisi, quel que soit le menu (static_select des inscrits ou users_select). */
+const pickedUser = (el) => (el && (el.selected_user || (el.selected_option && el.selected_option.value))) || null;
+
 /**
  * Demande à une personne. Sans `seller` : seulement le choix du joueur
  * (dispatch_action → views.update avec le vendeur choisi).
@@ -191,12 +232,14 @@ function buildDirectModal(buyer, seller = null, now = Date.now()) {
   const reason = trades.blockReason(buyer, now);
   if (reason) return infoModal('Demander une carte', ERROR_TEXT[reason]);
 
+  const sellerEl = sellerElement(buyer, seller);
+  if (!sellerEl) return infoModal('Demander une carte', '😕 Aucun autre joueur n\'est inscrit à `/jeanpip` pour le moment.');
   const blocks = [{
     type: 'input',
     block_id: 'seller',
     dispatch_action: true,
     label: plainText('À qui demandes-tu une carte ?'),
-    element: { type: 'users_select', action_id: 'trade_direct_seller', placeholder: plainText('Choisis un joueur'), ...(seller ? { initial_user: seller } : {}) },
+    element: sellerEl,
   }];
   const view = {
     type: 'modal',
@@ -208,7 +251,7 @@ function buildDirectModal(buyer, seller = null, now = Date.now()) {
     blocks,
   };
   if (!seller) {
-    blocks.push(context('Tu verras ensuite les numéros de ses cartes. Seuls les joueurs inscrits à `/jeanpip` peuvent échanger.'));
+    blocks.push(context('Tu verras ensuite les numéros de ses cartes. Seuls les joueurs inscrits à `/jeanpip` sont proposés.'));
     return view;
   }
   if (seller === buyer) { blocks.push(section(`⚠️ ${ERROR_TEXT.self}`)); return view; }
@@ -216,7 +259,7 @@ function buildDirectModal(buyer, seller = null, now = Date.now()) {
 
   // Liste des numéros : disponibles en gras, non disponibles barrés (jamais d'image)
   const free = trades.cessible(seller);
-  const all = cardIndex.listCards();
+  const all = cardIndex.listCardsFor(seller);   // + ses cartes retirées de la banque
   const available = all.filter((c) => free.has(c.url));
   const lines = byRarity(all).map(([r, list]) => `${RARITY_LABEL[r]} : ${list.map((c) => (free.has(c.url) ? `*${c.code}*` : `~${c.code}~`)).join(' ')}`);
   blocks.push(...chunkSections([`*Les cartes de <@${seller}>* — en gras : disponibles · ~barrées~ : non disponibles`, ...lines]));
@@ -237,7 +280,7 @@ function buildDirectModal(buyer, seller = null, now = Date.now()) {
     hint: plainText('Sans carte en échange : au moins le prix de rachat de la banque (commune 1, rare 2, épique 5, hors série 10, légendaire 20).'),
   });
   const mineFree = trades.cessible(buyer);
-  const mine = all.filter((c) => mineFree.has(c.url));
+  const mine = cardIndex.listCardsFor(buyer).filter((c) => mineFree.has(c.url));
   if (mine.length) {
     const offered = cardPicker(mine, { multi: true, placeholder: 'Choisis tes cartes', textHint: '#12, HW3' });
     blocks.push({ type: 'input', block_id: 'cards', optional: true, label: plainText('Et / ou tes cartes en échange'), ...offered });
@@ -254,7 +297,7 @@ function buildDirectModal(buyer, seller = null, now = Date.now()) {
 
 function sellerStatusLine(trade) {
   switch (trade.status) {
-    case 'done': return `✅ *Échange conclu* : la carte est partie chez <@${trade.buyer}>, tu as reçu ${describeOffer(trade.offer)}.`;
+    case 'done': return `✅ *Échange conclu* : la carte est partie chez <@${trade.buyer}>, tu as reçu ${describeOffer(trade.offer, [trade.buyer, trade.seller])}.`;
     case 'refused': return `✖️ *Tu as refusé cette demande.* <@${trade.buyer}> a été prévenu.`;
     case 'expired': return '⌛ *Demande expirée* : tu n\'as pas répondu à temps.';
     case 'cancelled': return `🚫 *Échange annulé*${ERROR_TEXT[trade.reason] ? ` : ${ERROR_TEXT[trade.reason]}` : '.'}`;
@@ -264,7 +307,7 @@ function sellerStatusLine(trade) {
 
 /** DM au vendeur : la demande, puis les boutons (ouverte) ou la décision. */
 function buildSellerDM(trade, sellerId) {
-  const head = `🤝 *<@${trade.buyer}> te demande ta carte* ${cardLine(trade.card)}\nSon offre : ${describeOffer(trade.offer)}${trade.offer.jp > 0 ? ' (déjà mis de côté)' : ''}.`;
+  const head = `🤝 *<@${trade.buyer}> te demande ta carte* ${cardLine(trade.card)}\nSon offre : ${describeOffer(trade.offer, [trade.buyer, trade.seller])}${trade.offer.jp > 0 ? ' (déjà mis de côté)' : ''}.`;
   const blocks = [];
   if (trade.status === 'open') {
     blocks.push(section(`${head}\n⏳ Réponds avant *${hour(trade.expiresAt)}*, sinon la demande expire.`));
@@ -292,7 +335,7 @@ function buildBuyerResultDM(trade, event) {
   ].filter(Boolean).join(' et ');
   const giveBack = back ? `\n↩️ ${back.charAt(0).toUpperCase()}${back.slice(1)}.` : '';
   const text = {
-    accepted: `✅ *<@${trade.seller}> a accepté ton échange !* La carte ${card} est dans ton classeur. Tu as cédé ${describeOffer(trade.offer)}.`,
+    accepted: `✅ *<@${trade.seller}> a accepté ton échange !* La carte ${card} est dans ton classeur. Tu as cédé ${describeOffer(trade.offer, [trade.buyer, trade.seller])}.`,
     refused: `✖️ *<@${trade.seller}> a refusé ta demande* pour la carte ${card}.${giveBack}`,
     expired: `⌛ *<@${trade.seller}> n'a pas répondu à temps* : ta demande pour la carte ${card} a expiré.${giveBack}`,
     cancelled: `🚫 *Ta demande pour la carte ${card} est annulée* : ${ERROR_TEXT[trade.reason] || ERROR_TEXT.closed}${giveBack}`,
@@ -301,7 +344,7 @@ function buildBuyerResultDM(trade, event) {
 }
 
 function buildBuyerSentDM(trade) {
-  const text = `📨 *Demande envoyée à <@${trade.seller}>* pour la carte ${cardLine(trade.card)}.\nTon offre : ${describeOffer(trade.offer)}. Réponse attendue avant *${hour(trade.expiresAt)}*, sinon tout t'est rendu.`;
+  const text = `📨 *Demande envoyée à <@${trade.seller}>* pour la carte ${cardLine(trade.card)}.\nTon offre : ${describeOffer(trade.offer, [trade.buyer, trade.seller])}. Réponse attendue avant *${hour(trade.expiresAt)}*, sinon tout t'est rendu.`;
   return { text: text.replace(/\*/g, ''), blocks: [section(text)] };
 }
 
@@ -309,16 +352,19 @@ function buildBuyerSentDM(trade) {
 // 📝 Lecture de la modale
 // ─────────────────────────────────────────────
 
-/** Codes saisis (menu ou champ texte) → { cards: [carte], bad: [code] } */
-function readCodes(field) {
+/**
+ * Codes saisis (menu ou champ texte) → { cards: [carte], bad: [code] }.
+ * `holder` : celui qui possède les cartes (ses cartes retirées de la banque sont reconnues).
+ */
+function readCodes(field, holder) {
   if (!field) return { cards: [], bad: [] };
   const raw = field.selected_options ? field.selected_options.map((o) => o.value)
     : field.selected_option ? [field.selected_option.value]
-      : String(field.value || '').split(/[,;\s]+/);
+      : String(field.value || '').split(/[,;]+/);   // pas d'espace : un titre de carte retirée en contient
   const codes = raw.map((c) => String(c || '').trim()).filter(Boolean);
   const cards = [];
   const bad = [];
-  for (const code of codes) { const c = cardIndex.byCode(code); if (c) cards.push(c); else bad.push(code); }
+  for (const code of codes) { const c = cardIndex.byCode(code, holder); if (c) cards.push(c); else bad.push(code); }
   return { cards, bad };
 }
 
@@ -353,17 +399,19 @@ function register(app, ctx) {
   // 🏠 Boutons de l'Accueil
   app.action('trade_direct_open', async ({ ack, body, client, logger }) => {
     await ack();
+    await loadNames(client, broadcast.getSubscribers());
     await ctx.openModal(client, body, buildDirectModal(body.user.id), logger);
   });
   app.action('trade_general_open', async ({ ack, body, client, logger }) => {
     await ack();
-    await ctx.openModal(client, body, buildSoonModal('Demande générale'), logger);
+    await ctx.openModal(client, body, buildGeneralModal(body.user.id), logger);
   });
   // 👤 Choix du vendeur : la modale se complète avec ses numéros et l'offre
   app.action('trade_direct_seller', async ({ ack, body, action, client }) => {
     await ack();
     try {
-      await client.views.update({ view_id: body.view.id, hash: body.view.hash, view: buildDirectModal(body.user.id, action.selected_user || null) });
+      await loadNames(client, broadcast.getSubscribers());
+      await client.views.update({ view_id: body.view.id, hash: body.view.hash, view: buildDirectModal(body.user.id, pickedUser(action)) });
     } catch (e) { log('mise à jour de la modale', e); }
   });
 
@@ -372,20 +420,26 @@ function register(app, ctx) {
     const buyer = body.user.id;
     const now = Date.now();
     const values = view.state.values;
-    const seller = (values.seller && values.seller.trade_direct_seller && values.seller.trade_direct_seller.selected_user) || view.private_metadata || null;
+    const seller = pickedUser(values.seller && values.seller.trade_direct_seller) || view.private_metadata || null;
     const fail = (field, text) => ack({ response_action: 'errors', errors: { [values[field] ? field : 'seller']: text } });
 
     const pause = weekend.pauseFor(buyer, now);
     if (pause) return fail('seller', pauseText(pause));
     if (!seller) return fail('seller', 'Choisis un joueur.');
-    const wanted = readCodes(values.card && values.card.value);
+    const wanted = readCodes(values.card && values.card.value, seller);
     if (wanted.bad.length || wanted.cards.length !== 1) return fail('card', wanted.bad.length ? `Numéro inconnu : ${wanted.bad[0]}.` : 'Choisis une carte.');
-    const offered = readCodes(values.cards && values.cards.value);
+    const offered = readCodes(values.cards && values.cards.value, buyer);
     if (offered.bad.length) return fail('cards', `Numéro inconnu : ${offered.bad.join(', ')}.`);
     const raw = values.jp && values.jp.value && values.jp.value.value;
     const jp = raw == null || String(raw).trim() === '' ? 0 : Number(raw);
 
-    const res = trades.createDirect({ buyer, seller, code: wanted.cards[0].code, jp, cards: offered.cards.map((c) => c.url), now });
+    let res;
+    try {
+      res = trades.createDirect({ buyer, seller, code: wanted.cards[0].code, jp, cards: offered.cards.map((c) => c.url), now });
+    } catch (e) {
+      log('création de la demande', e);
+      return fail('seller', ERROR_TEXT.closed);
+    }
     if (!res.ok) {
       let text = errorFor(res.error, buyer, { asBuyer: true, now });
       if (res.error === 'floor') text = `${ERROR_TEXT.floor} : ${trades.floor(wanted.cards[0].rarity)} JP$ minimum pour cette carte.`;
@@ -408,6 +462,7 @@ function register(app, ctx) {
     const tradeId = String(action.value || '').split('|')[0];
     const pause = weekend.pauseFor(userId, now);
     if (pause) return reply(client, body, pauseText(pause));
+    if ((trades.getTrade(tradeId) || {}).kind === 'general') return generalSellerClick(ctx, actionId, { body, client, tradeId, now });
 
     const res = decide(tradeId, userId, now);
     if (res.ok || (res.trade && res.trade.status !== 'open')) {
@@ -426,18 +481,45 @@ function register(app, ctx) {
   });
   sellerAction('trade_accept', trades.accept, 'accepted');
   sellerAction('trade_refuse', trades.refuse, 'refused');
+  registerGeneral(app, ctx);
   registerAuction(app, ctx);   // 🔨 section « Enchères et minuterie »
 }
 
+/** DM à l'acheteur : la contre-offre de `sellerId` est annulée (il a quitté /jeanpip). */
+function buildCounterCancelledDM(trade, sellerId) {
+  const text = `🚫 *La contre-offre de <@${sellerId}>* pour la carte ${cardLine(trade.card)} est annulée : ${ERROR_TEXT.unsubscribed}`;
+  return { text: text.replace(/\*/g, ''), blocks: [section(text)] };
+}
+
 /**
- * Le joueur quitte /jeanpip : ses échanges en cours sont annulés (trades.onUnsubscribe,
- * tâche 5, si présent) et les Accueils concernés republiés.
+ * Le joueur quitte /jeanpip : trades.onUnsubscribe annule ses demandes (et celles qui
+ * le visent) et ses contre-offres. L'acheteur touché est prévenu (annulée, remboursé),
+ * les DM gardés (trade.dms) passent à l'état fermé, les Accueils sont republiés.
  */
 async function onUnsubscribe(client, userId) {
   const involved = new Set([userId]);
   for (const t of trades.openTradesOf(userId)) { involved.add(t.buyer); involved.add(t.seller); }
-  if (typeof trades.onUnsubscribe === 'function') trades.onUnsubscribe(userId, Date.now());
+  const evs = typeof trades.onUnsubscribe === 'function' ? (trades.onUnsubscribe(userId, Date.now()) || []) : [];
   if (!registered) return;
+  const log = (what, e) => console.error(`❌ Échanges (${what}) :`, e.data ? e.data.error : e.message);
+  const dm = async (u, msg) => { try { return await registered.sendDM(client, u, msg); } catch (e) { log(`DM <@${u}>`, e); return null; } };
+  for (const { trade, event, counter } of evs) {
+    involved.add(trade.buyer);
+    if (trade.seller) involved.add(trade.seller);
+    if (event === 'counter_cancelled') {
+      await dm(trade.buyer, buildCounterCancelledDM(trade, counter));
+      continue;
+    }
+    if (event !== 'cancelled') continue;
+    console.log(`🤝 ${trade.id} annulé : <@${userId}> a quitté /jeanpip`);
+    for (const [u, ref] of Object.entries(trade.dms || {})) {
+      if (u === trade.buyer || !ref) continue;
+      involved.add(u);
+      const msg = buildSellerDM(trade, u);
+      try { await client.chat.update({ channel: ref.channel, ts: ref.ts, text: msg.text, blocks: msg.blocks }); } catch (e) { log('mise à jour DM vendeur', e); }
+    }
+    if (trade.buyer !== userId) await dm(trade.buyer, buildBuyerResultDM(trade, 'cancelled'));
+  }
   await Promise.all([...involved].filter(Boolean).map((u) => registered.refreshHome(client, u, console)));
 }
 
@@ -450,6 +532,404 @@ module.exports = {
   register,
   onUnsubscribe,
 };
+
+// ═══════════════════════════════════════════════════════════
+//  📣 DEMANDE GÉNÉRALE ET CONTRE-OFFRES (tâche 7b)
+//    • demande générale : modale (numéro → offre), DM à chaque
+//      propriétaire inscrit qui peut céder la carte (Accepter / Refuser /
+//      Contre-offre) ; le premier qui accepte conclut, les autres DM
+//      passent à « déjà conclue » ;
+//    • contre-offre (demande générale ou à une personne) : modale du
+//      vendeur (JP$ + cartes de l'acheteur, numéros seulement), DM à
+//      l'acheteur (Accepter / Refuser la contre-offre).
+//  Références des DM (trade.dms) : clé = joueur pour le DM de demande,
+//  `counter_<vendeur>` pour le DM de contre-offre reçu par l'acheteur.
+// ═══════════════════════════════════════════════════════════
+
+Object.assign(ERROR_TEXT, {
+  no_owner: 'Personne ne peut te céder cette carte pour le moment : aucun joueur inscrit et disponible n\'en a un exemplaire libre.',
+  already_countered: 'Tu as déjà fait une contre-offre pour cette demande : une seule par personne.',
+  not_buyer: 'Cette contre-offre ne t\'est pas adressée.',
+  no_counter: 'Cette contre-offre n\'existe plus.',
+  counter_closed: 'Cette contre-offre est déjà acceptée, refusée ou expirée.',
+});
+
+const COUNTER_KEY = 'counter_';
+const counterKey = (sellerId) => `${COUNTER_KEY}${sellerId}`;
+
+/** Montant JP$ d'un champ number_input : vide = 0, sinon Number() (une chaîne invalide → 'bad_amount'). */
+function readJp(values) {
+  const raw = values.jp && values.jp.value && values.jp.value.value;
+  return raw == null || String(raw).trim() === '' ? 0 : Number(raw);
+}
+
+/** Cartes cessibles de l'acheteur, sans compter celles réservées par CET échange. */
+function buyerFreeCards(trade) {
+  const data = trades._load();
+  delete data.trades[trade.id];
+  return trades.cessible(trade.buyer, data);
+}
+
+/** Liste des numéros : en gras si `free` les contient, barrés sinon. */
+function codeListLines(title, free) {
+  const all = cardIndex.listCards();
+  return [title, ...byRarity(all).map(([r, list]) => `${RARITY_LABEL[r]} : ${list.map((c) => (free.has(c.url) ? `*${c.code}*` : `~${c.code}~`)).join(' ')}`)];
+}
+
+// ─────────────────────────────────────────────
+// 🪟 Modales
+// ─────────────────────────────────────────────
+
+/** Demande générale : un numéro (tous les codes) et l'offre. */
+function buildGeneralModal(buyer, now = Date.now()) {
+  const pause = weekend.pauseFor(buyer, now);
+  if (pause) return infoModal('Demande générale', pauseText(pause));
+  const reason = trades.blockReason(buyer, now);
+  if (reason) return infoModal('Demande générale', ERROR_TEXT[reason]);
+
+  const all = cardIndex.listCards();
+  const wanted = cardPicker(all, { multi: false, placeholder: 'Choisis un numéro', textHint: 'HW3' });
+  const blocks = [
+    section('📣 *Demande à tout le monde* : ta demande part en message à tous les joueurs inscrits qui peuvent te céder cette carte. Le premier qui accepte conclut l\'échange.'),
+    { type: 'input', block_id: 'card', label: plainText('Carte recherchée'), ...wanted },
+    {
+      type: 'input',
+      block_id: 'jp',
+      optional: true,
+      label: plainText('Ton offre en JP$'),
+      element: { type: 'number_input', action_id: 'value', is_decimal_allowed: false, min_value: '0', placeholder: plainText('0') },
+      hint: plainText('Sans carte en échange : au moins le prix de rachat de la banque (commune 1, rare 2, épique 5, hors série 10, légendaire 20).'),
+    },
+  ];
+  const mineFree = trades.cessible(buyer);
+  const mine = all.filter((c) => mineFree.has(c.url));
+  if (mine.length) {
+    const offered = cardPicker(mine, { multi: true, placeholder: 'Choisis tes cartes', textHint: '#12, HW3' });
+    blocks.push({ type: 'input', block_id: 'cards', optional: true, label: plainText('Et / ou tes cartes en échange'), ...offered });
+  } else {
+    blocks.push(context('Tu n\'as aucune carte à proposer en échange : offre des JP$.'));
+  }
+  blocks.push(context(`💰 Ton solde : *${credits.getBalance(buyer)} JP$*. Les JP$ proposés sont mis de côté tout de suite, et rendus si personne n'accepte dans l'heure.`));
+  return {
+    type: 'modal',
+    callback_id: 'trade_general_submit',
+    title: plainText('Demande générale'),
+    submit: plainText('📣 Envoyer'),
+    close: plainText('Annuler'),
+    blocks,
+  };
+}
+
+/**
+ * Contre-offre du vendeur `sellerId` : JP$ et/ou cartes de l'acheteur.
+ * Le vendeur ne voit que des numéros (jamais d'image ni le classeur de l'acheteur).
+ */
+function buildCounterModal(trade, sellerId, now = Date.now()) {
+  const title = 'Contre-offre';
+  if (!trade || trade.status !== 'open') return infoModal(title, ERROR_TEXT.closed);
+  if (now >= trade.expiresAt) return infoModal(title, ERROR_TEXT.expired);
+  const pause = weekend.pauseFor(sellerId, now);
+  if (pause) return infoModal(title, pauseText(pause));
+  if (trade.counters && trade.counters[sellerId]) return infoModal(title, ERROR_TEXT.already_countered);
+  const reason = trades.blockReason(sellerId, now);
+  if (reason) return infoModal(title, ERROR_TEXT[reason]);
+
+  const blocks = [section(`💬 *Ta contre-offre à <@${trade.buyer}>* pour ta carte ${cardLine(trade.card)}.\nSon offre : ${describeOffer(trade.offer)}. Ta contre-offre la *remplace* : indique tout ce que tu veux recevoir. Une seule contre-offre possible.`)];
+  blocks.push({
+    type: 'input',
+    block_id: 'jp',
+    optional: true,
+    label: plainText('JP$ demandés'),
+    element: { type: 'number_input', action_id: 'value', is_decimal_allowed: false, min_value: '0', placeholder: plainText('0') },
+    hint: plainText('Sans carte : au moins le prix de rachat de la banque (commune 1, rare 2, épique 5, hors série 10, légendaire 20).'),
+  });
+  const free = buyerFreeCards(trade);
+  const theirs = cardIndex.listCards().filter((c) => free.has(c.url));
+  blocks.push(...chunkSections(codeListLines(`*Les cartes de <@${trade.buyer}>* — en gras : disponibles · ~barrées~ : non disponibles`, free)));
+  if (theirs.length) {
+    const picker = cardPicker(theirs, { multi: true, placeholder: 'Choisis ses cartes', textHint: '#12, HW3' });
+    blocks.push({ type: 'input', block_id: 'cards', optional: true, label: plainText('Et / ou ses cartes'), ...picker });
+  } else {
+    blocks.push(context(`<@${trade.buyer}> n'a aucune carte à céder : demande des JP$.`));
+  }
+  blocks.push(context(`⏳ <@${trade.buyer}> aura 1 h pour accepter ou refuser.`));
+  return {
+    type: 'modal',
+    callback_id: 'trade_counter_submit',
+    private_metadata: `${trade.id}|${sellerId}`,
+    title: plainText(title),
+    submit: plainText('💬 Envoyer'),
+    close: plainText('Annuler'),
+    blocks,
+  };
+}
+
+// ─────────────────────────────────────────────
+// 💬 Messages
+// ─────────────────────────────────────────────
+
+/** Ce que le vendeur a reçu (contre-offre acceptée ou offre d'origine). */
+const receivedOffer = (trade) => (trade.reason === 'counter_accepted' && trade.counters && trade.counters[trade.seller]) || trade.offer;
+
+function counterStatusLine(trade, sellerId) {
+  const co = trade.counters && trade.counters[sellerId];
+  if (!co) return '';
+  switch (co.status) {
+    case 'open': return `💬 Ta contre-offre : ${describeOffer(co)} · en attente de <@${trade.buyer}> jusqu'à *${hour(co.expiresAt)}*.`;
+    case 'refused': return `✖️ <@${trade.buyer}> a refusé ta contre-offre (${describeOffer(co)}).`;
+    case 'expired': return `⌛ Ta contre-offre (${describeOffer(co)}) a expiré sans réponse.`;
+    case 'cancelled': return `🚫 Ta contre-offre (${describeOffer(co)}) est annulée.`;
+    default: return '';
+  }
+}
+
+function requestClosedLine(trade, ownerId) {
+  switch (trade.status) {
+    case 'done':
+      if (trade.seller === ownerId) return `✅ *Échange conclu* : la carte est partie chez <@${trade.buyer}>, tu as reçu ${describeOffer(receivedOffer(trade))}.`;
+      return `🔒 *Déjà conclue* : un autre joueur a cédé la carte à <@${trade.buyer}>.`;
+    case 'refused':
+      return trade.reason === 'counter_refused'
+        ? `✖️ *<@${trade.buyer}> a refusé ta contre-offre* : la demande est close.`
+        : `✖️ *Tu as refusé cette demande.* <@${trade.buyer}> a été prévenu.`;
+    case 'expired': return '⌛ *Demande expirée* : personne n\'a conclu à temps.';
+    case 'cancelled': return `🚫 *Échange annulé*${ERROR_TEXT[trade.reason] ? ` : ${ERROR_TEXT[trade.reason]}` : '.'}`;
+    default: return '';
+  }
+}
+
+/**
+ * DM de demande reçu par `ownerId` (demande générale ou à une personne),
+ * avec l'état de sa contre-offre. `declined` : il a refusé une demande générale.
+ */
+function buildRequestDM(trade, ownerId, { declined = false } = {}) {
+  const general = trade.kind === 'general';
+  const intro = general
+    ? `📣 *<@${trade.buyer}> cherche la carte* ${cardLine(trade.card)} : demande envoyée à tous ceux qui peuvent la céder.`
+    : `🤝 *<@${trade.buyer}> te demande ta carte* ${cardLine(trade.card)}`;
+  const head = `${intro}\nSon offre : ${describeOffer(trade.offer)}${trade.offer.jp > 0 ? ' (déjà mis de côté)' : ''}.`;
+  const co = trade.counters && trade.counters[ownerId];
+  const blocks = [];
+  if (trade.status === 'open' && !declined) {
+    blocks.push(section(`${head}\n⏳ Réponds avant *${hour(trade.expiresAt)}*${general ? ' : le premier qui accepte conclut' : ', sinon la demande expire'}.`));
+    if (co) blocks.push(context(counterStatusLine(trade, ownerId)));
+    const elements = [
+      button('✅ Accepter', 'trade_accept', { value: trade.id, style: 'primary' }),
+      button('✖️ Refuser', 'trade_refuse', { value: trade.id }),
+    ];
+    if (!co) elements.push(button('💬 Contre-offre', 'trade_counter_open', { value: `${trade.id}|${ownerId}` }));
+    blocks.push({ type: 'actions', block_id: `trade_${trade.id}`, elements });
+  } else {
+    const line = trade.status === 'open' ? '✖️ *Tu as décliné cette demande.*' : requestClosedLine(trade, ownerId);
+    blocks.push(section(head), context(line));
+  }
+  return { text: `${general ? '📣' : '🤝'} ${codeOf(trade.card)} : demande de <@${trade.buyer}>`, blocks };
+}
+
+/** DM de contre-offre reçu par l'acheteur (boutons tant qu'elle est ouverte). */
+function buildCounterBuyerDM(trade, sellerId) {
+  const co = (trade.counters && trade.counters[sellerId]) || { jp: 0, cards: [], status: 'cancelled' };
+  const held = (trade.held && trade.held[trade.buyer]) || 0;
+  const diff = co.jp - held;
+  let money = '';
+  if (diff > 0) money = `\n💰 Si tu acceptes, le complément de *${diff} JP$* est prélevé sur ton solde.`;
+  else if (diff < 0) money = `\n💰 Si tu acceptes, *${-diff} JP$* te sont rendus.`;
+  const head = `💬 *<@${sellerId}> te fait une contre-offre* pour la carte ${cardLine(trade.card)}.\nTon offre : ${describeOffer(trade.offer)}\nSa contre-offre : ${describeOffer(co)}`;
+  const blocks = [];
+  if (trade.status === 'open' && co.status === 'open') {
+    blocks.push(section(`${head}${money}\n⏳ Réponds avant *${hour(co.expiresAt)}*.`));
+    blocks.push({
+      type: 'actions',
+      block_id: `trade_counter_${trade.id}_${sellerId}`,
+      elements: [
+        button('✅ Accepter la contre-offre', 'trade_counter_accept', { value: `${trade.id}|${sellerId}`, style: 'primary' }),
+        button('✖️ Refuser', 'trade_counter_refuse', { value: `${trade.id}|${sellerId}` }),
+      ],
+    });
+  } else {
+    let line;
+    if (co.status === 'accepted') line = '✅ *Contre-offre acceptée* : la carte est dans ton classeur.';
+    else if (co.status === 'refused') {
+      line = trade.kind === 'direct'
+        ? '✖️ *Tu as refusé cette contre-offre* : la demande est close, ce que tu avais mis de côté t\'est rendu.'
+        : '✖️ *Tu as refusé cette contre-offre.* Ta demande reste ouverte pour les autres joueurs.';
+    } else if (co.status === 'expired') line = '⌛ *Contre-offre expirée.*';
+    else if (trade.status === 'done') line = '🔒 *Déjà conclue* avec un autre joueur.';
+    else line = `🔒 *Demande close*${trade.status === 'expired' ? ' : elle a expiré' : ''}.`;
+    blocks.push(section(head), context(line));
+  }
+  return { text: `💬 ${codeOf(trade.card)} : contre-offre de <@${sellerId}>`, blocks };
+}
+
+// ─────────────────────────────────────────────
+// 🔌 Branchement Slack (registerGeneral, appelé par register)
+// ─────────────────────────────────────────────
+
+function generalHelpers(ctx) {
+  const log = (what, e) => console.error(`❌ Échanges (${what}) :`, e.data ? e.data.error : e.message);
+  const dm = async (client, userId, msg) => { try { return await ctx.sendDM(client, userId, msg); } catch (e) { log(`DM <@${userId}>`, e); return null; } };
+  const refresh = (client, users) => Promise.all([...new Set(users)].filter(Boolean).map((u) => ctx.refreshHome(client, u, console)));
+  const reply = async (client, body, text) => {
+    if (!body.channel) return;
+    try { await client.chat.postEphemeral({ channel: body.channel.id, user: body.user.id, text }); } catch (e) { log('réponse au clic', e); }
+  };
+  const update = async (client, ref, msg) => {
+    if (!ref) return;
+    try { await client.chat.update({ channel: ref.channel, ts: ref.ts, text: msg.text, blocks: msg.blocks }); } catch (e) { log('mise à jour DM', e); }
+  };
+  /** Republie tous les DM de l'échange (demandes reçues, contre-offres reçues par l'acheteur). */
+  const updateAll = (client, trade) => Promise.all(Object.entries(trade.dms || {}).map(([key, ref]) => (key.startsWith(COUNTER_KEY)
+    ? update(client, ref, buildCounterBuyerDM(trade, key.slice(COUNTER_KEY.length)))
+    : update(client, ref, buildRequestDM(trade, key)))));
+  return { log, dm, refresh, reply, update, updateAll };
+}
+
+/** Message mrkdwn → { text, blocks }. */
+const textDM = (text) => ({ text: text.replace(/\*/g, ''), blocks: [section(text)] });
+
+/** Clic Accepter / Refuser sur une demande GÉNÉRALE (routé depuis le handler de register). */
+async function generalSellerClick(ctx, actionId, { body, client, tradeId, now }) {
+  const h = generalHelpers(ctx);
+  const userId = body.user.id;
+  const clicked = body.channel && body.message ? { channel: body.channel.id, ts: body.message.ts } : null;
+
+  if (actionId === 'trade_refuse') {
+    // Refuser une demande générale = la décliner pour soi : rien ne change pour les autres
+    const trade = trades.getTrade(tradeId);
+    if (!trade) return h.reply(client, body, ERROR_TEXT.closed);
+    const ref = (trade.dms && trade.dms[userId]) || clicked;
+    await h.update(client, ref, buildRequestDM(trade, userId, { declined: trade.status === 'open' }));
+    if (trade.status !== 'open') await h.reply(client, body, ERROR_TEXT.closed);
+    return;
+  }
+
+  const res = trades.accept(tradeId, userId, now);
+  const { trade } = res;
+  if (res.ok || (trade && trade.status !== 'open')) {
+    if (!(trade.dms && trade.dms[userId]) && clicked) trade.dms = { ...(trade.dms || {}), [userId]: clicked };
+    console.log(`📣 ${trade.id} : ${trade.status} (${trade.reason}) par <@${userId}>`);
+    await h.updateAll(client, trade);
+    if (res.ok) await h.dm(client, trade.buyer, buildBuyerResultDM(trade, 'accepted'));
+    else if (res.error === 'cards_unavailable') await h.dm(client, trade.buyer, buildBuyerResultDM({ ...trade, seller: userId }, 'cancelled'));
+    if (!res.ok) await h.reply(client, body, errorFor(res.error, userId, { asBuyer: false, now }));
+    await h.refresh(client, [trade.buyer, userId]);
+    return;
+  }
+  await h.reply(client, body, errorFor(res.error, userId, { asBuyer: false, now }));
+}
+
+function registerGeneral(app, ctx) {
+  const h = generalHelpers(ctx);
+
+  // 📣 Envoi de la demande générale
+  app.view('trade_general_submit', async ({ ack, body, view, client }) => {
+    const buyer = body.user.id;
+    const now = Date.now();
+    const values = view.state.values;
+    const fail = (field, text) => ack({ response_action: 'errors', errors: { [values[field] ? field : 'card']: text } });
+
+    const pause = weekend.pauseFor(buyer, now);
+    if (pause) return fail('card', pauseText(pause));
+    const wanted = readCodes(values.card && values.card.value);
+    if (wanted.bad.length || wanted.cards.length !== 1) return fail('card', wanted.bad.length ? `Numéro inconnu : ${wanted.bad[0]}.` : 'Choisis une carte.');
+    const offered = readCodes(values.cards && values.cards.value);
+    if (offered.bad.length) return fail('cards', `Numéro inconnu : ${offered.bad.join(', ')}.`);
+
+    const res = trades.createGeneral({ buyer, code: wanted.cards[0].code, jp: readJp(values), cards: offered.cards.map((c) => c.url), now });
+    if (!res.ok) {
+      let text = errorFor(res.error, buyer, { asBuyer: true, now });
+      if (res.error === 'floor') text = `${ERROR_TEXT.floor} : ${trades.floor(wanted.cards[0].rarity)} JP$ minimum pour cette carte.`;
+      return fail(res.error === 'no_owner' ? 'card' : (FIELD_OF[res.error] || 'card'), text);
+    }
+    await ack();
+    const { trade, recipients } = res;
+    console.log(`📣 <@${buyer}> cherche ${trade.card.code} (${trade.offer.jp} JP$ + ${trade.offer.cards.length} carte(s)) → ${trade.id}, ${recipients.length} propriétaire(s)`);
+    for (const owner of recipients) {
+      const ref = await h.dm(client, owner, buildRequestDM(trade, owner));
+      if (ref) trades.setDm(trade.id, owner, ref);
+    }
+    const n = recipients.length;
+    await h.dm(client, buyer, textDM(`📣 *Demande générale envoyée* à ${n} joueur${n > 1 ? 's' : ''} qui peu${n > 1 ? 'vent' : 't'} te céder la carte ${cardLine(trade.card)}.\nTon offre : ${describeOffer(trade.offer)}. Le premier qui accepte conclut ; sans réponse avant *${hour(trade.expiresAt)}*, tout t'est rendu.`));
+    await h.refresh(client, [buyer]);
+  });
+
+  // 💬 Ouverture de la modale de contre-offre (depuis le DM de demande)
+  app.action('trade_counter_open', async ({ ack, body, action, client, logger }) => {
+    await ack();
+    const userId = body.user.id;
+    const now = Date.now();
+    const pause = weekend.pauseFor(userId, now);
+    if (pause) return h.reply(client, body, pauseText(pause));
+    const trade = trades.getTrade(String(action.value || '').split('|')[0]);
+    if (trade && trade.kind === 'direct' && trade.seller !== userId) return h.reply(client, body, ERROR_TEXT.not_seller);
+    await ctx.openModal(client, body, buildCounterModal(trade, userId, now), logger);
+  });
+
+  // 📨 Envoi de la contre-offre
+  app.view('trade_counter_submit', async ({ ack, body, view, client }) => {
+    const sellerId = body.user.id;
+    const now = Date.now();
+    const values = view.state.values;
+    const tradeId = String(view.private_metadata || '').split('|')[0];
+    const fail = (field, text) => ack({ response_action: 'errors', errors: { [values[field] ? field : 'jp']: text } });
+
+    const pause = weekend.pauseFor(sellerId, now);
+    if (pause) return fail('jp', pauseText(pause));
+    const asked = readCodes(values.cards && values.cards.value);
+    if (asked.bad.length) return fail('cards', `Numéro inconnu : ${asked.bad.join(', ')}.`);
+
+    const res = trades.counter(tradeId, sellerId, { jp: readJp(values), cards: asked.cards.map((c) => c.url) }, now);
+    if (!res.ok) {
+      let text = errorFor(res.error, sellerId, { asBuyer: false, now });
+      if (res.error === 'floor' && res.trade) text = `${ERROR_TEXT.floor} : ${trades.floor(res.trade.card.rarity)} JP$ minimum pour cette carte.`;
+      if (res.error === 'cards_unavailable') text = 'Une des cartes demandées n\'est plus disponible chez l\'acheteur.';
+      return fail(res.error === 'cards_unavailable' ? 'cards' : 'jp', text);
+    }
+    await ack();
+    const { trade } = res;
+    const co = trade.counters[sellerId];
+    console.log(`💬 ${trade.id} : contre-offre de <@${sellerId}> (${co.jp} JP$ + ${co.cards.length} carte(s))`);
+    await h.update(client, trade.dms && trade.dms[sellerId], buildRequestDM(trade, sellerId));
+    const ref = await h.dm(client, trade.buyer, buildCounterBuyerDM(trade, sellerId));
+    if (ref) trades.setDm(trade.id, counterKey(sellerId), ref);
+    await h.refresh(client, [trade.buyer, sellerId]);
+  });
+
+  // ✅ / ✖️ Réponse de l'acheteur à une contre-offre
+  const buyerAction = (actionId, decide, accepted) => app.action(actionId, async ({ ack, body, action, client }) => {
+    await ack();
+    const userId = body.user.id;
+    const now = Date.now();
+    const pause = weekend.pauseFor(userId, now);
+    if (pause) return h.reply(client, body, pauseText(pause));
+    const [tradeId, sellerId] = String(action.value || '').split('|');
+
+    const res = decide(tradeId, userId, sellerId, now);
+    const trade = res.trade || trades.getTrade(tradeId);
+    if (!res.ok) {
+      await h.reply(client, body, errorFor(res.error, userId, { asBuyer: true, now }));
+      if (trade && trade.buyer === userId && res.error !== 'balance') await h.updateAll(client, trade);
+      return;
+    }
+    const co = trade.counters[sellerId];
+    console.log(`💬 ${trade.id} : contre-offre de <@${sellerId}> → ${co.status} par <@${userId}>`);
+    await h.updateAll(client, trade);
+    if (accepted) {
+      await h.dm(client, sellerId, textDM(`✅ *<@${userId}> a accepté ta contre-offre !* Ta carte ${cardLine(trade.card)} est partie, tu as reçu ${describeOffer(co)}.`));
+    } else {
+      const rest = trade.kind === 'direct' ? ' La demande est close.' : ' Tu peux encore accepter son offre d\'origine tant que la demande est ouverte.';
+      await h.dm(client, sellerId, textDM(`✖️ *<@${userId}> a refusé ta contre-offre* pour la carte ${cardLine(trade.card)}.${rest}`));
+    }
+    await h.refresh(client, [userId, sellerId]);
+  });
+  buyerAction('trade_counter_accept', trades.acceptCounter, true);
+  buyerAction('trade_counter_refuse', trades.refuseCounter, false);
+}
+
+module.exports.buildGeneralModal = buildGeneralModal;
+module.exports.buildCounterModal = buildCounterModal;
+module.exports.buildRequestDM = buildRequestDM;
+module.exports.buildCounterBuyerDM = buildCounterBuyerDM;
 
 // ═══════════════════════════════════════════════════════════
 //  🔨 ENCHÈRES ET MINUTERIE (v3.9, tâche 8)
@@ -477,7 +957,6 @@ Object.assign(ERROR_TEXT, {
   self_bid: 'Tu ne peux pas enchérir sur ta propre enchère.',
   not_found: 'Cet échange n\'existe plus.',
   card_lost: 'La carte n\'est plus disponible (partie, volée ou placée dans un deck).',
-  unsubscribed: 'Un des joueurs a quitté la liste /jeanpip.',
   stopped: 'Cet échange n\'a pas pu aboutir.',
 });
 
@@ -774,7 +1253,7 @@ function registerAuction(app, ctx) {
 
     const pause = weekend.pauseFor(seller, now);
     if (pause) return fail('card', pauseText(pause));
-    const wanted = readCodes(values.card && values.card.value);
+    const wanted = readCodes(values.card && values.card.value, seller);
     if (wanted.bad.length || wanted.cards.length !== 1) return fail('card', wanted.bad.length ? `Numéro inconnu : ${wanted.bad[0]}.` : 'Choisis une carte.');
     const raw = values.price && values.price.value && values.price.value.value;
     const price = raw == null || String(raw).trim() === '' ? null : Number(raw);
