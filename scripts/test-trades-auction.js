@@ -139,8 +139,8 @@ test('enchères : B 10, C 11 → B remboursé ; déjà le meilleur ; trop bas ; 
   assert.strictEqual(c.outbid, 'U_B');
   assert.strictEqual(credits.getBalance('U_B'), 50, 'B remboursé');
   assert.strictEqual(credits.getBalance('U_C'), 39);
-  assert.deepStrictEqual(moves('U_B', 'trade_hold'), [{ amount: -10, ref: auc.id }]);
-  assert.deepStrictEqual(moves('U_B', 'trade_refund'), [{ amount: 10, ref: auc.id }]);
+  assert.deepStrictEqual(moves('U_B', 'trade_hold'), [{ amount: -10, ref: `${auc.id}#0` }]);
+  assert.deepStrictEqual(moves('U_B', 'trade_refund'), [{ amount: 10, ref: `${auc.id}#0:refund` }]);
   assert.deepStrictEqual(trades.getTrade(auc.id).held, { U_C: 11 });
 
   assert.strictEqual(trades.bid(auc.id, 'U_C', 15, NOW).error, 'already_best');
@@ -192,7 +192,7 @@ test('règlement après la fin : vendue à C, A touche 13, une seule fois', () =
   assert.strictEqual(count('U_C', EPIC.url), 1);
   assert.strictEqual(count('U_A', EPIC.url), 1);
   assert.strictEqual(credits.getBalance('U_A'), sellerBefore + 13);
-  assert.deepStrictEqual(moves('U_A', 'trade_sale'), [{ amount: 13, ref: auc.id }]);
+  assert.deepStrictEqual(moves('U_A', 'trade_sale'), [{ amount: 13, ref: `${auc.id}:sale` }]);
   assert.strictEqual(credits.getBalance('U_C'), 37);
   assert.deepStrictEqual(trades.getTrade(auc.id).held, {});
   assert.deepStrictEqual(trades.settleAuction(auc.id, auc.endsAt), { ok: false, error: 'closed' });

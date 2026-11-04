@@ -96,7 +96,7 @@ test('plancher : 9 JP$ refusé, 10 JP$ accepté et mis en réserve', () => {
   assert.ok(r.ok, JSON.stringify(r));
   tradeHW = r.trade;
   assert.strictEqual(credits.getBalance('U_A'), 90);
-  assert.deepStrictEqual(moves('U_A', 'trade_hold'), [{ amount: -10, ref: tradeHW.id }]);
+  assert.deepStrictEqual(moves('U_A', 'trade_hold'), [{ amount: -10, ref: `${tradeHW.id}:hold` }]);
   assert.strictEqual(tradeHW.status, 'open');
   assert.strictEqual(tradeHW.kind, 'direct');
   assert.strictEqual(tradeHW.card.code, 'HW1');
@@ -148,7 +148,7 @@ test('accepter : HW1 passe chez A, B touche 10 JP$, une seule fois', () => {
   assert.strictEqual(count('U_A', HW1.url), 1);
   assert.strictEqual(count('U_B', HW1.url), 0);
   assert.strictEqual(credits.getBalance('U_B'), before + 10);
-  assert.deepStrictEqual(moves('U_B', 'trade_sale'), [{ amount: 10, ref: tradeHW.id }]);
+  assert.deepStrictEqual(moves('U_B', 'trade_sale'), [{ amount: 10, ref: `${tradeHW.id}:sale` }]);
   assert.deepStrictEqual(trades.accept(tradeHW.id, 'U_B', NOW), { ok: false, error: 'closed' });
   assert.strictEqual(credits.getBalance('U_B'), before + 10, 'pas de double paiement');
   assert.strictEqual(trades.accept('nope', 'U_B', NOW).error, 'not_found');
@@ -173,7 +173,7 @@ test('refuser : A remboursé', () => {
   assert.ok(rr.ok);
   assert.strictEqual(trades.getTrade(r.trade.id).status, 'refused');
   assert.strictEqual(credits.getBalance('U_A'), 90);
-  assert.deepStrictEqual(moves('U_A', 'trade_refund'), [{ amount: 12, ref: r.trade.id }]);
+  assert.deepStrictEqual(moves('U_A', 'trade_refund'), [{ amount: 12, ref: `${r.trade.id}:refund` }]);
   assert.strictEqual(trades.refuse(r.trade.id, 'U_B', NOW).error, 'closed');
 });
 

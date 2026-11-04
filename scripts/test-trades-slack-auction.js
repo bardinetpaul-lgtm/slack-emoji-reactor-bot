@@ -302,6 +302,37 @@ const hasImage = (m) => (m.blocks || []).some((b) => b.type === 'image' && /^htt
   check(u3s.some((m) => m.channel === 'D_UC') && u3s.filter((m) => m.channel === 'D_UC').every((m) => noButton(m, 'trade_counter_accept') && /te fait une contre-offre/.test(flat(m))), 'DM de contre-offre reçu par C fermé, sans boutons (toujours un DM de contre-offre)');
   broadcast.subscribe('UC');
 
+  // ── Accueil : échanges triés par fin (enchère : endsAt), deux enchères rapprochées ──
+  collections.addCards('UA', [{ ...C1 }, { ...C1 }]);
+  check(await submitAuction('UA', C1.code, 1) === null, 'A met une commune aux enchères (fin demain 10h)');
+  const a3 = trades.openTradesOf('UA').find((t) => t.kind === 'auction');
+  const d3 = trades.createDirect({ buyer: 'UB', seller: 'UA', code: C1.code, jp: 2, now: Date.now() });
+  check(d3.ok, 'B demande une commune à A (fin dans 1 h)');
+  const homeA = flat(homeOf('UA'));
+  const iReq = homeA.indexOf('te demande');
+  const iAuc = homeA.indexOf('est aux enchères');
+  check(iReq > 0 && iAuc > 0 && iReq < iAuc, 'Accueil de A : la demande (fin dans 1 h) avant l\'enchère (fin demain)');
+
+  const u4 = updated.length;
+  const p1 = submitBid('UB', a3.id, 5);   // les deux enchères arrivent avant toute mise à jour des DM
+  const p2 = submitBid('UC', a3.id, 6);
+  check((await p1) === null && (await p2) === null, 'B enchérit 5, C enchérit 6 presque en même temps');
+  const u4s = updated.slice(u4).filter((m) => /Enchère/.test(m.text || ''));
+  check(u4s.length && u4s.every((m) => /6 JP\$/.test(flat(m)) && !/Prix actuel : \*5 JP\$/.test(flat(m))), 'DM d\'annonce : chaque mise à jour relit l\'enchère, aucun ne garde le prix dépassé (5 JP$)');
+
+  // ── Conclu juste avant un arrêt du bot : la minuterie prévient comme une acceptation ──
+  const d4 = trades.createDirect({ buyer: 'UB', seller: 'UA', code: C1.code, jp: 3, now: Date.now() });
+  const beforeCrash = fs.readFileSync(trades.TRADES_PATH);
+  check(trades.accept(d4.trade.id, 'UA', Date.now()).ok, 'A accepte la demande de B (3 JP$)…');
+  fs.writeFileSync(trades.TRADES_PATH, beforeCrash);   // … et le bot s'arrête avant d'écrire trades.json
+  const balB4 = credits.getBalance('UB');
+  const p4 = posted.length;
+  await tradesSlack.runTick(fakeClient, logger);
+  check(trades.getTrade(d4.trade.id).status === 'done' && credits.getBalance('UB') === balB4, 'runTick : échange conclu, B pas remboursé');
+  check(posted.slice(p4).some((m) => m.channel === 'D_UB' && /a accepté ton échange/.test(flat(m))), 'B reçoit le DM « échange accepté »');
+  const evR = tradeEvents().at(-1);
+  check(evR && JSON.parse(evR.data).tradeId === d4.trade.id && JSON.parse(evR.data).jp === 3, 'événement trade_done enregistré');
+
   // ── Fin pendant le week-end ──
   at('2026-11-06T14:00:00Z');   // vendredi 15h → fin samedi
   await auctionOpen('UA');

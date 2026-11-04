@@ -107,14 +107,14 @@ const quiet = { info() {}, warn() {}, error() {} };
   collections.addCards('UU', [{ url: tc.url, title: tc.title, rarity: 'common', type: 'image' }]);
   const t1 = trades.createDirect({ buyer: 'UT', seller: 'UU', code: tc.code, jp: 3, now: tue });
   const hold = move("user_id = 'UT' AND source = 'trade_hold'");
-  check('offre d\'échange → trade_hold', t1.ok && hold && hold.amount === -3 && hold.ref === t1.trade.id);
+  check('offre d\'échange → trade_hold', t1.ok && hold && hold.amount === -3 && hold.ref === `${t1.trade.id}:hold`);
   trades.refuse(t1.trade.id, 'UU', tue + 1000);
   const back = move("user_id = 'UT' AND source = 'trade_refund'");
-  check('refus → trade_refund', back && back.amount === 3 && back.ref === t1.trade.id);
+  check('refus → trade_refund', back && back.amount === 3 && back.ref === `${t1.trade.id}:refund`);
   const t2 = trades.createDirect({ buyer: 'UT', seller: 'UU', code: tc.code, jp: 4, now: tue + 2000 });
   trades.accept(t2.trade.id, 'UU', tue + 3000);
   const sale = move("user_id = 'UU' AND source = 'trade_sale'");
-  check('échange conclu → trade_sale (vendeur payé)', sale && sale.amount === 4 && sale.ref === t2.trade.id);
+  check('échange conclu → trade_sale (vendeur payé)', sale && sale.amount === 4 && sale.ref === `${t2.trade.id}:sale`);
 
   // ❓ Plus aucun mouvement 'unknown' pour ces flux
   check('aucune source unknown', conn.prepare("SELECT COUNT(*) n FROM credit_moves WHERE source = 'unknown'").get().n === 0);

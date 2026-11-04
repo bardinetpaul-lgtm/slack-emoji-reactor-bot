@@ -87,7 +87,7 @@ test('demande sans réponse pendant 1 h 00 min 01 s → expired, remboursée', (
   assert.strictEqual(t.status, 'expired');
   assert.strictEqual(t.reason, 'expired');
   assert.strictEqual(bal('U_B'), 100, 'remboursé');
-  assert.deepStrictEqual(moves('U_B', 'trade_refund'), [{ amount: 5, ref: r.trade.id }]);
+  assert.deepStrictEqual(moves('U_B', 'trade_refund'), [{ amount: 5, ref: `${r.trade.id}:refund` }]);
 });
 
 test('contre-offre ouverte plus tardive : la demande attend, puis expire après elle', () => {

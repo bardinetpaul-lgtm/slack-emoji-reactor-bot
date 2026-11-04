@@ -281,6 +281,27 @@ const has = (x, id) => flat(x).includes(`"action_id":"${id}"`);
   check(/solde ne suffit pas/.test(ephemerals.at(-1).text), 'complément impossible : message clair');
   check(trades.getTrade(d3.id).status === 'open' && credits.getBalance('UA') === balA3 && collections.getCount('UB', HW1.url) === 1, 'rien n\'a bougé, la demande reste ouverte');
 
+  // ── Cartes retirées de la banque : proposables (demande générale, contre-offre), mises aux enchères ──
+  const RA = { url: 'https://x.test/retiree-a', title: 'Vieille carte #998', rarity: 'rare', type: 'image' };
+  const RB = { url: 'https://x.test/retiree-b', title: 'Souvenir #997', rarity: 'epic', type: 'image' };
+  collections.addCards('UA', [{ ...RA }]);
+  collections.addCards('UB', [{ ...RB }]);
+  await click('trade_general_open', 'UA');
+  const gvR = opened.at(-1).view;
+  check(flat(gvR).includes('"value":"#998"'), 'demande générale : ma carte retirée #998 proposable en échange');
+  check(!flat(gvR.blocks.find((b) => b.block_id === 'card')).includes('#998'), 'demande générale : la carte recherchée reste un numéro de l\'index');
+  check(await submitView('trade_general_submit', 'UA', { code: 'HW1', cards: ['#998'] }) === null, 'demande générale : HW1 contre la carte retirée #998');
+  const gR = trades.openTradesOf('UA').find((t) => t.kind === 'general');
+  check(gR && gR.offer.cards[0] === RA.url, 'carte retirée réservée dans l\'offre');
+  check(/\*#998\*/.test(flat(dmsTo('UC').at(-1))), 'DM aux propriétaires : la carte retirée est nommée #998 (pas « ? »)');
+  await click('trade_counter_open', 'UC', `${gR.id}|UC`);
+  const cvR = opened.at(-1).view;
+  check(flat(cvR).includes('"value":"#998"') && flat(cvR).includes('*#998*'), 'contre-offre : la carte retirée de l\'acheteur est listée et choisissable');
+  check(await submitView('trade_counter_submit', 'UC', { jp: 0, cards: ['#998'], meta: `${gR.id}|UC` }) === null, 'contre-offre : la carte retirée #998 demandée (lue chez l\'acheteur)');
+  check(trades.getTrade(gR.id).counters.UC.cards[0] === RA.url, 'contre-offre enregistrée avec la carte retirée');
+  await click('trade_auction_open', 'UB');
+  check(flat(opened.at(-1).view).includes('"value":"#997"'), 'enchères : ma carte retirée #997 peut être mise aux enchères');
+
   // ── Samedi : pause ──
   at('2026-11-06T23:10:00Z');   // samedi 0h10
   const satPosted = posted.length;

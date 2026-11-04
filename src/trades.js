@@ -28,7 +28,7 @@
 // ═══════════════════════════════════════════════════════════
 
 const path = require('path');
-const { readJson, writeJsonAtomic } = require('./storage');
+const storage = require('./storage');
 const cardIndex = require('./cardIndex');
 const resale = require('./resale');
 const credits = require('./credits');
@@ -47,12 +47,12 @@ const AUCTION_MS = 43200000;    // 12 h : enchère
 // ─────────────────────────────────────────────
 
 function _load() {
-  const data = readJson(TRADES_PATH, { seq: 0, trades: {} });
+  const data = storage.readJson(TRADES_PATH, { seq: 0, trades: {} });
   if (!data || typeof data !== 'object' || !data.trades || typeof data.trades !== 'object') return { seq: 0, trades: {} };
   if (!Number.isInteger(data.seq)) data.seq = 0;
   return data;
 }
-const _save = (data) => writeJsonAtomic(TRADES_PATH, data);
+const _save = (data) => storage.writeJsonAtomic(TRADES_PATH, data);
 
 /** Nouvel identifiant (incrémente data.seq). */
 function _nextId(data, now = Date.now()) {
@@ -60,10 +60,38 @@ function _nextId(data, now = Date.now()) {
   return `T${data.seq}-${now.toString(36)}`;
 }
 
+/**
+ * Références des mouvements de JP$ d'un échange : chaque mouvement logique a la
+ * sienne, et un remboursement ou un paiement n'est jamais écrit deux fois pour
+ * (joueur, source, ref). Si le bot plante entre le grand livre (SQLite) et
+ * data/trades.json, rejouer la clôture ne rend ni ne paie rien de plus.
+ */
+const refs = {
+  hold: (id) => `${id}:hold`,                // offre de l'acheteur, à l'envoi
+  counterHold: (id) => `${id}:hold:counter`, // complément d'une contre-offre acceptée
+  refund: (id) => `${id}:refund`,            // offre de l'acheteur rendue (une seule fois par demande)
+  bid: (id, i) => `${id}#${i}`,              // mise n° i d'une enchère
+  bidRefund: (id, i) => `${id}#${i}:refund`, // mise n° i rendue (dépassée ou enchère annulée)
+  sale: (id) => `${id}:sale`,                // paiement du vendeur
+};
+
 /** Met des JP$ en réserve. false si le solde ne suffit pas. */
 const _hold = (userId, amount, ref) => credits.spend(userId, amount, { source: 'trade_hold', ref });
-const _refund = (userId, amount, ref) => credits.addCredit(userId, amount, { source: 'trade_refund', ref });
-const _pay = (userId, amount, ref) => credits.addCredit(userId, amount, { source: 'trade_sale', ref });
+/** Rend des JP$ (rien si ce remboursement est déjà écrit). */
+const _refund = (userId, amount, ref) => credits.addCreditOnce(userId, amount, { source: 'trade_refund', ref });
+/** Paie le vendeur (rien si ce paiement est déjà écrit). */
+const _pay = (userId, amount, ref) => credits.addCreditOnce(userId, amount, { source: 'trade_sale', ref });
+
+/** Paiement du vendeur déjà écrit pour cet échange : { userId, amount } ou null. */
+const _saleOf = (trade) => credits.findMove('trade_sale', refs.sale(trade.id));
+
+/** Ref du remboursement de ce que `userId` a en réserve dans `trade`. */
+function heldRefundRef(trade, userId) {
+  if (trade.kind !== 'auction') return refs.refund(trade.id);
+  const bids = trade.bids || [];
+  for (let i = bids.length - 1; i >= 0; i -= 1) if (bids[i].userId === userId) return refs.bidRefund(trade.id, i);
+  return refs.refund(trade.id);
+}
 
 /**
  * Déplace un exemplaire de `card` ({ url, title?, rarity?, type? }) de `from` à `to`.
@@ -88,7 +116,7 @@ function _close(trade, status, now = Date.now(), reason = null) {
   trade.closedAt = now;
   trade.reason = reason;
   for (const [userId, amount] of Object.entries(trade.held || {})) {
-    if (amount > 0) _refund(userId, amount, trade.id);
+    if (amount > 0) _refund(userId, amount, heldRefundRef(trade, userId));
   }
   trade.held = {};
   for (const c of Object.values(trade.counters || {})) if (c.status === 'open') c.status = 'cancelled';
@@ -187,7 +215,7 @@ function createDirect({ buyer, seller, code, jp = 0, cards = [], now = Date.now(
   if (!offered.length && amount < floor(card.rarity)) return { ok: false, error: 'floor' };
 
   const id = _nextId(data, now);
-  if (amount && !_hold(buyer, amount, id)) return { ok: false, error: 'balance' };
+  if (amount && !_hold(buyer, amount, refs.hold(id))) return { ok: false, error: 'balance' };
 
   const trade = {
     id,
@@ -236,6 +264,7 @@ function accept(tradeId, sellerId, now = Date.now()) {
   if (general && general.kind === 'general') return acceptGeneral(tradeId, sellerId, now);
   const { data, trade, error } = sellerAction(tradeId, sellerId, now);
   if (error) return { ok: false, error };
+  if (_saleOf(trade)) return { ok: false, error: 'closed', trade };   // déjà conclu (avant un plantage) : la minuterie le clôt
   if (blockReason(sellerId, now)) return { ok: false, error: 'blocked_seller', trade };
   if (blockReason(trade.buyer, now)) return { ok: false, error: 'blocked_buyer', trade };
 
@@ -253,7 +282,7 @@ function accept(tradeId, sellerId, now = Date.now()) {
   _transferCard(sellerId, trade.buyer, trade.card);
   for (const url of trade.offer.cards) _transferCard(trade.buyer, sellerId, { url });
   const paid = (trade.held && trade.held[trade.buyer]) || 0;
-  if (paid > 0) _pay(sellerId, paid, trade.id);
+  if (paid > 0) _pay(sellerId, paid, refs.sale(trade.id));
   trade.held = {};
   _close(trade, 'done', now, 'accepted');
   _save(data);
@@ -402,13 +431,13 @@ function bid(tradeId, userId, jp, now = Date.now()) {
   if (best && best.userId === userId) return { ok: false, error: 'already_best', trade };
   const amount = Number(jp);
   if (!Number.isInteger(amount) || amount < minBid(trade)) return { ok: false, error: 'too_low', trade };
-  if (!_hold(userId, amount, trade.id)) return { ok: false, error: 'balance', trade };
+  if (!_hold(userId, amount, refs.bid(trade.id, trade.bids.length))) return { ok: false, error: 'balance', trade };
 
   let outbid = null;
   if (best) {
     outbid = best.userId;
     const back = (trade.held && trade.held[outbid]) || 0;
-    if (back > 0) _refund(outbid, back, trade.id);
+    if (back > 0) _refund(outbid, back, refs.bidRefund(trade.id, trade.bids.length - 1));
   }
   trade.held = { [userId]: amount };
   trade.bids.push({ userId, jp: amount, at: now });
@@ -429,6 +458,7 @@ function settleAuction(tradeId, now = Date.now()) {
   if (trade.status !== 'open') return { ok: false, error: 'closed' };
   if (now < trade.endsAt) return { ok: false, error: 'not_ended' };
   if (weekend.isPaused(now)) return { ok: false, error: 'paused' };
+  if (_saleOf(trade)) return { ok: false, error: 'closed' };   // déjà réglée (avant un plantage) : la minuterie la clôt
 
   // Carte du vendeur : réservée par CETTE enchère, donc on l'écarte du calcul
   const others = { ...data, trades: { ...data.trades } };
@@ -444,7 +474,7 @@ function settleAuction(tradeId, now = Date.now()) {
   } else {
     _transferCard(trade.seller, best.userId, trade.card);
     const paid = (trade.held && trade.held[best.userId]) || 0;
-    if (paid > 0) _pay(trade.seller, paid, trade.id);
+    if (paid > 0) _pay(trade.seller, paid, refs.sale(trade.id));
     trade.held = {};
     trade.buyer = best.userId;
     _close(trade, 'done', now, 'sold');
@@ -507,7 +537,7 @@ function createGeneral({ buyer, code, jp = 0, cards = [], now = Date.now() }) {
   if (!recipients.length) return { ok: false, error: 'no_owner' };
 
   const id = _nextId(data, now);
-  if (amount && !_hold(buyer, amount, id)) return { ok: false, error: 'balance' };
+  if (amount && !_hold(buyer, amount, refs.hold(id))) return { ok: false, error: 'balance' };
 
   const trade = {
     id,
@@ -544,6 +574,7 @@ function acceptGeneral(tradeId, sellerId, now = Date.now()) {
   if (trade.status !== 'open') return { ok: false, error: 'closed', trade };
   if (now >= trade.expiresAt) return { ok: false, error: 'expired', trade };
   if (!sellerId || sellerId === trade.buyer) return { ok: false, error: 'not_seller', trade };
+  if (_saleOf(trade)) return { ok: false, error: 'closed', trade };   // déjà conclu (avant un plantage) : la minuterie le clôt
   if (blockReason(sellerId, now)) return { ok: false, error: 'blocked_seller', trade };
   if (blockReason(trade.buyer, now)) return { ok: false, error: 'blocked_buyer', trade };
   if (_cessibleCount(sellerId, trade.card.url, data) < 1) return { ok: false, error: 'unavailable', trade };
@@ -557,7 +588,7 @@ function acceptGeneral(tradeId, sellerId, now = Date.now()) {
   _transferCard(sellerId, trade.buyer, trade.card);
   for (const url of trade.offer.cards) _transferCard(trade.buyer, sellerId, { url });
   const paid = (trade.held && trade.held[trade.buyer]) || 0;
-  if (paid > 0) _pay(sellerId, paid, trade.id);
+  if (paid > 0) _pay(sellerId, paid, refs.sale(trade.id));
   trade.held = {};
   _close(trade, 'done', now, 'accepted');
   _save(data);
@@ -622,22 +653,30 @@ function acceptCounter(tradeId, buyerId, sellerId, now = Date.now()) {
   const { data, trade, co, error } = buyerCounterAction(tradeId, buyerId, sellerId);
   if (error) return { ok: false, error, trade };
   if (now >= co.expiresAt) return { ok: false, error: 'expired', trade };
+  if (_saleOf(trade)) return { ok: false, error: 'closed', trade };   // déjà conclu (avant un plantage) : la minuterie le clôt
   if (blockReason(buyerId, now)) return { ok: false, error: 'blocked_buyer', trade };
   if (blockReason(sellerId, now)) return { ok: false, error: 'blocked_seller', trade };
-  if (_cessibleCount(sellerId, trade.card.url, data) < 1) return { ok: false, error: 'unavailable', trade };
+  if (_cessibleCount(sellerId, trade.card.url, data) < 1) {
+    // Demande à une personne : sa carte n'y est plus, l'échange ne peut plus aboutir → annulé, JP$ rendus
+    if (trade.kind === 'direct') {
+      _close(trade, 'cancelled', now, 'unavailable');
+      _save(data);
+    }
+    return { ok: false, error: 'unavailable', trade };
+  }
   if (!cardsAvailable(buyerId, co.cards, withoutTrade(data, trade.id))) return { ok: false, error: 'cards_unavailable', trade };
 
-  // Complément prélevé (ou excédent rendu) : held[acheteur] = prix de la contre-offre
+  // Complément prélevé : held[acheteur] = prix de la contre-offre
   trade.held = trade.held || {};
   const diff = co.jp - (trade.held[buyerId] || 0);
-  if (diff > 0 && !_hold(buyerId, diff, trade.id)) return { ok: false, error: 'balance', trade };
-  if (diff < 0) _refund(buyerId, -diff, trade.id);
-  trade.held[buyerId] = co.jp;
+  if (diff > 0 && !_hold(buyerId, diff, refs.counterHold(trade.id))) return { ok: false, error: 'balance', trade };
 
   trade.seller = sellerId;
   _transferCard(sellerId, buyerId, trade.card);
   for (const url of co.cards) _transferCard(buyerId, sellerId, { url });
-  if (co.jp > 0) _pay(sellerId, co.jp, trade.id);
+  // Excédent rendu : même ref que le remboursement à la clôture, l'acheteur n'est jamais remboursé deux fois
+  if (diff < 0) _refund(buyerId, -diff, refs.refund(trade.id));
+  if (co.jp > 0) _pay(sellerId, co.jp, refs.sale(trade.id));
   trade.held = {};
   co.status = 'accepted';
   _close(trade, 'done', now, 'counter_accepted');
@@ -690,6 +729,10 @@ module.exports.setDm = setDm;
 //  tick(now) : appelée régulièrement (et au démarrage, pour rattraper
 //  ce qui a expiré pendant un arrêt du bot). Sans Slack : elle renvoie
 //  des événements, l'appelant prévient les joueurs.
+//    0. échange encore ouvert dont le vendeur est déjà payé (le bot s'est
+//       arrêté entre le paiement et l'écriture de trades.json) → conclu
+//       ('done'), rien n'est rendu (événement 'recovered', ou 'settled'
+//       pour une enchère) ;
 //    1. carte réservée qui n'est plus possédée → échange annulé
 //       ('card_lost'), JP$ rendus. Le plus ancien échange garde ses
 //       exemplaires, les suivants sont annulés ;
@@ -700,6 +743,9 @@ module.exports.setDm = setDm;
 //    4. enchères arrivées à échéance → settleAuction (événement 'settled').
 //  Événement : { trade, event, reason?, counter?, outcome? }
 //  Rien ne bouge deux fois : un 2ᵉ tick au même instant renvoie [].
+//  Chaque clôture est écrite tout de suite ; si l'écriture échoue, la
+//  minuterie s'arrête (erreur relancée) et les remboursements déjà faits
+//  ne sont pas refaits au tick suivant (refs uniques, voir `refs`).
 // ═══════════════════════════════════════════════════════════
 
 const isRequest = (t) => t.kind === 'direct' || t.kind === 'general';
@@ -723,18 +769,59 @@ const openByAge = (data) => Object.values(data.trades).filter(isOpen)
   .sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
 
 /**
+ * Termine un échange que le vendeur `sale.userId` a déjà conclu (paiement écrit)
+ * mais dont l'état n'a pas été enregistré : rien n'est rendu, les cartes ont déjà bougé.
+ */
+function recoverDone(trade, sale, now) {
+  trade.held = {};
+  if (trade.kind === 'auction') {
+    const best = bestBid(trade);
+    trade.buyer = best ? best.userId : trade.buyer;
+    _close(trade, 'done', now, 'sold');
+    return;
+  }
+  trade.seller = sale.userId;
+  const co = trade.counters && trade.counters[sale.userId];
+  if (co && co.status === 'open' && co.jp === sale.amount && trade.offer.jp !== sale.amount) {
+    co.status = 'accepted';
+    _close(trade, 'done', now, 'counter_accepted');
+  } else {
+    _close(trade, 'done', now, 'accepted');
+  }
+}
+
+/**
  * Fait avancer tous les échanges à l'instant `now`.
- * → [{ trade, event: 'expired' | 'counter_expired' | 'settled' | 'cancelled', reason?, counter?, outcome? }]
+ * → [{ trade, event: 'expired' | 'counter_expired' | 'settled' | 'cancelled' | 'recovered', reason?, counter?, outcome? }]
+ * Lève si data/trades.json ne peut pas être écrit (la minuterie s'arrête là).
  */
 function tick(now = Date.now()) {
   const events = [];
   const data = _load();
-  let changed = false;
+  const save = () => {
+    try {
+      _save(data);
+    } catch (e) {
+      console.error('❌ Échanges : écriture de trades.json impossible, minuterie arrêtée :', e.message);
+      throw e;
+    }
+  };
   const cancel = (trade, reason) => {
     _close(trade, 'cancelled', now, reason);
+    save();
     events.push({ trade, event: 'cancelled', reason });
-    changed = true;
   };
+
+  // 0. Déjà conclus avant un arrêt du bot (vendeur payé) : on enregistre la fin
+  for (const trade of openByAge(data)) {
+    const sale = _saleOf(trade);
+    if (!sale) continue;
+    recoverDone(trade, sale, now);
+    save();
+    events.push(trade.kind === 'auction'
+      ? { trade, event: 'settled', outcome: 'sold' }
+      : { trade, event: 'recovered' });
+  }
 
   // 1. Cartes réservées encore possédées ?
   const used = new Map();
@@ -766,19 +853,18 @@ function tick(now = Date.now()) {
       if (now >= co.expiresAt) {
         co.status = 'expired';
         co.closedAt = now;
+        save();
         events.push({ trade, event: 'counter_expired', counter: sellerId });
-        changed = true;
       } else {
         stillOpen = true;
       }
     }
     if (!stillOpen && now >= trade.expiresAt) {
       _close(trade, 'expired', now, 'expired');
+      save();
       events.push({ trade, event: 'expired', reason: 'expired' });
-      changed = true;
     }
   }
-  if (changed) _save(data);
 
   // 4. Enchères terminées (settleAuction relit et écrit l'état lui-même)
   for (const trade of openByAge(data)) {

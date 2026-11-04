@@ -180,7 +180,7 @@ test('contre-offre acceptée avec complément : A paie 30 au total, B reçoit 30
   assert.strictEqual(t.seller, 'U_B');
   assert.strictEqual(t.counters.U_B.status, 'accepted');
   assert.deepStrictEqual(t.held, {});
-  const holds = db.getDb().prepare("SELECT amount FROM credit_moves WHERE user_id = 'U_A' AND source = 'trade_hold' AND ref = ?").all(trade.id);
+  const holds = db.getDb().prepare("SELECT amount FROM credit_moves WHERE user_id = 'U_A' AND source = 'trade_hold' AND ref LIKE ?").all(`${trade.id}:hold%`);
   assert.deepStrictEqual(holds.map((m) => m.amount), [-10, -20]);
   assert.strictEqual(trades.accept(trade.id, 'U_C', NOW + MIN).error, 'closed');
 });
