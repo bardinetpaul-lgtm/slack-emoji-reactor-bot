@@ -78,5 +78,27 @@ ok('carte retirée : #N du titre, sinon le titre');
 for (const c of cards) assert.strictEqual(codeOf(c.url), c.code);
 ok('codeOf(listCards) est cohérent avec les codes');
 
+// Cartes retirées de la banque possédées par un joueur : restent désignables
+{
+  const { listCardsFor } = require(path.join(TMP, 'src', 'cardIndex.js'));
+  const collections = require(path.join(TMP, 'src', 'collections.js'));
+  const takenNum = first.code.slice(1);
+  collections.addCards('U_RET', [
+    { url: 'https://x.test/old1', title: 'Vieille carte #999', rarity: 'rare', type: 'image' },
+    { url: 'https://x.test/old2', title: `Doublon #${takenNum}`, rarity: 'common', type: 'image' },
+    { url: 'https://x.test/old3', title: 'Sans numéro', rarity: 'epic', type: 'image' },
+  ]);
+  assert.strictEqual(byCode('#999', 'U_RET').url, 'https://x.test/old1');
+  assert.strictEqual(byCode('999', 'U_RET').rarity, 'rare');
+  assert.strictEqual(byCode('#999'), null);
+  assert.strictEqual(byCode('sans numéro', 'U_RET').url, 'https://x.test/old3');
+  assert.strictEqual(byCode(`Doublon #${takenNum}`, 'U_RET').url, 'https://x.test/old2');
+  assert.strictEqual(byCode(`#${takenNum}`, 'U_RET').url, first.url);
+  assert.strictEqual(codeOf('https://x.test/old2', `Doublon #${takenNum}`), `Doublon #${takenNum}`);
+  assert.strictEqual(listCardsFor('U_RET').length, cards.length + 3);
+  assert.strictEqual(listCardsFor(null).length, cards.length);
+  ok('cartes retirées d\'un joueur : byCode(code, joueur), numéro en double → titre');
+}
+
 console.log(`\n${n} contrôles OK`);
-fs.rmSync(TMP, { recursive: true, force: true });
+try { fs.rmSync(TMP, { recursive: true, force: true }); } catch { /* base SQLite encore ouverte (Windows) */ }

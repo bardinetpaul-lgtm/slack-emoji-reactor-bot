@@ -50,6 +50,7 @@ const ERROR_TEXT = {
   pause: 'Jeanpip est en pause : pas d\'échange pour le moment.',
   raid: 'Tu subis un raid : pas d\'échange avant sa fin.',
   farm: 'Tu es sous pénalité anti-farm : pas d\'échange avant sa fin.',
+  unsubscribed: 'un des deux joueurs a quitté la liste de diffusion /jeanpip.',
 };
 
 const section = (text, accessory) => ({ type: 'section', text: { type: 'mrkdwn', text }, ...(accessory ? { accessory } : {}) });
@@ -84,7 +85,8 @@ function byRarity(cards) {
 }
 
 /** Menu (static_select ou multi_static_select) groupé par rareté, ou champ texte au-delà de 100 options. */
-function cardPicker(cards, { multi, placeholder, textHint }) {
+function cardPicker(allCards, { multi, placeholder, textHint }) {
+  const cards = allCards.filter((c) => c.code.length <= 150);   // limite Slack de la valeur d'une option
   if (cards.length > MAX_OPTIONS) {
     return {
       element: { type: 'plain_text_input', action_id: 'value', placeholder: plainText(textHint) },
@@ -98,7 +100,7 @@ function cardPicker(cards, { multi, placeholder, textHint }) {
       placeholder: plainText(placeholder),
       option_groups: byRarity(cards).map(([r, list]) => ({
         label: plainText(RARITY_LABEL[r]),
-        options: list.map((c) => option(multi && c.title ? `${c.code} · ${c.title}` : c.code, c.code)),
+        options: list.map((c) => option(multi && c.title && c.title !== c.code ? `${c.code} · ${c.title}` : c.code, c.code)),
       })),
     },
   };
@@ -116,11 +118,20 @@ function chunkSections(lines) {
   return out;
 }
 
-/** « 12 JP$ + #3, HW1 » */
-function describeOffer(offer) {
+/** Code d'une carte (`url`) : index, sinon carte retirée chez l'un des `holders`. */
+function urlCode(url, holders = []) {
+  for (const h of holders) {
+    const c = h && cardIndex.listCardsFor(h).find((x) => x.url === url);
+    if (c) return c.code;
+  }
+  return cardIndex.codeOf(url) || '?';
+}
+
+/** « 12 JP$ + #3, HW1 » (`holders` : où chercher les cartes retirées de la banque) */
+function describeOffer(offer, holders = []) {
   const parts = [];
   if (offer.jp > 0) parts.push(`*${offer.jp} JP$*`);
-  if (offer.cards && offer.cards.length) parts.push(offer.cards.map((url) => `*${cardIndex.codeOf(url)}*`).join(', '));
+  if (offer.cards && offer.cards.length) parts.push(offer.cards.map((url) => `*${urlCode(url, holders)}*`).join(', '));
   return parts.join(' + ') || 'rien';
 }
 
@@ -180,6 +191,36 @@ function infoModal(title, text) {
 
 const buildSoonModal = (title) => infoModal(title, '🚧 *Bientôt disponible !* Cette façon d\'échanger arrive dans quelques jours.');
 
+// Noms des joueurs (users.info), gardés en mémoire pour le menu des inscrits
+const names = new Map();
+
+/** Charge les noms manquants, sans attendre plus de `ms` (le trigger_id d'une modale expire en 3 s). */
+async function loadNames(client, ids, ms = 1500) {
+  const missing = ids.filter((id) => !names.has(id));
+  if (!missing.length) return;
+  const all = Promise.all(missing.map((id) => client.users.info({ user: id })
+    .then((r) => { const u = (r && r.user) || {}; names.set(id, (u.profile && u.profile.display_name) || u.real_name || u.name || id); })
+    .catch(() => {})));
+  let timer;
+  await Promise.race([all, new Promise((r) => { timer = setTimeout(r, ms); if (timer.unref) timer.unref(); })]);
+  clearTimeout(timer);
+}
+
+/** Choix du vendeur : menu des seuls inscrits (sauf l'acheteur) ; au-delà de 100, sélecteur Slack. */
+function sellerElement(buyer, seller) {
+  const subs = broadcast.getSubscribers().filter((u) => u && u !== buyer);
+  if (subs.length > MAX_OPTIONS) {
+    return { type: 'users_select', action_id: 'trade_direct_seller', placeholder: plainText('Choisis un joueur'), ...(seller ? { initial_user: seller } : {}) };
+  }
+  if (!subs.length) return null;
+  const options = subs.map((u) => option(names.get(u) || u, u)).sort((a, b) => a.text.text.localeCompare(b.text.text, 'fr'));
+  const initial = seller && options.find((o) => o.value === seller);
+  return { type: 'static_select', action_id: 'trade_direct_seller', placeholder: plainText('Choisis un joueur inscrit'), options, ...(initial ? { initial_option: initial } : {}) };
+}
+
+/** Vendeur choisi, quel que soit le menu (static_select des inscrits ou users_select). */
+const pickedUser = (el) => (el && (el.selected_user || (el.selected_option && el.selected_option.value))) || null;
+
 /**
  * Demande à une personne. Sans `seller` : seulement le choix du joueur
  * (dispatch_action → views.update avec le vendeur choisi).
@@ -190,12 +231,14 @@ function buildDirectModal(buyer, seller = null, now = Date.now()) {
   const reason = trades.blockReason(buyer, now);
   if (reason) return infoModal('Demander une carte', ERROR_TEXT[reason]);
 
+  const sellerEl = sellerElement(buyer, seller);
+  if (!sellerEl) return infoModal('Demander une carte', '😕 Aucun autre joueur n\'est inscrit à `/jeanpip` pour le moment.');
   const blocks = [{
     type: 'input',
     block_id: 'seller',
     dispatch_action: true,
     label: plainText('À qui demandes-tu une carte ?'),
-    element: { type: 'users_select', action_id: 'trade_direct_seller', placeholder: plainText('Choisis un joueur'), ...(seller ? { initial_user: seller } : {}) },
+    element: sellerEl,
   }];
   const view = {
     type: 'modal',
@@ -207,7 +250,7 @@ function buildDirectModal(buyer, seller = null, now = Date.now()) {
     blocks,
   };
   if (!seller) {
-    blocks.push(context('Tu verras ensuite les numéros de ses cartes. Seuls les joueurs inscrits à `/jeanpip` peuvent échanger.'));
+    blocks.push(context('Tu verras ensuite les numéros de ses cartes. Seuls les joueurs inscrits à `/jeanpip` sont proposés.'));
     return view;
   }
   if (seller === buyer) { blocks.push(section(`⚠️ ${ERROR_TEXT.self}`)); return view; }
@@ -215,7 +258,7 @@ function buildDirectModal(buyer, seller = null, now = Date.now()) {
 
   // Liste des numéros : disponibles en gras, non disponibles barrés (jamais d'image)
   const free = trades.cessible(seller);
-  const all = cardIndex.listCards();
+  const all = cardIndex.listCardsFor(seller);   // + ses cartes retirées de la banque
   const available = all.filter((c) => free.has(c.url));
   const lines = byRarity(all).map(([r, list]) => `${RARITY_LABEL[r]} : ${list.map((c) => (free.has(c.url) ? `*${c.code}*` : `~${c.code}~`)).join(' ')}`);
   blocks.push(...chunkSections([`*Les cartes de <@${seller}>* — en gras : disponibles · ~barrées~ : non disponibles`, ...lines]));
@@ -236,7 +279,7 @@ function buildDirectModal(buyer, seller = null, now = Date.now()) {
     hint: plainText('Sans carte en échange : au moins le prix de rachat de la banque (commune 1, rare 2, épique 5, hors série 10, légendaire 20).'),
   });
   const mineFree = trades.cessible(buyer);
-  const mine = all.filter((c) => mineFree.has(c.url));
+  const mine = cardIndex.listCardsFor(buyer).filter((c) => mineFree.has(c.url));
   if (mine.length) {
     const offered = cardPicker(mine, { multi: true, placeholder: 'Choisis tes cartes', textHint: '#12, HW3' });
     blocks.push({ type: 'input', block_id: 'cards', optional: true, label: plainText('Et / ou tes cartes en échange'), ...offered });
@@ -253,7 +296,7 @@ function buildDirectModal(buyer, seller = null, now = Date.now()) {
 
 function sellerStatusLine(trade) {
   switch (trade.status) {
-    case 'done': return `✅ *Échange conclu* : la carte est partie chez <@${trade.buyer}>, tu as reçu ${describeOffer(trade.offer)}.`;
+    case 'done': return `✅ *Échange conclu* : la carte est partie chez <@${trade.buyer}>, tu as reçu ${describeOffer(trade.offer, [trade.buyer, trade.seller])}.`;
     case 'refused': return `✖️ *Tu as refusé cette demande.* <@${trade.buyer}> a été prévenu.`;
     case 'expired': return '⌛ *Demande expirée* : tu n\'as pas répondu à temps.';
     case 'cancelled': return `🚫 *Échange annulé*${ERROR_TEXT[trade.reason] ? ` : ${ERROR_TEXT[trade.reason]}` : '.'}`;
@@ -263,7 +306,7 @@ function sellerStatusLine(trade) {
 
 /** DM au vendeur : la demande, puis les boutons (ouverte) ou la décision. */
 function buildSellerDM(trade, sellerId) {
-  const head = `🤝 *<@${trade.buyer}> te demande ta carte* ${cardLine(trade.card)}\nSon offre : ${describeOffer(trade.offer)}${trade.offer.jp > 0 ? ' (déjà mis de côté)' : ''}.`;
+  const head = `🤝 *<@${trade.buyer}> te demande ta carte* ${cardLine(trade.card)}\nSon offre : ${describeOffer(trade.offer, [trade.buyer, trade.seller])}${trade.offer.jp > 0 ? ' (déjà mis de côté)' : ''}.`;
   const blocks = [];
   if (trade.status === 'open') {
     blocks.push(section(`${head}\n⏳ Réponds avant *${hour(trade.expiresAt)}*, sinon la demande expire.`));
@@ -291,7 +334,7 @@ function buildBuyerResultDM(trade, event) {
   ].filter(Boolean).join(' et ');
   const giveBack = back ? `\n↩️ ${back.charAt(0).toUpperCase()}${back.slice(1)}.` : '';
   const text = {
-    accepted: `✅ *<@${trade.seller}> a accepté ton échange !* La carte ${card} est dans ton classeur. Tu as cédé ${describeOffer(trade.offer)}.`,
+    accepted: `✅ *<@${trade.seller}> a accepté ton échange !* La carte ${card} est dans ton classeur. Tu as cédé ${describeOffer(trade.offer, [trade.buyer, trade.seller])}.`,
     refused: `✖️ *<@${trade.seller}> a refusé ta demande* pour la carte ${card}.${giveBack}`,
     expired: `⌛ *<@${trade.seller}> n'a pas répondu à temps* : ta demande pour la carte ${card} a expiré.${giveBack}`,
     cancelled: `🚫 *Ta demande pour la carte ${card} est annulée* : ${ERROR_TEXT[trade.reason] || ERROR_TEXT.closed}${giveBack}`,
@@ -300,7 +343,7 @@ function buildBuyerResultDM(trade, event) {
 }
 
 function buildBuyerSentDM(trade) {
-  const text = `📨 *Demande envoyée à <@${trade.seller}>* pour la carte ${cardLine(trade.card)}.\nTon offre : ${describeOffer(trade.offer)}. Réponse attendue avant *${hour(trade.expiresAt)}*, sinon tout t'est rendu.`;
+  const text = `📨 *Demande envoyée à <@${trade.seller}>* pour la carte ${cardLine(trade.card)}.\nTon offre : ${describeOffer(trade.offer, [trade.buyer, trade.seller])}. Réponse attendue avant *${hour(trade.expiresAt)}*, sinon tout t'est rendu.`;
   return { text: text.replace(/\*/g, ''), blocks: [section(text)] };
 }
 
@@ -308,16 +351,19 @@ function buildBuyerSentDM(trade) {
 // 📝 Lecture de la modale
 // ─────────────────────────────────────────────
 
-/** Codes saisis (menu ou champ texte) → { cards: [carte], bad: [code] } */
-function readCodes(field) {
+/**
+ * Codes saisis (menu ou champ texte) → { cards: [carte], bad: [code] }.
+ * `holder` : celui qui possède les cartes (ses cartes retirées de la banque sont reconnues).
+ */
+function readCodes(field, holder) {
   if (!field) return { cards: [], bad: [] };
   const raw = field.selected_options ? field.selected_options.map((o) => o.value)
     : field.selected_option ? [field.selected_option.value]
-      : String(field.value || '').split(/[,;\s]+/);
+      : String(field.value || '').split(/[,;]+/);   // pas d'espace : un titre de carte retirée en contient
   const codes = raw.map((c) => String(c || '').trim()).filter(Boolean);
   const cards = [];
   const bad = [];
-  for (const code of codes) { const c = cardIndex.byCode(code); if (c) cards.push(c); else bad.push(code); }
+  for (const code of codes) { const c = cardIndex.byCode(code, holder); if (c) cards.push(c); else bad.push(code); }
   return { cards, bad };
 }
 
@@ -352,6 +398,7 @@ function register(app, ctx) {
   // 🏠 Boutons de l'Accueil
   app.action('trade_direct_open', async ({ ack, body, client, logger }) => {
     await ack();
+    await loadNames(client, broadcast.getSubscribers());
     await ctx.openModal(client, body, buildDirectModal(body.user.id), logger);
   });
   app.action('trade_general_open', async ({ ack, body, client, logger }) => {
@@ -367,7 +414,8 @@ function register(app, ctx) {
   app.action('trade_direct_seller', async ({ ack, body, action, client }) => {
     await ack();
     try {
-      await client.views.update({ view_id: body.view.id, hash: body.view.hash, view: buildDirectModal(body.user.id, action.selected_user || null) });
+      await loadNames(client, broadcast.getSubscribers());
+      await client.views.update({ view_id: body.view.id, hash: body.view.hash, view: buildDirectModal(body.user.id, pickedUser(action)) });
     } catch (e) { log('mise à jour de la modale', e); }
   });
 
@@ -376,20 +424,26 @@ function register(app, ctx) {
     const buyer = body.user.id;
     const now = Date.now();
     const values = view.state.values;
-    const seller = (values.seller && values.seller.trade_direct_seller && values.seller.trade_direct_seller.selected_user) || view.private_metadata || null;
+    const seller = pickedUser(values.seller && values.seller.trade_direct_seller) || view.private_metadata || null;
     const fail = (field, text) => ack({ response_action: 'errors', errors: { [values[field] ? field : 'seller']: text } });
 
     const pause = weekend.pauseFor(buyer, now);
     if (pause) return fail('seller', pauseText(pause));
     if (!seller) return fail('seller', 'Choisis un joueur.');
-    const wanted = readCodes(values.card && values.card.value);
+    const wanted = readCodes(values.card && values.card.value, seller);
     if (wanted.bad.length || wanted.cards.length !== 1) return fail('card', wanted.bad.length ? `Numéro inconnu : ${wanted.bad[0]}.` : 'Choisis une carte.');
-    const offered = readCodes(values.cards && values.cards.value);
+    const offered = readCodes(values.cards && values.cards.value, buyer);
     if (offered.bad.length) return fail('cards', `Numéro inconnu : ${offered.bad.join(', ')}.`);
     const raw = values.jp && values.jp.value && values.jp.value.value;
     const jp = raw == null || String(raw).trim() === '' ? 0 : Number(raw);
 
-    const res = trades.createDirect({ buyer, seller, code: wanted.cards[0].code, jp, cards: offered.cards.map((c) => c.url), now });
+    let res;
+    try {
+      res = trades.createDirect({ buyer, seller, code: wanted.cards[0].code, jp, cards: offered.cards.map((c) => c.url), now });
+    } catch (e) {
+      log('création de la demande', e);
+      return fail('seller', ERROR_TEXT.closed);
+    }
     if (!res.ok) {
       let text = errorFor(res.error, buyer, { asBuyer: true, now });
       if (res.error === 'floor') text = `${ERROR_TEXT.floor} : ${trades.floor(wanted.cards[0].rarity)} JP$ minimum pour cette carte.`;
@@ -431,15 +485,41 @@ function register(app, ctx) {
   sellerAction('trade_refuse', trades.refuse, 'refused');
 }
 
+/** DM à l'acheteur : la contre-offre de `sellerId` est annulée (il a quitté /jeanpip). */
+function buildCounterCancelledDM(trade, sellerId) {
+  const text = `🚫 *La contre-offre de <@${sellerId}>* pour la carte ${cardLine(trade.card)} est annulée : ${ERROR_TEXT.unsubscribed}`;
+  return { text: text.replace(/\*/g, ''), blocks: [section(text)] };
+}
+
 /**
- * Le joueur quitte /jeanpip : ses échanges en cours sont annulés (trades.onUnsubscribe,
- * tâche 5, si présent) et les Accueils concernés republiés.
+ * Le joueur quitte /jeanpip : trades.onUnsubscribe annule ses demandes (et celles qui
+ * le visent) et ses contre-offres. L'acheteur touché est prévenu (annulée, remboursé),
+ * les DM gardés (trade.dms) passent à l'état fermé, les Accueils sont republiés.
  */
 async function onUnsubscribe(client, userId) {
   const involved = new Set([userId]);
   for (const t of trades.openTradesOf(userId)) { involved.add(t.buyer); involved.add(t.seller); }
-  if (typeof trades.onUnsubscribe === 'function') trades.onUnsubscribe(userId, Date.now());
+  const evs = typeof trades.onUnsubscribe === 'function' ? (trades.onUnsubscribe(userId, Date.now()) || []) : [];
   if (!registered) return;
+  const log = (what, e) => console.error(`❌ Échanges (${what}) :`, e.data ? e.data.error : e.message);
+  const dm = async (u, msg) => { try { return await registered.sendDM(client, u, msg); } catch (e) { log(`DM <@${u}>`, e); return null; } };
+  for (const { trade, event, counter } of evs) {
+    involved.add(trade.buyer);
+    if (trade.seller) involved.add(trade.seller);
+    if (event === 'counter_cancelled') {
+      await dm(trade.buyer, buildCounterCancelledDM(trade, counter));
+      continue;
+    }
+    if (event !== 'cancelled') continue;
+    console.log(`🤝 ${trade.id} annulé : <@${userId}> a quitté /jeanpip`);
+    for (const [u, ref] of Object.entries(trade.dms || {})) {
+      if (u === trade.buyer || !ref) continue;
+      involved.add(u);
+      const msg = buildSellerDM(trade, u);
+      try { await client.chat.update({ channel: ref.channel, ts: ref.ts, text: msg.text, blocks: msg.blocks }); } catch (e) { log('mise à jour DM vendeur', e); }
+    }
+    if (trade.buyer !== userId) await dm(trade.buyer, buildBuyerResultDM(trade, 'cancelled'));
+  }
   await Promise.all([...involved].filter(Boolean).map((u) => registered.refreshHome(client, u, console)));
 }
 

@@ -45,21 +45,48 @@ function listCards() {
 
 /**
  * Code d'une carte. Carte retirée de la banque : « #N » tiré du titre,
- * sinon le titre lui-même.
+ * sinon (ou si ce numéro est déjà pris) le titre lui-même.
  */
 function codeOf(url, title) {
-  const known = listCards().find((c) => c.url === url);
+  const list = listCards();
+  const known = list.find((c) => c.url === url);
   if (known) return known.code;
   const n = numberFromTitle(title);
-  return n ? `#${n}` : (title || '');
+  return n && !list.some((c) => c.code === `#${n}`) ? `#${n}` : (title || '');
 }
 
-/** Carte désignée par un code (insensible à la casse ; « 42 » = « #42 »). */
-function byCode(code) {
+/**
+ * L'index + les cartes retirées de la banque que possède `userId` (elles restent
+ * échangeables). Code d'une carte retirée : « #N » tiré de son titre, sinon son
+ * titre (aussi quand ce numéro est déjà pris par une autre carte).
+ */
+function listCardsFor(userId) {
+  const list = listCards();
+  if (!userId) return list;
+  const known = new Set(list.map((c) => c.url));
+  const taken = new Set(list.map((c) => c.code.toUpperCase()));
+  const { getCollection } = require('./collections');   // require tardif : pas de cycle au chargement
+  for (const c of getCollection(userId)) {
+    if (!c || !c.url || known.has(c.url)) continue;
+    known.add(c.url);
+    const n = numberFromTitle(c.title);
+    const title = c.title || c.url;
+    const code = n && !taken.has(`#${n}`) ? `#${n}` : title;
+    taken.add(code.toUpperCase());
+    list.push({ code, url: c.url, title, rarity: (RARITIES[c.rarity] || ['rose', 'halloween', 'extra'].includes(c.rarity)) ? c.rarity : 'common', type: c.type || 'image', retired: true });
+  }
+  return list;
+}
+
+/**
+ * Carte désignée par un code (insensible à la casse ; « 42 » = « #42 »).
+ * Avec `userId` : cherche aussi les cartes retirées de la banque qu'il possède.
+ */
+function byCode(code, userId = null) {
   let wanted = String(code || '').trim().toUpperCase();
   if (!wanted) return null;
   if (/^\d+$/.test(wanted)) wanted = `#${wanted}`;
-  return listCards().find((c) => c.code.toUpperCase() === wanted) || null;
+  return listCardsFor(userId).find((c) => c.code.toUpperCase() === wanted) || null;
 }
 
-module.exports = { listCards, codeOf, byCode };
+module.exports = { listCards, listCardsFor, codeOf, byCode };
