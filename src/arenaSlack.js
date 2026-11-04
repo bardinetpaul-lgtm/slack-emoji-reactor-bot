@@ -67,7 +67,7 @@ function homeState(userId, links, now = Date.now()) {
     stats,
     streak: dailyStreak.preview(arenaStore.getStreak(userId), now),
     ranking: arenaStore.ranking({ userId }),
-    cards: deckRules.totalCopies(collections.getCollection(userId)),
+    cards: deckRules.totalCopies(collections.getAvailableCollection(userId)),   // hors cartes réservées par un échange
     next: arenas.nextUnlock(stats.wins),
     match: m ? { status: m.status, url: links.arena(m.id, userId) } : null,
     inQueue: status.inQueue,
@@ -274,7 +274,7 @@ function buildResultDM(match, summary, userId, links = {}) {
 function register(app, ctx) {
   matchmaking.configure({
     isBusy: (u) => matches.isBusy(u),
-    cardCount: (u) => deckRules.totalCopies(collections.getCollection(u)),
+    cardCount: (u) => deckRules.totalCopies(collections.getAvailableCollection(u)),   // hors cartes réservées par un échange
     winsOf: (u) => arenaStore.getStats(u).wins,
   });
 

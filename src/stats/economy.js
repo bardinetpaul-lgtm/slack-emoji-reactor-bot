@@ -3,12 +3,17 @@
 //  Masse en circulation = somme des soldes, rejouée mouvement par
 //  mouvement depuis le début (le mouvement 'opening' de la migration
 //  porte les soldes d'avant le suivi).
+//  Échanges entre joueurs (sources 'trade_…' : mise de côté, remboursement,
+//  paiement du vendeur) : des JP$ qui changent de main, ni créés ni
+//  consommés → hors created / consumed, comptés à part (transfers).
 // ═══════════════════════════════════════════════════════════
 
 const { bucketsBetween, bucketBounds, sum, round, median, indexer } = require('./time');
 const { fortunes } = require('./live');
 
 const itemKey = (m) => (m.item ? `${m.source}/${m.item}` : m.source);
+/** Mouvement d'un échange entre joueurs (v3.9) : un transfert, pas une création ni une dépense. */
+const isTransfer = (m) => String(m.source || '').startsWith('trade_');
 const sorted = (obj) => Object.entries(obj).map(([key, credits]) => ({ key, credits: round(credits) })).sort((a, b) => b.credits - a.credits);
 
 function firstMoveAt(db) {
@@ -30,8 +35,8 @@ function economy(f, { db, boosterPrice = 20 }) {
   const keys = bounds.map((b) => b.key);
   const zero = () => keys.map(() => 0);
   const created = zero(); const consumed = zero(); const mass = zero(); const mean = zero(); const med = zero();
-  const bySource = {}; const byUse = {};
-  let adjust = 0; let unknown = 0;
+  const bySource = {}; const byUse = {}; const byTransfer = {};
+  let adjust = 0; let unknown = 0; let transfers = 0;
 
   const userClause = f.user ? ' AND user_id = ?' : '';
   const userArgs = f.user ? [f.user] : [];
@@ -58,7 +63,12 @@ function economy(f, { db, boosterPrice = 20 }) {
     for (const m of (b.last ? inLastBucket : inBucket).all(b.start, b.end, ...userArgs)) {
       apply(m);
       if (m.source === 'unknown') unknown += m.n;
-      if (m.kind === 'earn' && pass(m)) {
+      if (isTransfer(m)) {
+        if (pass(m)) {
+          byTransfer[m.source] = (byTransfer[m.source] || 0) + m.amount;
+          if (m.source === 'trade_sale') transfers += m.amount;
+        }
+      } else if (m.kind === 'earn' && pass(m)) {
         created[i] += m.amount;
         bySource[m.source] = (bySource[m.source] || 0) + m.amount;
       } else if (m.kind === 'spend' && pass(m)) {
@@ -88,6 +98,7 @@ function economy(f, { db, boosterPrice = 20 }) {
       consumed: consumedTotal,
       net: round(createdTotal - consumedTotal),
       adjust: round(adjust),
+      transfers: round(transfers),   // JP$ versés d'un joueur à l'autre par les échanges conclus
       inflationPct: massStart > 0 ? round(((mass[last] - massStart) / massStart) * 100, 1) : null,
       spendRatePct: avgMass > 0 ? round((consumedTotal / avgMass) * 100, 1) : null,
       purchasingPower: boosterPrice ? round(mean[last] / boosterPrice, 1) : null,
@@ -103,7 +114,7 @@ function economy(f, { db, boosterPrice = 20 }) {
       mean,
       median: med,
     },
-    tables: { bySource: sorted(bySource), byUse: sorted(byUse), fortunes: fortunes(db) },
+    tables: { bySource: sorted(bySource), byUse: sorted(byUse), transfers: sorted(byTransfer), fortunes: fortunes(db) },
     since: firstMoveAt(db),
   };
 }
@@ -112,7 +123,7 @@ function purchases(f, { db }) {
   const keys = bucketsBetween(f.from, f.to, f.grain);
   const at = indexer(keys, f.grain);
   const rows = db.prepare(`SELECT at, user_id AS userId, -amount AS credits, source, item FROM credit_moves
-    WHERE kind = 'spend' AND at >= ? AND at <= ?${f.user ? ' AND user_id = ?' : ''} ORDER BY at, id`)
+    WHERE kind = 'spend' AND substr(source, 1, 6) <> 'trade_' AND at >= ? AND at <= ?${f.user ? ' AND user_id = ?' : ''} ORDER BY at, id`)
     .all(...(f.user ? [f.from, f.to, f.user] : [f.from, f.to]));
 
   const items = {}; const families = {};

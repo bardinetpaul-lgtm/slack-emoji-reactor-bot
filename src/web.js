@@ -68,6 +68,7 @@ const STATIC_TYPES = {
   '.png': 'image/png',
   '.svg': 'image/svg+xml',
   '.ico': 'image/x-icon',
+  '.mp3': 'audio/mpeg',
 };
 
 function isEnabled() {
@@ -411,7 +412,7 @@ function createHandler(deps) {
       let m;
 
       if (req.method === 'GET' && /^\/open\/[\w-]+$/.test(pathname)) {
-        return servePage(res, 'open');
+        return servePage(res, 'open', ['open.css', 'open.js', 'open-sounds.js']);
       }
       if (req.method === 'GET' && /^\/collection\/[\w-]+$/.test(pathname)) {
         return servePage(res, 'collection');

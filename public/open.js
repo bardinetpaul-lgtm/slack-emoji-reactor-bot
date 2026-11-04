@@ -42,23 +42,80 @@
   };
 
   // ─────────────────────────────────────────────
-  // 🔊 Sons synthétisés (Web Audio, aucun fichier) — coupés par défaut
+  // 🔊 Sons (Web Audio) — activés par défaut (v3.9), 🔇 les coupe
+  //    Bruitages mp3 (Rare / Épique / Légendaire, ouverture facultative :
+  //    voir open-sounds.js), le reste est synthétisé.
+  //    Le clic sur le pack débloque l'audio (règle des navigateurs) ;
+  //    si le navigateur refuse quand même, l'animation reste muette.
   // ─────────────────────────────────────────────
+
+  const SOUNDS = window.OpenSounds;
 
   const sound = (() => {
     let ctx = null;
-    let enabled = false;
-    try { enabled = localStorage.getItem('jeanpip-sound') === 'on'; } catch { /* stockage bloqué */ }
+    let enabled = true;
+    try { enabled = SOUNDS.isSoundOn(localStorage.getItem('jeanpip-sound')); } catch { /* stockage bloqué */ }
+
+    // Fichiers : téléchargés au chargement (sans contexte audio),
+    // décodés au premier son (après le clic). Absent / illisible → synthèse.
+    const raw = {};     // nom → Promise<ArrayBuffer|null>
+    const decoded = {}; // nom → AudioBuffer
+    let current = null; // bruitage en cours (coupé si on enchaîne)
+
+    function preload() {
+      for (const name of Object.values(SOUNDS.FILES)) {
+        if (raw[name]) continue;
+        raw[name] = fetch(new URL(SOUNDS.DIR + name, BASE))
+          .then((res) => (res.ok ? res.arrayBuffer() : null))
+          .catch(() => null);
+      }
+      return Promise.all(Object.values(raw));
+    }
+
+    function decodeAll(c) {
+      for (const [name, p] of Object.entries(raw)) {
+        if (decoded[name] !== undefined) continue;
+        decoded[name] = null; // en cours
+        p.then((buf) => (buf ? c.decodeAudioData(buf) : null))
+          .then((b) => { decoded[name] = b || null; })
+          .catch(() => { decoded[name] = null; });
+      }
+    }
 
     function ensure() {
       if (!enabled) return null;
       if (!ctx) {
         const AC = window.AudioContext || window.webkitAudioContext;
         if (!AC) return null;
-        ctx = new AC();
+        try { ctx = new AC(); } catch { return null; }
       }
-      if (ctx.state === 'suspended') ctx.resume();
+      if (ctx.state === 'suspended') ctx.resume().catch(() => { /* refusé : muet */ });
+      decodeAll(ctx);
       return ctx;
+    }
+
+    function stopFile() {
+      if (!current) return;
+      try { current.stop(); } catch { /* déjà fini */ }
+      current = null;
+    }
+
+    // Joue un fichier s'il est prêt ; false → l'appelant synthétise
+    function playFile(name) {
+      const c = ensure();
+      if (!c) return true; // son coupé : rien du tout
+      const buffer = name && decoded[name];
+      if (!buffer) return false;
+      stopFile();
+      const src = c.createBufferSource();
+      src.buffer = buffer;
+      const g = c.createGain();
+      g.gain.value = 0.8;
+      src.connect(g).connect(c.destination);
+      src.onended = () => { if (current === src) current = null; };
+      src.start();
+      current = src;
+      return true;
     }
 
     function tone(freq, dur, { type = 'sine', gain = 0.18, delay = 0, slideTo = null } = {}) {
@@ -104,18 +161,31 @@
 
     return {
       get enabled() { return enabled; },
+      preload,
+      stopFile,
       toggle() {
         enabled = !enabled;
         try { localStorage.setItem('jeanpip-sound', enabled ? 'on' : 'off'); } catch { /* ignoré */ }
         if (enabled) this.flip();
+        else stopFile();
         return enabled;
       },
       rumble() { tone(70, 0.6, { type: 'sawtooth', gain: 0.08, slideTo: 110 }); },
-      tear() { noise(0.55, { from: 300, to: 6000, gain: 0.35 }); tone(180, 0.4, { type: 'triangle', gain: 0.12, slideTo: 520 }); },
+      tear() {
+        if (playFile(SOUNDS.FILES.open)) return;
+        noise(0.55, { from: 300, to: 6000, gain: 0.35 });
+        tone(180, 0.4, { type: 'triangle', gain: 0.12, slideTo: 520 });
+      },
       whoosh() { noise(0.4, { from: 1200, to: 300, gain: 0.18, q: 0.8 }); },
       flip() { noise(0.07, { from: 2500, to: 5000, gain: 0.22, q: 3 }); },
       tease(rank) { tone(110 + rank * 30, 0.5, { type: 'triangle', gain: 0.1, slideTo: 220 + rank * 60 }); },
+      // Révélation d'une carte : bruitage mp3 (Rare / Épique / Légendaire)
       reveal(rarity) {
+        if (playFile(SOUNDS.revealFileFor(rarity))) return;
+        this.synthReveal(rarity);
+      },
+      // Son synthétique (communes, 🎀 / 🎃, écrans d'annonce, repli)
+      synthReveal(rarity) {
         const r = RARITY_RANK[rarity] || 0;
         if (r === 0) return tone(880, 0.18, { gain: 0.1 });
         const notes = [[523, 659, 784], [523, 659, 784, 1047], [392, 523, 659, 784, 1047, 1319]][r - 1];
@@ -509,7 +579,7 @@
       fx.stopRain();
     } else if (best === 'epic' || best === 'rose' || best === 'halloween') {
       atmosphere({ dark: true, beams: true });
-      sound.reveal(best);
+      sound.synthReveal(best); // l'annonce garde son son ; le mp3 vient à la révélation
       flash(best);
       fx.burst(innerWidth / 2, innerHeight / 2, RARITY[best].color, 90, 11);
       text.textContent = { rose: 'OCTOBRE ROSE', halloween: 'HALLOWEEN' }[best] || 'ÉPIQUE';
@@ -548,6 +618,7 @@
         big.classList.add('is-descending');
       }
       spot.replaceChildren(big);
+      sound.stopFile(); // carte suivante : le bruitage précédent s'arrête
       sound.whoosh();
 
       // Teasing : plus la carte est rare, plus le dos pulse longtemps
@@ -597,6 +668,7 @@
   function showRecap() {
     tellFinished();
     if (run) run.dead = true;
+    sound.stopFile();
     fx.stopRain();
     atmosphere({ focus: true });
     $('#btn-skip').hidden = true;
@@ -671,6 +743,7 @@
       img.onload = img.onerror = resolve;
       img.src = u;
     }));
+    all.push(sound.preload()); // 🔊 bruitages téléchargés avant le pack
     // On n'attend jamais plus de 4 s : le visuel de repli prend le relais
     return Promise.race([Promise.all(all), new Promise((r) => setTimeout(r, 4000))]);
   }

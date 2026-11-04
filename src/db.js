@@ -49,6 +49,9 @@ const MIGRATIONS = [
     CREATE INDEX credit_moves_stats ON credit_moves(at, user_id, kind, source, item, amount);
     CREATE INDEX events_stats ON events(type, at, user_id);
   `),
+  // v3 — échanges (v3.9) : retrouver vite un mouvement par (source, ref),
+  //      pour ne jamais rembourser ni payer deux fois le même échange
+  (db) => db.exec('CREATE INDEX credit_moves_ref ON credit_moves(source, ref, user_id);'),
 ];
 
 let db = null;
