@@ -144,6 +144,12 @@ function cardsAvailable(userId, urls, data) {
   return [...wanted].every(([url, n]) => (free.get(url) || 0) >= n);
 }
 
+/** Montant en JP$ d'une offre : entier ≥ 0 (absent = 0), sinon null (→ 'bad_amount'). */
+function _amount(jp) {
+  const amount = jp == null ? 0 : jp;
+  return Number.isInteger(amount) && amount >= 0 ? amount : null;
+}
+
 function getTrade(id) {
   return _load().trades[id] || null;
 }
@@ -173,8 +179,8 @@ function createDirect({ buyer, seller, code, jp = 0, cards = [], now = Date.now(
   const card = cardIndex.byCode(code);
   if (!card || _cessibleCount(seller, card.url, data) < 1) return { ok: false, error: 'unavailable' };
 
-  const amount = jp == null ? 0 : jp;
-  if (!Number.isInteger(amount) || amount < 0) return { ok: false, error: 'bad_amount' };
+  const amount = _amount(jp);
+  if (amount === null) return { ok: false, error: 'bad_amount' };
   const offered = (Array.isArray(cards) ? cards : []).filter(Boolean);
   if (!amount && !offered.length) return { ok: false, error: 'empty' };
   if (offered.length && !cardsAvailable(buyer, offered, data)) return { ok: false, error: 'cards_unavailable' };
@@ -467,12 +473,9 @@ module.exports.minBid = minBid;
 //  status : 'open' | 'accepted' | 'refused' | 'cancelled'
 // ═══════════════════════════════════════════════════════════
 
-/** Montant et cartes d'une offre, nettoyés. → { amount, offered } */
+/** Montant (null si invalide, voir _amount) et cartes d'une offre. → { amount, offered } */
 function cleanOffer(jp, cards) {
-  return {
-    amount: Math.max(0, Math.floor(Number(jp) || 0)),
-    offered: (Array.isArray(cards) ? cards : []).filter(Boolean),
-  };
+  return { amount: _amount(jp), offered: (Array.isArray(cards) ? cards : []).filter(Boolean) };
 }
 
 /** Copie de l'état sans cet échange (ses cartes réservées redeviennent libres). */
@@ -485,7 +488,7 @@ function withoutTrade(data, tradeId) {
 /**
  * L'acheteur demande la carte `code` à tous ceux qui peuvent la céder.
  * → { ok: true, trade, recipients: [userId] } | { ok: false, error: 'blocked_buyer'
- *   | 'unavailable' | 'empty' | 'cards_unavailable' | 'floor' | 'no_owner' | 'balance' }
+ *   | 'unavailable' | 'bad_amount' | 'empty' | 'cards_unavailable' | 'floor' | 'no_owner' | 'balance' }
  */
 function createGeneral({ buyer, code, jp = 0, cards = [], now = Date.now() }) {
   if (!buyer || blockReason(buyer, now)) return { ok: false, error: 'blocked_buyer' };
@@ -494,6 +497,7 @@ function createGeneral({ buyer, code, jp = 0, cards = [], now = Date.now() }) {
   if (!card) return { ok: false, error: 'unavailable' };
 
   const { amount, offered } = cleanOffer(jp, cards);
+  if (amount === null) return { ok: false, error: 'bad_amount' };
   if (!amount && !offered.length) return { ok: false, error: 'empty' };
   if (offered.length && !cardsAvailable(buyer, offered, data)) return { ok: false, error: 'cards_unavailable' };
   if (!offered.length && amount < floor(card.rarity)) return { ok: false, error: 'floor' };
@@ -564,10 +568,10 @@ function acceptGeneral(tradeId, sellerId, now = Date.now()) {
  * Le vendeur (demande à une personne) ou un propriétaire (demande générale)
  * propose ses conditions : `jp` et `cards` remplacent ce que l'acheteur donne.
  * → { ok: true, trade } | { ok: false, error: 'not_found' | 'closed' | 'expired' | 'not_seller'
- *   | 'already_countered' | 'blocked_seller' | 'unavailable' | 'empty' | 'floor'
+ *   | 'already_countered' | 'blocked_seller' | 'unavailable' | 'bad_amount' | 'empty' | 'floor'
  *   | 'cards_unavailable', trade? }
  */
-function counter(tradeId, sellerId, { jp = 0, cards = [] } = {}, now = Date.now()) {
+function counter(tradeId, sellerId, { jp, cards = [] } = {}, now = Date.now()) {
   const data = _load();
   const trade = data.trades[tradeId];
   if (!trade || (trade.kind !== 'direct' && trade.kind !== 'general')) return { ok: false, error: 'not_found' };
@@ -581,6 +585,7 @@ function counter(tradeId, sellerId, { jp = 0, cards = [] } = {}, now = Date.now(
   if (_cessibleCount(sellerId, trade.card.url, data) < 1) return { ok: false, error: 'unavailable', trade };
 
   const { amount, offered } = cleanOffer(jp, cards);
+  if (amount === null) return { ok: false, error: 'bad_amount', trade };
   if (!amount && !offered.length) return { ok: false, error: 'empty', trade };
   if (!offered.length && amount < floor(trade.card.rarity)) return { ok: false, error: 'floor', trade };
   if (offered.length && !cardsAvailable(trade.buyer, offered, withoutTrade(data, trade.id))) {
@@ -641,14 +646,18 @@ function acceptCounter(tradeId, buyerId, sellerId, now = Date.now()) {
 }
 
 /**
- * L'acheteur refuse la contre-offre de `sellerId`. La demande reste ouverte :
- * son offre d'origine est toujours valable. → { ok, trade } | { ok: false, error }
+ * L'acheteur refuse la contre-offre de `sellerId`.
+ *   • demande à une personne : la demande est refusée et l'acheteur remboursé ;
+ *   • demande générale : seule cette contre-offre se ferme, l'offre d'origine
+ *     reste valable pour les autres propriétaires.
+ * → { ok, trade } | { ok: false, error }
  */
 function refuseCounter(tradeId, buyerId, sellerId, now = Date.now()) {
   const { data, trade, co, error } = buyerCounterAction(tradeId, buyerId, sellerId);
   if (error) return { ok: false, error, trade };
   co.status = 'refused';
   co.closedAt = now;
+  if (trade.kind === 'direct') _close(trade, 'refused', now, 'counter_refused');
   _save(data);
   return { ok: true, trade };
 }

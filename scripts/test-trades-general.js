@@ -264,6 +264,42 @@ test('demande à une personne : seul le vendeur peut faire une contre-offre', ()
   assert.strictEqual(count('U_C', HW1.url), 0);
 });
 
+test('demande à une personne : contre-offre refusée → demande refusée, A remboursé', () => {
+  collections.addCards('U_C', [{ ...HW1 }]);
+  credits.addCredit('U_A', 100, { source: 'test' });
+  const bA = bal('U_A');
+  const r = trades.createDirect({ buyer: 'U_A', seller: 'U_C', code: 'HW1', jp: 10, cards: [], now: NOW });
+  assert.ok(r.ok, JSON.stringify(r));
+  assert.strictEqual(bal('U_A'), bA - 10);
+  assert.ok(trades.counter(r.trade.id, 'U_C', { jp: 20, cards: [] }, NOW).ok);
+  const rf = trades.refuseCounter(r.trade.id, 'U_A', 'U_C', NOW);
+  assert.ok(rf.ok, JSON.stringify(rf));
+  const t = trades.getTrade(r.trade.id);
+  assert.strictEqual(t.status, 'refused');
+  assert.strictEqual(t.reason, 'counter_refused');
+  assert.strictEqual(t.counters.U_C.status, 'refused');
+  assert.strictEqual(bal('U_A'), bA, '10 JP$ rendus');
+  assert.strictEqual(trades.accept(r.trade.id, 'U_C', NOW).error, 'closed');
+  assert.strictEqual(count('U_C', HW1.url), 1);
+});
+
+test('montants invalides → bad_amount (demande générale et contre-offre)', () => {
+  collections.addCards('U_A', card('ca', 'common', 1));
+  const bA = bal('U_A');
+  for (const jp of [-5, 2.5, '10', NaN]) {
+    assert.strictEqual(trades.createGeneral({ buyer: 'U_A', code: 'HW1', jp, cards: [], now: NOW }).error, 'bad_amount', `createGeneral ${jp}`);
+  }
+  assert.strictEqual(bal('U_A'), bA);
+  const ok = trades.createGeneral({ buyer: 'U_A', code: 'HW1', jp: null, cards: ['ca'], now: NOW });
+  assert.ok(ok.ok, 'jp null = 0 : ' + JSON.stringify(ok));
+  for (const jp of [-5, 2.5]) {
+    assert.strictEqual(trades.counter(ok.trade.id, 'U_C', { jp, cards: [] }, NOW).error, 'bad_amount', `counter ${jp}`);
+  }
+  assert.strictEqual(trades.getTrade(ok.trade.id).counters.U_C, undefined, 'aucune contre-offre enregistrée');
+  assert.ok(trades.counter(ok.trade.id, 'U_C', { cards: ['ca'] }, NOW).ok, 'jp absent = 0');
+  trades._close(trades._load().trades[ok.trade.id], 'cancelled', NOW);
+});
+
 try { db.close(); } catch { /* base jamais ouverte */ }
 try { fs.rmSync(TMP, { recursive: true, force: true }); } catch { /* Windows */ }
 console.log(process.exitCode ? '\n❌ Échec' : `\n✅ Tout est bon (${passed})`);
