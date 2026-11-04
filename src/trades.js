@@ -277,3 +277,170 @@ module.exports = {
   _close,
   _cessibleCount,
 };
+
+// ═══════════════════════════════════════════════════════════
+//  3. ENCHÈRES (kind 'auction')
+//  Le vendeur met un exemplaire aux enchères pour 12 h (JP$ seulement).
+//  Sa carte est réservée pendant toute l'enchère (reservedCounts).
+//  Seul le meilleur enchérisseur a des JP$ en réserve (held) : dépassé,
+//  il est remboursé tout de suite. À la fin, le vendeur est payé avec
+//  la réserve du gagnant. Sans enchère, la carte reste au vendeur.
+//  Fin entre 20 h et 9 h (Paris) → repoussée au 10 h suivant.
+//  Pas de lancement si la fin tombe pendant une pause ; un vendeur en
+//  congés n'arrête pas son enchère, un enchérisseur en congés ne peut
+//  pas enchérir (blockReason).
+// ═══════════════════════════════════════════════════════════
+
+const { parisDay, parisMinutes } = require('./octobreRose');
+
+const NIGHT_FROM = 20 * 60;   // 20h00
+const NIGHT_TO = 9 * 60;      // 9h00
+const MORNING = 10 * 60;      // 10h00
+
+/** Instant (ms) du jour `day` (« AAAA-MM-JJ ») à `minutes` après minuit, heure de Paris. */
+function parisTime(day, minutes) {
+  let t = Date.parse(`${day}T00:00:00Z`) + minutes * 60000;
+  // Corrige le décalage horaire de Paris (UTC+1 / UTC+2), sur ±12 h
+  let diff = (parisMinutes(t) - minutes + 1440) % 1440;
+  if (diff > 720) diff -= 1440;
+  t -= diff * 60000;
+  return t;
+}
+
+/** Fin d'une enchère lancée à `start` : +12 h, ou le 10 h suivant si elle tombe la nuit. */
+function auctionEnd(start) {
+  const end = start + AUCTION_MS;
+  const m = parisMinutes(end);
+  if (m >= NIGHT_TO && m < NIGHT_FROM) return end;
+  let day = parisDay(end);
+  if (m >= NIGHT_FROM) day = parisDay(Date.parse(`${day}T12:00:00Z`) + 24 * 3600000);
+  return parisTime(day, MORNING);
+}
+
+/**
+ * Le vendeur met aux enchères un exemplaire de la carte `code`.
+ * startPrice : entier ≥ plancher de la rareté (par défaut : le plancher).
+ * → { ok: true, trade, recipients: [userId] } (inscrits sauf le vendeur)
+ *   | { ok: false, error: 'blocked_seller' | 'ends_in_pause' | 'unavailable' | 'floor' }
+ */
+function createAuction({ seller, code, startPrice, now = Date.now() }) {
+  if (!seller || blockReason(seller, now)) return { ok: false, error: 'blocked_seller' };
+  const endsAt = auctionEnd(now);
+  if (weekend.isPausedDay(parisDay(endsAt))) return { ok: false, error: 'ends_in_pause' };
+
+  const data = _load();
+  const card = cardIndex.byCode(code);
+  if (!card || _cessibleCount(seller, card.url, data) < 1) return { ok: false, error: 'unavailable' };
+  const price = startPrice == null ? floor(card.rarity) : Number(startPrice);
+  if (!Number.isInteger(price) || price < floor(card.rarity)) return { ok: false, error: 'floor' };
+
+  const id = _nextId(data, now);
+  const trade = {
+    id,
+    kind: 'auction',
+    buyer: null,
+    seller,
+    card: { url: card.url, title: card.title, rarity: card.rarity, code: card.code },
+    offer: { jp: 0, cards: [] },
+    startPrice: price,
+    held: {},
+    status: 'open',
+    createdAt: now,
+    expiresAt: null,
+    endsAt,
+    counters: {},
+    bids: [],
+    dms: {},
+    closedAt: null,
+    reason: null,
+  };
+  data.trades[id] = trade;
+  _save(data);
+  const recipients = broadcast.getSubscribers().filter((u) => u !== seller);
+  return { ok: true, trade, recipients };
+}
+
+/** Meilleure enchère { userId, jp, at } ou null. */
+const bestBid = (trade) => (trade.bids && trade.bids.length ? trade.bids[trade.bids.length - 1] : null);
+
+/** Montant minimum de la prochaine enchère. */
+const minBid = (trade) => {
+  const best = bestBid(trade);
+  return best ? best.jp + 1 : trade.startPrice;
+};
+
+/**
+ * `userId` enchérit `jp` JP$ (mis en réserve) ; le précédent meilleur est remboursé.
+ * → { ok: true, trade, outbid: userId | null }
+ *   | { ok: false, error: 'not_found' | 'closed' | 'ended' | 'self' | 'blocked'
+ *     | 'already_best' | 'too_low' | 'balance', trade? }
+ */
+function bid(tradeId, userId, jp, now = Date.now()) {
+  const data = _load();
+  const trade = data.trades[tradeId];
+  if (!trade || trade.kind !== 'auction') return { ok: false, error: 'not_found' };
+  if (trade.status !== 'open') return { ok: false, error: 'closed', trade };
+  if (now >= trade.endsAt) return { ok: false, error: 'ended', trade };
+  if (userId === trade.seller) return { ok: false, error: 'self', trade };
+  if (blockReason(userId, now)) return { ok: false, error: 'blocked', trade };
+  const best = bestBid(trade);
+  if (best && best.userId === userId) return { ok: false, error: 'already_best', trade };
+  const amount = Number(jp);
+  if (!Number.isInteger(amount) || amount < minBid(trade)) return { ok: false, error: 'too_low', trade };
+  if (!_hold(userId, amount, trade.id)) return { ok: false, error: 'balance', trade };
+
+  let outbid = null;
+  if (best) {
+    outbid = best.userId;
+    const back = (trade.held && trade.held[outbid]) || 0;
+    if (back > 0) _refund(outbid, back, trade.id);
+  }
+  trade.held = { [userId]: amount };
+  trade.bids.push({ userId, jp: amount, at: now });
+  _save(data);
+  return { ok: true, trade, outbid };
+}
+
+/**
+ * Règle une enchère terminée. Ne fait rien avant `endsAt` ni pendant une pause générale.
+ * → { ok: true, trade, outcome: 'sold' | 'no_bid' | 'cancelled' }
+ *   | { ok: false, error: 'not_found' | 'closed' | 'not_ended' | 'paused' }
+ * 'cancelled' : la carte n'est plus chez le vendeur, le gagnant est remboursé.
+ */
+function settleAuction(tradeId, now = Date.now()) {
+  const data = _load();
+  const trade = data.trades[tradeId];
+  if (!trade || trade.kind !== 'auction') return { ok: false, error: 'not_found' };
+  if (trade.status !== 'open') return { ok: false, error: 'closed' };
+  if (now < trade.endsAt) return { ok: false, error: 'not_ended' };
+  if (weekend.isPaused(now)) return { ok: false, error: 'paused' };
+
+  // Carte du vendeur : réservée par CETTE enchère, donc on l'écarte du calcul
+  const others = { ...data, trades: { ...data.trades } };
+  delete others.trades[trade.id];
+  const best = bestBid(trade);
+  let outcome;
+  if (_cessibleCount(trade.seller, trade.card.url, others) < 1) {
+    _close(trade, 'cancelled', now, 'unavailable');
+    outcome = 'cancelled';
+  } else if (!best) {
+    _close(trade, 'expired', now, 'no_bid');
+    outcome = 'no_bid';
+  } else {
+    _transferCard(trade.seller, best.userId, trade.card);
+    const paid = (trade.held && trade.held[best.userId]) || 0;
+    if (paid > 0) _pay(trade.seller, paid, trade.id);
+    trade.held = {};
+    trade.buyer = best.userId;
+    _close(trade, 'done', now, 'sold');
+    outcome = 'sold';
+  }
+  _save(data);
+  return { ok: true, trade, outcome };
+}
+
+module.exports.auctionEnd = auctionEnd;
+module.exports.createAuction = createAuction;
+module.exports.bid = bid;
+module.exports.settleAuction = settleAuction;
+module.exports.minBid = minBid;
