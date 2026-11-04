@@ -21,6 +21,10 @@ fs.copyFileSync(path.join(ROOT, 'data', 'media-bank.json'), path.join(TMP, 'data
 
 const origLog = console.log;
 console.log = () => {};
+// v3.9 : faux module d'échanges (aucune carte réservée ici)
+const tradesPath = path.join(TMP, 'src', 'trades.js');
+if (!fs.existsSync(tradesPath)) fs.writeFileSync(tradesPath, '');
+require.cache[tradesPath] = { id: tradesPath, filename: tradesPath, loaded: true, exports: { reservedCounts: () => new Map() } };
 const matches = require(path.join(TMP, 'src', 'game', 'matches.js'));
 const collections = require(path.join(TMP, 'src', 'collections.js'));
 const arenaStore = require(path.join(TMP, 'src', 'game', 'arenaStore.js'));

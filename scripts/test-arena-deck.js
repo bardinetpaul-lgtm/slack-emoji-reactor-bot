@@ -116,6 +116,25 @@ check('deck sauvegardé : le 3e tank1 (non possédé) est remplacé', kept.urls.
   check('la collection réelle est inchangée', collections.getCollection('UR').find((x) => x.url === 'vigie1').count === 2);
 }
 
+// 🔒 v3.9 : la construction du deck (création du combat, deck auto) ignore aussi les cartes réservées
+{
+  const collections = require(path.join(TMP, 'src', 'collections.js'));
+  const matches = require(path.join(TMP, 'src', 'game', 'matches.js'));
+  const arenaStore = require(path.join(TMP, 'src', 'game', 'arenaStore.js'));
+  const mk = (u) => ({ url: u, title: u, rarity: 'common' });
+  const nine = ['b1', 'b2', 'b3', 'b4', 'b5', 'b6', 'b7', 'b8', 'b9'];
+  collections.addCards('UP', nine.map(mk));
+  collections.addCards('UQ', nine.map(mk));
+  arenaStore.setDeck('UP', nine.slice(0, 8));   // deck enregistré : b1…b8
+  reservedByUser.UP = { b1: 1 };                // b1 réservée par un échange
+  const created = matches.createMatchFor('UP', 'UQ', Date.now());
+  const urlsP = created.match.players.A.deckUrls;
+  check('deck enregistré avec une carte réservée : créé sans elle, complété à 8', urlsP.length === 8 && !urlsP.includes('b1') && urlsP.includes('b9'));
+  const autoAvail = deck.buildAutoDeck(collections.getAvailableCollection('UP'));
+  check('deck auto : une carte réservée n’est jamais choisie', autoAvail.length === 8 && !autoAvail.includes('b1'));
+  delete reservedByUser.UP;
+}
+
 try { require(path.join(TMP, 'src', 'db.js')).close(); } catch { /* base jamais ouverte */ }   // Windows : fichier ouvert = non supprimable
 fs.rmSync(TMP, { recursive: true, force: true });
 console.log(failures ? `\n❌ ${failures} échec(s)` : '\n✅ Tout est bon');

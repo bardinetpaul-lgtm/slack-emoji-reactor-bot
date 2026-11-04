@@ -76,8 +76,8 @@ function sideOf(match, userId) {
 
 function createMatchFor(userA, userB, now = Date.now(), { arena } = {}) {
   if (isBusy(userA) || isBusy(userB)) return { ok: false, reason: 'busy' };
-  const deckA = deckRules.resolveDeck(arenaStore.getDeck(userA), collections.getCollection(userA));
-  const deckB = deckRules.resolveDeck(arenaStore.getDeck(userB), collections.getCollection(userB));
+  const deckA = deckRules.resolveDeck(arenaStore.getDeck(userA), collections.getAvailableCollection(userA));
+  const deckB = deckRules.resolveDeck(arenaStore.getDeck(userB), collections.getAvailableCollection(userB));
   if (!deckA || !deckB) return { ok: false, reason: 'cards' };
 
   seq += 1;
@@ -201,7 +201,7 @@ function startMatch(match, now) {
   const players = {};
   for (const side of ['A', 'B']) {
     const p = match.players[side];
-    const collection = collections.getCollection(p.userId);
+    const collection = collections.getAvailableCollection(p.userId);
     // Re-vérifie le deck au dernier moment (une carte a pu disparaître)
     const resolved = deckRules.resolveDeck(p.deckUrls, collection);
     if (!resolved) return cancel(match, 'cards', now);
@@ -376,7 +376,7 @@ function view(match, userId) {
   };
 
   if (match.status === 'preparing') {
-    const collection = collections.getCollection(userId);
+    const collection = collections.getAvailableCollection(userId);
     const byUrl = Object.fromEntries(collection.map((c) => [c.url, c]));
     const me = match.players[side];
     return {
