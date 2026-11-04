@@ -666,3 +666,138 @@ module.exports.createGeneral = createGeneral;
 module.exports.counter = counter;
 module.exports.acceptCounter = acceptCounter;
 module.exports.refuseCounter = refuseCounter;
+
+// ═══════════════════════════════════════════════════════════
+//  4. MINUTERIE ET DÉSINSCRIPTION
+//  tick(now) : appelée régulièrement (et au démarrage, pour rattraper
+//  ce qui a expiré pendant un arrêt du bot). Sans Slack : elle renvoie
+//  des événements, l'appelant prévient les joueurs.
+//    1. carte réservée qui n'est plus possédée → échange annulé
+//       ('card_lost'), JP$ rendus. Le plus ancien échange garde ses
+//       exemplaires, les suivants sont annulés ;
+//    2. pause générale, ou pause (congés…) de l'acheteur ou du vendeur
+//       visé → demandes annulées ('pause'). Les enchères continuent ;
+//    3. contre-offres dépassées → 'expired' (événement 'counter_expired') ;
+//       demande dépassée sans contre-offre encore ouverte → 'expired' ;
+//    4. enchères arrivées à échéance → settleAuction (événement 'settled').
+//  Événement : { trade, event, reason?, counter?, outcome? }
+//  Rien ne bouge deux fois : un 2ᵉ tick au même instant renvoie [].
+// ═══════════════════════════════════════════════════════════
+
+const isRequest = (t) => t.kind === 'direct' || t.kind === 'general';
+
+/** Exemplaires réservés par cet échange : [[userId, url, n]]. */
+function reservationsOf(trade) {
+  const out = new Map();
+  const add = (userId, url) => {
+    const key = `${userId}\u0000${url}`;
+    const r = out.get(key) || [userId, url, 0];
+    r[2] += 1;
+    out.set(key, r);
+  };
+  if (isRequest(trade)) for (const url of (trade.offer && trade.offer.cards) || []) add(trade.buyer, url);
+  if (trade.kind === 'auction' && trade.card) add(trade.seller, trade.card.url);
+  return [...out.values()];
+}
+
+/** Échanges ouverts, du plus ancien au plus récent. */
+const openByAge = (data) => Object.values(data.trades).filter(isOpen)
+  .sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+
+/**
+ * Fait avancer tous les échanges à l'instant `now`.
+ * → [{ trade, event: 'expired' | 'counter_expired' | 'settled' | 'cancelled', reason?, counter?, outcome? }]
+ */
+function tick(now = Date.now()) {
+  const events = [];
+  const data = _load();
+  let changed = false;
+  const cancel = (trade, reason) => {
+    _close(trade, 'cancelled', now, reason);
+    events.push({ trade, event: 'cancelled', reason });
+    changed = true;
+  };
+
+  // 1. Cartes réservées encore possédées ?
+  const used = new Map();
+  for (const trade of openByAge(data)) {
+    const needs = reservationsOf(trade);
+    const backed = needs.every(([userId, url, n]) => (used.get(`${userId}\u0000${url}`) || 0) + n
+      <= collections.getCount(userId, url));
+    if (!backed) { cancel(trade, 'card_lost'); continue; }
+    for (const [userId, url, n] of needs) {
+      const key = `${userId}\u0000${url}`;
+      used.set(key, (used.get(key) || 0) + n);
+    }
+  }
+
+  // 2. Pause : les demandes s'arrêtent (pas les enchères)
+  const paused = weekend.isPaused(now);
+  for (const trade of openByAge(data)) {
+    if (!isRequest(trade)) continue;
+    if (paused || weekend.pauseFor(trade.buyer, now)
+      || (trade.kind === 'direct' && weekend.pauseFor(trade.seller, now))) cancel(trade, 'pause');
+  }
+
+  // 3. Contre-offres puis demandes dépassées
+  for (const trade of openByAge(data)) {
+    if (!isRequest(trade)) continue;
+    let stillOpen = false;
+    for (const [sellerId, co] of Object.entries(trade.counters || {})) {
+      if (co.status !== 'open') continue;
+      if (now >= co.expiresAt) {
+        co.status = 'expired';
+        co.closedAt = now;
+        events.push({ trade, event: 'counter_expired', counter: sellerId });
+        changed = true;
+      } else {
+        stillOpen = true;
+      }
+    }
+    if (!stillOpen && now >= trade.expiresAt) {
+      _close(trade, 'expired', now, 'expired');
+      events.push({ trade, event: 'expired', reason: 'expired' });
+      changed = true;
+    }
+  }
+  if (changed) _save(data);
+
+  // 4. Enchères terminées (settleAuction relit et écrit l'état lui-même)
+  for (const trade of openByAge(data)) {
+    if (trade.kind !== 'auction' || now < trade.endsAt) continue;
+    const r = settleAuction(trade.id, now);
+    if (r.ok) events.push({ trade: r.trade, event: 'settled', outcome: r.outcome });
+  }
+  return events;
+}
+
+/**
+ * Le joueur se désinscrit de /jeanpip : ses demandes (acheteur) et celles
+ * qui le visent (vendeur d'une demande à une personne) sont annulées
+ * ('unsubscribed', JP$ rendus) ; ses contre-offres ouvertes sont annulées
+ * (la demande continue). Ses enchères et ses mises restent valables.
+ * → [{ trade, event: 'cancelled' | 'counter_cancelled', reason: 'unsubscribed', counter? }]
+ */
+function onUnsubscribe(userId, now = Date.now()) {
+  const events = [];
+  const data = _load();
+  for (const trade of openByAge(data)) {
+    if (!isRequest(trade)) continue;
+    if (trade.buyer === userId || (trade.kind === 'direct' && trade.seller === userId)) {
+      _close(trade, 'cancelled', now, 'unsubscribed');
+      events.push({ trade, event: 'cancelled', reason: 'unsubscribed' });
+      continue;
+    }
+    const co = trade.counters && trade.counters[userId];
+    if (co && co.status === 'open') {
+      co.status = 'cancelled';
+      co.closedAt = now;
+      events.push({ trade, event: 'counter_cancelled', reason: 'unsubscribed', counter: userId });
+    }
+  }
+  if (events.length) _save(data);
+  return events;
+}
+
+module.exports.tick = tick;
+module.exports.onUnsubscribe = onUnsubscribe;
