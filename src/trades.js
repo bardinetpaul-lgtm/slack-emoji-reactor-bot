@@ -283,3 +283,21 @@ module.exports = {
   _close,
   _cessibleCount,
 };
+
+// ═══════════════════════════════════════════════════════════
+//  💬 RÉFÉRENCES DES DM (tâche 7, src/tradesSlack.js)
+//  trade.dms[userId] = { channel, ts } : pour mettre le DM à jour (chat.update).
+// ═══════════════════════════════════════════════════════════
+
+/** Garde la référence du DM envoyé à `userId` pour cet échange. false si l'échange n'existe pas. */
+function setDm(id, userId, ref) {
+  if (!ref || !ref.channel || !ref.ts) return false;
+  const data = _load();
+  const trade = data.trades[id];
+  if (!trade) return false;
+  trade.dms = { ...(trade.dms || {}), [userId]: { channel: ref.channel, ts: ref.ts } };
+  _save(data);
+  return true;
+}
+
+module.exports.setDm = setDm;
