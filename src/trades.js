@@ -819,3 +819,26 @@ function onUnsubscribe(userId, now = Date.now()) {
 
 module.exports.tick = tick;
 module.exports.onUnsubscribe = onUnsubscribe;
+
+// ═══════════════════════════════════════════════════════════
+//  📣 REFUS D'UNE DEMANDE GÉNÉRALE (tâche 7b)
+//  Un propriétaire qui refuse une demande générale la décline pour lui
+//  seul : la demande reste ouverte pour les autres. On le garde dans
+//  trade.declined[userId] = instant, pour que son DM reste sans boutons.
+// ═══════════════════════════════════════════════════════════
+
+/**
+ * `userId` décline la demande générale `tradeId`.
+ * → { ok: true, trade } | { ok: false, error: 'not_found' | 'closed', trade? }
+ */
+function decline(tradeId, userId, now = Date.now()) {
+  const data = _load();
+  const trade = data.trades[tradeId];
+  if (!trade || trade.kind !== 'general') return { ok: false, error: 'not_found' };
+  if (trade.status !== 'open') return { ok: false, error: 'closed', trade };
+  trade.declined = { ...(trade.declined || {}), [userId]: now };
+  _save(data);
+  return { ok: true, trade };
+}
+
+module.exports.decline = decline;

@@ -108,15 +108,15 @@ const has = (x, id) => flat(x).includes(`"action_id":"${id}"`);
   const broadcast = req('broadcast.js');
   const collections = req('collections.js');
   const cardIndex = req('cardIndex.js');
-  const find = (list, name) => list.find((a) => a.id === name).fn;
+  const find = (list, name) => list.find((a) => (a.id instanceof RegExp ? a.id.test(name) : a.id === name)).fn;
   const ack = async () => {};
 
   const HW1 = cardIndex.byCode('HW1');
   const C1 = cardIndex.listCards().find((c) => c.rarity === 'common');
 
-  for (const u of ['UA', 'UB', 'UC', 'UE']) broadcast.subscribe(u);   // UD : pas inscrit ; UE : inscrit sans HW1
+  for (const u of ['UA', 'UB', 'UC', 'UE', 'UF', 'UG']) broadcast.subscribe(u);   // UD : pas inscrit ; UE : inscrit sans HW1
   credits.addCredit('UA', 100, { source: 'test' });
-  for (const u of ['UB', 'UC', 'UD']) collections.addCards(u, [{ ...HW1 }]);
+  for (const u of ['UB', 'UC', 'UD', 'UF', 'UG']) collections.addCards(u, [{ ...HW1 }]);
   collections.addCards('UA', [{ ...C1 }]);
   for (const u of ['UA', 'UB', 'UC']) await find(events, 'app_home_opened')({ event: { tab: 'home', user: u }, client: fakeClient, logger });
 
@@ -173,6 +173,18 @@ const has = (x, id) => flat(x).includes(`"action_id":"${id}"`);
   const gDms = trades.getTrade(g.id).dms;
   check(gDms.UB && gDms.UC && gDms.UC.channel === 'D_UC', 'références des DM de B et C gardées (setDm)');
 
+  // ── F décline AVANT toute contre-offre (et sa référence de DM a été perdue) ──
+  const raw = trades._load();
+  delete raw.trades[g.id].dms.UF;
+  trades._save(raw);
+  await click('trade_refuse', 'UF', g.id);
+  const gF = trades.getTrade(g.id);
+  check(gF.status === 'open' && gF.declined && gF.declined.UF, 'F décline : gardé dans trade.declined, la demande reste ouverte');
+  check(gF.dms.UF && gF.dms.UF.channel === 'D_UF' && gF.dms.UF.ts === 'dm-ts', 'référence du DM cliqué enregistrée (trades.setDm)');
+  const fDeclined = () => updated.filter((m) => m.channel === 'D_UF').at(-1);
+  const fUpd0 = updated.filter((m) => m.channel === 'D_UF').length;
+  check(/décliné/.test(flat(fDeclined())) && !actionIds(fDeclined()).length, 'DM de F : « décliné », sans boutons');
+
   // ── Contre-offre de C sur la demande générale ──
   await click('trade_counter_open', 'UC', `${g.id}|UC`);
   const cv = opened.at(-1).view;
@@ -197,6 +209,18 @@ const has = (x, id) => flat(x).includes(`"action_id":"${id}"`);
   check(trades.getTrade(g.id).status === 'open' && trades.getTrade(g.id).counters.UC.status === 'refused', 'A refuse la contre-offre : la demande générale reste ouverte');
   check(/refusé ta contre-offre/.test(flat(dmsTo('UC').at(-1))), 'C est prévenu du refus');
   check(credits.getBalance('UA') === 88, 'la réserve de A ne bouge pas');
+  const fUpd1 = updated.filter((m) => m.channel === 'D_UF');
+  check(fUpd1.length > fUpd0 && /décliné/.test(flat(fUpd1.at(-1))) && !actionIds(fUpd1.at(-1)).length, 'après le refus de la contre-offre, le DM de F est republié toujours sans boutons');
+
+  // ── G contre-propose puis quitte /jeanpip : événement counter_cancelled → DM republiés ──
+  check(await submitView('trade_counter_submit', 'UG', { jp: 20, meta: `${g.id}|UG` }) === null, 'contre-offre de G');
+  const fUpd2 = updated.filter((m) => m.channel === 'D_UF').length;
+  await find(actions, 'broadcast_leave')({ ack, body: { user: { id: 'UG' } }, action: { action_id: 'broadcast_leave' }, client: fakeClient, logger });
+  check(trades.getTrade(g.id).counters.UG.status === 'cancelled' && trades.getTrade(g.id).status === 'open', 'G se désinscrit : sa contre-offre est annulée, la demande continue');
+  const fUpd3 = updated.filter((m) => m.channel === 'D_UF');
+  check(fUpd3.length > fUpd2 && /décliné/.test(flat(fUpd3.at(-1))) && !actionIds(fUpd3.at(-1)).length, 'après cet événement, le DM de F reste « décliné », sans boutons');
+  await tradesSlack.runTick(fakeClient, logger);
+  check(!/trade_accept/.test(flat(fDeclined())), 'après un passage de la minuterie : toujours aucun bouton pour F');
 
   // ── Refuser (décliner) une demande générale ──
   const updE = updated.length;
@@ -216,6 +240,8 @@ const has = (x, id) => flat(x).includes(`"action_id":"${id}"`);
   const upC = after.find((m) => m.channel === 'D_UC');
   check(upB && /Échange conclu/.test(flat(upB)) && !actionIds(upB).length, 'DM de B mis à jour : échange conclu');
   check(upC && /Déjà conclue/.test(flat(upC)) && !actionIds(upC).length, 'DM de C mis à jour : « déjà conclue », sans boutons');
+  const upF = after.find((m) => m.channel === 'D_UF');
+  check(upF && /Déjà conclue/.test(flat(upF)) && !actionIds(upF).length, 'DM de F (qui avait décliné) : « déjà conclue »');
   check(/accept/i.test(flat(dmsTo('UA').at(-1))), 'DM de résultat à A');
   check(published.slice(pubBefore).some((p) => p.user_id === 'UA') && published.slice(pubBefore).some((p) => p.user_id === 'UB'), 'Accueils de A et B rafraîchis');
   await click('trade_accept', 'UC', g.id);

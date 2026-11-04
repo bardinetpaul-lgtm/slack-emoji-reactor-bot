@@ -696,9 +696,10 @@ function requestClosedLine(trade, ownerId) {
 
 /**
  * DM de demande reçu par `ownerId` (demande générale ou à une personne),
- * avec l'état de sa contre-offre. `declined` : il a refusé une demande générale.
+ * avec l'état de sa contre-offre. `declined` : il a refusé une demande générale
+ * (par défaut : lu dans trade.declined, gardé par trades.decline).
  */
-function buildRequestDM(trade, ownerId, { declined = false } = {}) {
+function buildRequestDM(trade, ownerId, { declined = Boolean(trade.declined && trade.declined[ownerId]) } = {}) {
   const general = trade.kind === 'general';
   const intro = general
     ? `📣 *<@${trade.buyer}> cherche la carte* ${cardLine(trade.card)} : demande envoyée à tous ceux qui peuvent la céder.`
@@ -791,18 +792,23 @@ async function generalSellerClick(ctx, actionId, { body, client, tradeId, now })
 
   if (actionId === 'trade_refuse') {
     // Refuser une demande générale = la décliner pour soi : rien ne change pour les autres
-    const trade = trades.getTrade(tradeId);
+    // (gardé dans l'échange : toute mise à jour ultérieure du DM reste sans boutons)
+    const res = trades.decline(tradeId, userId, now);
+    const trade = res.trade || trades.getTrade(tradeId);
     if (!trade) return h.reply(client, body, ERROR_TEXT.closed);
-    const ref = (trade.dms && trade.dms[userId]) || clicked;
-    await h.update(client, ref, buildRequestDM(trade, userId, { declined: trade.status === 'open' }));
-    if (trade.status !== 'open') await h.reply(client, body, ERROR_TEXT.closed);
+    if (!(trade.dms && trade.dms[userId]) && clicked) trades.setDm(trade.id, userId, clicked);
+    await h.update(client, (trade.dms && trade.dms[userId]) || clicked, buildRequestDM(trade, userId));
+    if (!res.ok) await h.reply(client, body, ERROR_TEXT.closed);
     return;
   }
 
   const res = trades.accept(tradeId, userId, now);
   const { trade } = res;
   if (res.ok || (trade && trade.status !== 'open')) {
-    if (!(trade.dms && trade.dms[userId]) && clicked) trade.dms = { ...(trade.dms || {}), [userId]: clicked };
+    if (!(trade.dms && trade.dms[userId]) && clicked) {
+      trades.setDm(trade.id, userId, clicked);
+      trade.dms = { ...(trade.dms || {}), [userId]: clicked };
+    }
     console.log(`📣 ${trade.id} : ${trade.status} (${trade.reason}) par <@${userId}>`);
     if (res.ok) recordDone(trade);
     await h.updateAll(client, trade);
