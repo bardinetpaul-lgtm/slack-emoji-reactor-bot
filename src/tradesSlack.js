@@ -5,10 +5,10 @@
 //    • demande à une personne : modale (joueur → numéros → offre),
 //      DM au vendeur (Accepter / Refuser / Contre-offre),
 //      DM de résultat à l'acheteur.
-//  Demande générale, contre-offres et enchères : tâches suivantes
-//  (leurs boutons ouvrent pour l'instant une modale « bientôt »).
+//  Demande générale et contre-offres, puis enchères et minuterie :
+//  sections en fin de fichier.
 //  Règles et stockage : src/trades.js. Ici : messages et boutons.
-//  Constructeurs (build*) purs → testés par scripts/test-trades-slack.js.
+//  Constructeurs (build*) purs → testés par scripts/test-trades-slack*.js.
 // ═══════════════════════════════════════════════════════════
 
 const trades = require('./trades');
@@ -189,8 +189,6 @@ function buildTradeBlocks(userId, now = Date.now()) {
 function infoModal(title, text) {
   return { type: 'modal', callback_id: 'trade_info', title: plainText(title), close: plainText('Fermer'), blocks: [section(text)] };
 }
-
-const buildSoonModal = (title) => infoModal(title, '🚧 *Bientôt disponible !* Cette façon d\'échanger arrive dans quelques jours.');
 
 // Noms des joueurs (users.info), gardés en mémoire pour le menu des inscrits
 const names = new Map();
@@ -470,6 +468,7 @@ function register(app, ctx) {
       console.log(`🤝 ${trade.id} : ${trade.status} (${trade.reason}) par <@${userId}>`);
       if (res.ok && event === 'accepted') recordDone(trade);
       await updateSellerDM(client, trade, userId, body);
+      await updateCounterDMs(client, trade);   // contre-offre en attente : ses boutons disparaissent
       await dm(client, trade.buyer, buildBuyerResultDM(trade, res.ok ? event : 'cancelled'));
       if (!res.ok) await reply(client, body, errorFor(res.error, userId, { asBuyer: false, now }));
       await refresh(client, [trade.buyer, userId]);
@@ -508,16 +507,13 @@ async function onUnsubscribe(client, userId) {
     if (trade.seller) involved.add(trade.seller);
     if (event === 'counter_cancelled') {
       await dm(trade.buyer, buildCounterCancelledDM(trade, counter));
+      await updateRequestDMs(client, trade);
       continue;
     }
     if (event !== 'cancelled') continue;
     console.log(`🤝 ${trade.id} annulé : <@${userId}> a quitté /jeanpip`);
-    for (const [u, ref] of Object.entries(trade.dms || {})) {
-      if (u === trade.buyer || !ref) continue;
-      involved.add(u);
-      const msg = buildSellerDM(trade, u);
-      try { await client.chat.update({ channel: ref.channel, ts: ref.ts, text: msg.text, blocks: msg.blocks }); } catch (e) { log('mise à jour DM vendeur', e); }
-    }
+    for (const u of dmOwners(trade)) involved.add(u);
+    await updateRequestDMs(client, trade);   // vendeurs (selon la sorte) et contre-offres de l'acheteur
     if (trade.buyer !== userId) await dm(trade.buyer, buildBuyerResultDM(trade, 'cancelled'));
   }
   await Promise.all([...involved].filter(Boolean).map((u) => registered.refreshHome(client, u, console)));
@@ -754,7 +750,7 @@ function buildCounterBuyerDM(trade, sellerId) {
         ? '✖️ *Tu as refusé cette contre-offre* : la demande est close, ce que tu avais mis de côté t\'est rendu.'
         : '✖️ *Tu as refusé cette contre-offre.* Ta demande reste ouverte pour les autres joueurs.';
     } else if (co.status === 'expired') line = '⌛ *Contre-offre expirée.*';
-    else if (trade.status === 'done') line = '🔒 *Déjà conclue* avec un autre joueur.';
+    else if (trade.status === 'done') line = trade.seller === sellerId ? `✅ *<@${sellerId}> a finalement accepté ton offre d'origine* : la carte est dans ton classeur.` : '🔒 *Déjà conclue* avec un autre joueur.';
     else line = `🔒 *Demande close*${trade.status === 'expired' ? ' : elle a expiré' : ''}.`;
     blocks.push(section(head), context(line));
   }
@@ -808,6 +804,7 @@ async function generalSellerClick(ctx, actionId, { body, client, tradeId, now })
   if (res.ok || (trade && trade.status !== 'open')) {
     if (!(trade.dms && trade.dms[userId]) && clicked) trade.dms = { ...(trade.dms || {}), [userId]: clicked };
     console.log(`📣 ${trade.id} : ${trade.status} (${trade.reason}) par <@${userId}>`);
+    if (res.ok) recordDone(trade);
     await h.updateAll(client, trade);
     if (res.ok) await h.dm(client, trade.buyer, buildBuyerResultDM(trade, 'accepted'));
     else if (res.error === 'cards_unavailable') await h.dm(client, trade.buyer, buildBuyerResultDM({ ...trade, seller: userId }, 'cancelled'));
@@ -913,6 +910,7 @@ function registerGeneral(app, ctx) {
     }
     const co = trade.counters[sellerId];
     console.log(`💬 ${trade.id} : contre-offre de <@${sellerId}> → ${co.status} par <@${userId}>`);
+    if (accepted) recordDone(trade, co);
     await h.updateAll(client, trade);
     if (accepted) {
       await h.dm(client, sellerId, textDM(`✅ *<@${userId}> a accepté ta contre-offre !* Ta carte ${cardLine(trade.card)} est partie, tu as reçu ${describeOffer(co)}.`));
@@ -960,8 +958,8 @@ Object.assign(ERROR_TEXT, {
   stopped: 'Cet échange n\'a pas pu aboutir.',
 });
 
-/** DM du vendeur d'une demande, par sorte (la section « demande générale » peut ajouter la sienne). */
-const SELLER_DM_BUILDERS = { direct: buildSellerDM };
+/** DM de demande reçu par un vendeur, par sorte d'échange. */
+const SELLER_DM_BUILDERS = { direct: buildSellerDM, general: buildRequestDM };
 
 /** « mercredi 4/11 à 10h00 », heure de Paris. */
 function whenText(ms) {
@@ -1175,13 +1173,24 @@ async function updateAuctionDMs(client, trade) {
   for (const [userId, ref] of Object.entries(trade.dms || {})) await updateDM(client, ref, buildAuctionDM(trade, userId));
 }
 
-/** Met à jour les DM des vendeurs d'une demande close. */
-async function updateSellerDMs(client, trade) {
-  const build = SELLER_DM_BUILDERS[trade.kind];
-  if (!build) return;
-  for (const [userId, ref] of Object.entries(trade.dms || {})) {
-    if (userId !== trade.buyer) await updateDM(client, ref, build(trade, userId));
+/** Joueurs qui ont un DM gardé pour cette demande (clé `counter_<vendeur>` → l'acheteur). */
+const dmOwners = (trade) => Object.keys(trade.dms || {}).map((k) => (k.startsWith(COUNTER_KEY) ? trade.buyer : k));
+
+/** Met à jour les DM de contre-offre reçus par l'acheteur (trade.dms[`counter_<vendeur>`]). */
+async function updateCounterDMs(client, trade) {
+  for (const [key, ref] of Object.entries(trade.dms || {})) {
+    if (key.startsWith(COUNTER_KEY) && ref) await updateDM(client, ref, buildCounterBuyerDM(trade, key.slice(COUNTER_KEY.length)));
   }
+}
+
+/** Met à jour tous les DM d'une demande : ceux des vendeurs, et les contre-offres reçues par l'acheteur. */
+async function updateRequestDMs(client, trade) {
+  const build = SELLER_DM_BUILDERS[trade.kind];
+  for (const [key, ref] of Object.entries(trade.dms || {})) {
+    if (!ref || !build || key === trade.buyer || key.startsWith(COUNTER_KEY)) continue;
+    await updateDM(client, ref, build(trade, key));
+  }
+  await updateCounterDMs(client, trade);
 }
 
 async function handleTickEvent(client, ev, involved) {
@@ -1208,18 +1217,19 @@ async function handleTickEvent(client, ev, involved) {
     return;
   }
 
+  for (const u of dmOwners(trade)) involved.add(u);
   if (event === 'counter_expired' || event === 'counter_cancelled') {
     involved.add(ev.counter);
     await safeDM(client, trade.buyer, buildCounterEndDM(trade, ev.counter, event));
+    await updateRequestDMs(client, trade);
     return;
   }
   // Demande annulée « pour pause » : elle a pu expirer avant la pause (bot redémarré le week-end) → texte neutre
   const shown = trade.reason === 'pause' ? { ...trade, reason: 'stopped' } : trade;
-  for (const u of Object.keys(trade.dms || {})) involved.add(u);
   console.log(`🤝 ${trade.id} : ${event} (${trade.reason})`);
   const msg = trade.kind === 'direct' ? buildBuyerResultDM(shown, event === 'expired' ? 'expired' : 'cancelled') : buildRequestEndDM(shown, event);
   await safeDM(client, trade.buyer, msg);
-  await updateSellerDMs(client, shown);
+  await updateRequestDMs(client, shown);
 }
 
 /**

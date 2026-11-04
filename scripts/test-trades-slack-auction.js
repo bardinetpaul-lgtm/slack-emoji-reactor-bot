@@ -110,7 +110,7 @@ const hasImage = (m) => (m.blocks || []).some((b) => b.type === 'image' && /^htt
   const cardIndex = req('cardIndex.js');
   const home = req('home.js');
   const db = req('db.js');
-  const find = (list, name) => list.find((a) => a.id === name).fn;
+  const find = (list, name) => list.find((a) => (a.id instanceof RegExp ? a.id.test(name) : a.id === name)).fn;
   const ack = async () => {};
   const homeOf = (u) => home.buildHomeView(u, { isAdmin: false, creditsPerJeanpipLabel: '0,5', targetEmoji: 'jeanpip', farmRemainingMs: 0, farmQuota: { used: 0, max: 10, nextFreeMs: 0 }, formatRemaining: String });
   const tradeEvents = () => db.getDb().prepare("SELECT * FROM events WHERE type = 'trade_done' ORDER BY id").all();
@@ -235,6 +235,72 @@ const hasImage = (m) => (m.blocks || []).some((b) => b.type === 'image' && /^htt
   await find(actions, 'trade_accept')({ ack, body: { user: { id: 'UA' }, channel: { id: 'D_UA' }, message: { ts: 'x' } }, action: { action_id: 'trade_accept', value: direct.trade.id }, client: fakeClient, logger });
   const ev2 = tradeEvents().at(-1);
   check(ev2 && ev2.user_id === 'UB' && JSON.parse(ev2.data).kind === 'direct' && JSON.parse(ev2.data).jp === 4, 'demande acceptée : événement trade_done (direct, 4 JP$)');
+
+  // ── Intégration avec la demande générale et les contre-offres ──
+  const clickDM = (actionId, user, value) => find(actions, actionId)({
+    ack, body: { user: { id: user }, trigger_id: 'T3', channel: { id: `D_${user}` }, message: { ts: 'dm' } }, action: { action_id: actionId, value }, client: fakeClient, logger,
+  });
+  const submitOffer = async (callbackId, user, { code, jp, meta = '' }) => {
+    let response = null;
+    const values = { jp: { value: { value: jp == null ? null : String(jp) } }, cards: { value: { selected_options: [] } } };
+    if (code) values.card = { value: { selected_option: { value: code } } };
+    await find(views, callbackId)({ ack: async (r) => { response = r || null; }, body: { user: { id: user } }, view: { private_metadata: meta, state: { values } }, client: fakeClient, logger });
+    return response;
+  };
+  const noButton = (m, id) => m && !flat(m).includes(`"action_id":"${id}"`);
+  // HW1 est chez C (enchère gagnée) ; B a 96 JP$, C 80 JP$
+  check(await submitOffer('trade_general_submit', 'UB', { code: 'HW1', jp: 12 }) === null, 'B lance une demande générale pour HW1 (12 JP$)');
+  const g1 = trades.openTradesOf('UB').find((t) => t.kind === 'general');
+  await clickDM('trade_accept', 'UC', g1.id);
+  const evG = tradeEvents().at(-1);
+  const dG = evG && JSON.parse(evG.data);
+  check(trades.getTrade(g1.id).status === 'done' && evG.user_id === 'UB' && dG.kind === 'general' && dG.jp === 12 && dG.seller === 'UC', 'demande générale acceptée : événement trade_done (général, 12 JP$, vendeur C)');
+
+  // HW1 est chez B : C demande à tous, B fait une contre-offre à 15, C l'accepte
+  check(await submitOffer('trade_general_submit', 'UC', { code: 'HW1', jp: 12 }) === null, 'C lance une demande générale pour HW1 (12 JP$)');
+  const g2 = trades.openTradesOf('UC').find((t) => t.kind === 'general');
+  check(await submitOffer('trade_counter_submit', 'UB', { jp: 15, meta: `${g2.id}|UB` }) === null, 'B fait une contre-offre à 15 JP$');
+  await clickDM('trade_counter_accept', 'UC', `${g2.id}|UB`);
+  const evC = tradeEvents().at(-1);
+  const dC = evC && JSON.parse(evC.data);
+  check(trades.getTrade(g2.id).status === 'done' && evC.user_id === 'UC' && dC.jp === 15 && dC.seller === 'UB' && dC.tradeId === g2.id, 'contre-offre acceptée : trade_done avec les 15 JP$ de la contre-offre');
+
+  // HW1 est chez C : B demande à tous, C contre-propose, tout expire → la minuterie ferme les DM
+  check(await submitOffer('trade_general_submit', 'UB', { code: 'HW1', jp: 12 }) === null, 'B relance une demande générale pour HW1');
+  const g3 = trades.openTradesOf('UB').find((t) => t.kind === 'general');
+  at('2026-11-04T09:31:00Z');
+  check(await submitOffer('trade_counter_submit', 'UC', { jp: 20, meta: `${g3.id}|UC` }) === null, 'C fait une contre-offre à 20 JP$');
+  at('2026-11-04T10:35:00Z');   // contre-offre et demande dépassées
+  const u1 = updated.length;
+  await tradesSlack.runTick(fakeClient, logger);
+  const st3 = trades.getTrade(g3.id);
+  check(st3.status === 'expired' && st3.counters.UC.status === 'expired', 'runTick : contre-offre puis demande générale expirées');
+  const updOwner = updated.slice(u1).filter((m) => m.channel === 'D_UC');
+  const updBuyer = updated.slice(u1).filter((m) => m.channel === 'D_UB');
+  check(updOwner.length && updOwner.every((m) => noButton(m, 'trade_accept')), 'DM de demande générale de C mis à jour, sans boutons (SELLER_DM_BUILDERS.general)');
+  check(updBuyer.length && updBuyer.every((m) => noButton(m, 'trade_counter_accept')), 'DM de contre-offre reçu par B mis à jour, sans boutons');
+  check(!updated.slice(u1).some((m) => /te demande ta carte/.test(flat(m)) && m.channel === 'D_UB'), 'le DM de contre-offre de B n\'est pas remplacé par un DM de vendeur');
+
+  // Demande à une personne avec contre-offre, puis le vendeur accepte l'offre d'origine
+  const d2 = trades.createDirect({ buyer: 'UB', seller: 'UC', code: 'HW1', jp: 12, now: Date.now() });
+  check(d2.ok && await submitOffer('trade_counter_submit', 'UC', { jp: 25, meta: `${d2.trade.id}|UC` }) === null, 'B demande HW1 à C, C fait une contre-offre à 25 JP$');
+  const u2 = updated.length;
+  await clickDM('trade_accept', 'UC', d2.trade.id);
+  const coUpd = updated.slice(u2).find((m) => m.channel === 'D_UB');
+  check(trades.getTrade(d2.trade.id).status === 'done' && noButton(coUpd, 'trade_counter_accept') && /offre d'origine/.test(flat(coUpd)), 'C accepte l\'offre d\'origine : le DM de contre-offre de B perd ses boutons');
+
+  // Désinscription d'un propriétaire : DM de demande générale fermé, contre-offre annulée
+  collections.addCards('UA', [{ ...HW1 }]);
+  check(await submitOffer('trade_general_submit', 'UC', { code: 'HW1', jp: 12 }) === null, 'C demande HW1 à tous (A et B l\'ont)');
+  const g4 = trades.openTradesOf('UC').find((t) => t.kind === 'general');
+  check(await submitOffer('trade_counter_submit', 'UB', { jp: 30, meta: `${g4.id}|UB` }) === null, 'B fait une contre-offre à 30 JP$');
+  const u3 = updated.length;
+  await find(actions, 'broadcast_leave')({ ack, body: { user: { id: 'UC' } }, action: { action_id: 'broadcast_leave' }, client: fakeClient, logger });
+  const u3s = updated.slice(u3);
+  check(trades.getTrade(g4.id).status === 'cancelled', 'C quitte /jeanpip : sa demande générale est annulée');
+  check(u3s.some((m) => m.channel === 'D_UA') && u3s.filter((m) => m.channel === 'D_UA' || m.channel === 'D_UB').every((m) => noButton(m, 'trade_accept')), 'DM de demande générale de A et B fermés (SELLER_DM_BUILDERS.general)');
+  check(u3s.some((m) => m.channel === 'D_UC') && u3s.filter((m) => m.channel === 'D_UC').every((m) => noButton(m, 'trade_counter_accept') && /te fait une contre-offre/.test(flat(m))), 'DM de contre-offre reçu par C fermé, sans boutons (toujours un DM de contre-offre)');
+  broadcast.subscribe('UC');
 
   // ── Fin pendant le week-end ──
   at('2026-11-06T14:00:00Z');   // vendredi 15h → fin samedi
