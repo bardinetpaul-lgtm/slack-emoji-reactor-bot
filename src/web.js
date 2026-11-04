@@ -17,6 +17,9 @@
 //    /stats, /api/stats/…             → Dashboard admin (src/stats/web.js)
 //    /tv/arena, /api/tv/…             → 📺 JP TV : Arène en direct (src/game/tvWeb.js)
 //    /tickets, /api/tickets/…         → 🎟️ Tickets à gratter (src/scratchWeb.js)
+//    /ville, /api/ville/…             → 🏙️ Ville Jeanpip (src/villeWeb.js, v4.0)
+//    /boutique, /api/boutique/…       → 🎁 Boutique de boosters (src/boutiqueWeb.js)
+//    /banque, /api/banque/…           → 🏦 Banque, revente (src/banqueWeb.js)
 //    GET  /<fichier>                  → statiques de public/
 //
 //  Désactivé si WEB_PUBLIC_URL est vide (ouverture Slack uniquement).
@@ -37,6 +40,10 @@ const arenaMatches = require('./game/matches');
 const statsWeb = require('./stats/web');
 const tvWeb = require('./game/tvWeb');
 const scratchWeb = require('./scratchWeb');
+const villeWeb = require('./villeWeb');
+const boutiqueWeb = require('./boutiqueWeb');
+const banqueWeb = require('./banqueWeb');
+const villeToken = require('./villeToken');
 const collections = require('./collections');
 const { getAllMedia } = require('./media');
 const { writeFileAtomic } = require('./storage');
@@ -51,6 +58,12 @@ const STATIC_TYPES = {
   '.html': 'text/html; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
+  '.mjs': 'text/javascript; charset=utf-8',
+  '.glb': 'model/gltf-binary',
+  '.gltf': 'model/gltf+json',
+  '.bin': 'application/octet-stream',
+  '.webp': 'image/webp',
+  '.txt': 'text/plain; charset=utf-8',
   '.jpg': 'image/jpeg',
   '.png': 'image/png',
   '.svg': 'image/svg+xml',
@@ -166,7 +179,7 @@ function buildOpenUrl(boosterId, ownerId) {
 // ─────────────────────────────────────────────
 
 function send(res, status, body, headers = {}) {
-  res.writeHead(status, { 'X-Content-Type-Options': 'nosniff', ...headers });
+  res.writeHead(status, { 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer', ...headers });
   res.end(body);
 }
 
@@ -340,6 +353,7 @@ function handleOpen(res, id, token, { client, logger, onOpened }) {
 
 // Prénom (couverture du classeur, Arène) et photo Slack (classement) : users.info, gardé 1 h en mémoire
 const NAME_TTL_MS = 60 * 60 * 1000;
+const NAMES_MAX = 1000; // au-delà, le plus ancien est oublié
 const names = new Map();
 
 /** → { name, avatar } (null si Slack ne répond pas) */
@@ -356,7 +370,9 @@ async function userProfile(client, userId, logger) {
   } catch (e) {
     logger.warn(`[web] nom de ${userId} : ${e.message}`);
   }
+  names.delete(userId);
   names.set(userId, { profile, at: Date.now() });
+  while (names.size > NAMES_MAX) names.delete(names.keys().next().value);
   return profile;
 }
 
@@ -419,6 +435,9 @@ function createHandler(deps) {
         return await handleCardImage(res, m[1], deps, { thumb: true });
       }
       if (await scratchWeb.route(req, res, url)) return undefined;
+      if (await villeWeb.route(req, res, url)) return undefined;
+      if (await boutiqueWeb.route(req, res, url)) return undefined;
+      if (await banqueWeb.route(req, res, url)) return undefined;
       if (await tvWeb.route(req, res, url)) return undefined;
       if (await statsWeb.route(req, res, url)) return undefined;
       if (await arenaWeb.route(req, res, url)) return undefined;
@@ -441,7 +460,7 @@ function createHandler(deps) {
  *                                      animée (pas lors d'un rejeu du lien)
  * @returns {http.Server|null}
  */
-function startWebServer({ client, logger = console, port = WEB_PORT, host = '127.0.0.1', force = false, onOpened }) {
+function startWebServer({ client, logger = console, port = WEB_PORT, host = '127.0.0.1', force = false, onOpened, hooks = {} }) {
   if (!isEnabled() && !force) {
     logger.info('🎬 Page d\'ouverture animée désactivée (WEB_PUBLIC_URL vide)');
     return null;
@@ -451,6 +470,7 @@ function startWebServer({ client, logger = console, port = WEB_PORT, host = '127
   configureStats({ client, logger });
   configureTv({ client, logger });
   configureTickets({ logger, onChange: onOpened });
+  configureVille({ client, logger, hooks });
   arenaMatches.start();   // boucle 10 Hz des combats (idempotent)
   const server = http.createServer(createHandler({ client, logger, onOpened }));
   server.on('error', (err) => logger.error('[web] serveur:', err.message));
@@ -512,4 +532,65 @@ function buildStatsUrl(userId) {
   return statsWeb.buildStatsUrl(userId);
 }
 
-module.exports = { startWebServer, buildOpenUrl, buildTicketsUrl, buildCollectionUrl, buildDeckUrl, buildArenaUrl, buildStatsUrl, buildTvUrls, isEnabled, signToken, verifyToken };
+// 🏙️ v4.0 : ville Jeanpip, Boutique, Banque — même jeton (src/villeToken.js)
+/** Lit le corps JSON d'un POST (10 Ko max) → objet ({} si vide ou invalide). */
+function readJson(req, limit = 10 * 1024) {
+  return new Promise((resolve) => {
+    let size = 0;
+    const chunks = [];
+    req.on('data', (c) => {
+      size += c.length;
+      if (size > limit) { req.destroy(); resolve({}); return; }
+      chunks.push(c);
+    });
+    req.on('end', () => {
+      try {
+        const data = JSON.parse(Buffer.concat(chunks).toString('utf-8') || '{}');
+        resolve(data && typeof data === 'object' && !Array.isArray(data) ? data : {});
+      } catch {
+        resolve({});
+      }
+    });
+    req.on('error', () => resolve({}));
+  });
+}
+
+/**
+ * Liens (relatifs à la racine web) que la ville propose au joueur.
+ * L'Arène n'y est pas : son lien est par combat (villeWeb, buildArenaUrl).
+ */
+function villeLinks(userId) {
+  const tv = tvWeb.buildTvUrls();
+  return {
+    ville: `ville?${villeToken.query(userId)}`,
+    boutique: `boutique?${villeToken.query(userId)}`,
+    banque: `banque?${villeToken.query(userId)}`,
+    museum: collectionPath(userId),
+    kiosk: strip(scratchWeb.buildTicketsUrl(userId)),
+    deck: strip(arenaWeb.buildDeckUrl(userId)),
+    tv: tv ? strip(tv.page) : null,
+  };
+}
+
+function configureVille({ client = null, logger = console, hooks = {} } = {}) {
+  villeToken.configure({ getSecret });
+  const context = {
+    publicUrl: WEB_PUBLIC_URL, getSecret, send, sendJson, servePage, readJson, userProfile, client, logger,
+    hooks, buildUrls: villeLinks, signToken, arenaUrl: (matchId, userId) => strip(arenaWeb.buildArenaUrl(matchId, userId)),
+  };
+  villeWeb.configure(context);
+  boutiqueWeb.configure(context);
+  banqueWeb.configure(context);
+}
+function strip(u) {
+  return u && WEB_PUBLIC_URL && u.startsWith(`${WEB_PUBLIC_URL}/`) ? u.slice(WEB_PUBLIC_URL.length + 1) : u;
+}
+configureVille();
+
+/** Lien personnel de la ville Jeanpip (null si la page web est désactivée). */
+function buildVilleUrl(userId) {
+  if (!isEnabled()) return null;
+  return `${WEB_PUBLIC_URL}/ville?${villeToken.query(userId)}`;
+}
+
+module.exports = { startWebServer, buildVilleUrl, readJson, buildOpenUrl, buildTicketsUrl, buildCollectionUrl, buildDeckUrl, buildArenaUrl, buildStatsUrl, buildTvUrls, isEnabled, signToken, verifyToken };

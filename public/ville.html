@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="theme-color" content="#1d2c4c">
+  <title>Jeanpip City</title>
+  <!-- Chemins relatifs : la page est servie sur …/ville (derrière un préfixe de proxy) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;600;800&display=swap">
+  <link rel="stylesheet" href="ville.css?v=__ASSET_VERSION__">
+  <script type="importmap">
+    { "imports": { "three": "./vendor/three/three.module.js", "three/addons/": "./vendor/three/addons/" } }
+  </script>
+</head>
+<body>
+  <div id="scene" aria-hidden="true"></div>
+  <div id="labels" class="labels"></div>
+  <div id="hover-ring" hidden></div>
+
+  <header class="topbar">
+    <div class="brand"><i aria-hidden="true">🏙️</i>JEANPIP <span>CITY</span></div>
+    <div class="wallet" id="wallet" hidden><b id="balance">…</b> JP$</div>
+    <div class="clock" id="clock" title="Heure de Lorient"></div>
+    <div class="top-actions">
+      <button class="pill-btn" id="btn-home" type="button" hidden>🏠 Ma maison</button>
+      <button class="pill-btn" id="btn-center" type="button">🎯 Recentrer</button>
+      <a class="pill-btn" href="slack://open">💬 Slack</a>
+    </div>
+  </header>
+
+  <div class="pause" id="pause" role="status" hidden></div>
+
+  <nav class="menu" id="menu" aria-label="Aller à">
+    <button class="menu-toggle" id="menu-toggle" type="button" aria-expanded="false">🧭 Aller à…</button>
+    <ul id="menu-list" hidden></ul>
+  </nav>
+
+  <ol class="feed" id="feed" aria-live="polite"></ol>
+  <p class="hint" id="hint">Glisse pour tourner · molette pour zoomer · clic droit (ou deux doigts) pour te déplacer · clique sur un bâtiment</p>
+
+  <div class="loading" id="loading">
+    <div class="loading-card">
+      <div class="loading-title">🏙️ Jeanpip City se construit…</div>
+      <div class="bar"><i id="loading-bar"></i></div>
+      <p id="loading-msg">Chargement des rues de Lorient</p>
+    </div>
+  </div>
+
+  <section class="fallback" id="fallback" hidden>
+    <div class="fallback-card">
+      <h1>🏙️ Jeanpip City</h1>
+      <p id="fallback-msg">Ton navigateur n'affiche pas Jeanpip City en 3D. Voici tous ses bâtiments :</p>
+      <ul id="fallback-links"></ul>
+    </div>
+  </section>
+
+  <div class="panel-wrap" id="panel-wrap" hidden>
+    <section class="panel" id="panel" role="dialog" aria-modal="true" aria-labelledby="panel-title">
+      <button class="panel-close" id="panel-close" type="button" aria-label="Fermer">✕</button>
+      <h2 id="panel-title"></h2>
+      <div id="panel-body"></div>
+    </section>
+  </div>
+  <div class="toast" id="toast" role="status" hidden></div>
+
+  <script src="ville-logic.js?v=__ASSET_VERSION__"></script>
+  <script>
+    // 🛟 Repli sans 3D : liste simple de liens (aussi si le module ne démarre pas)
+    (function () {
+      var shown = false;
+      window.__villeFallback = function (msg, state) {
+        if (shown) return; shown = true;
+        var L = window.VilleLogic;
+        var token = new URLSearchParams(location.search).get('t') || '';
+        var box = document.getElementById('fallback');
+        var load = document.getElementById('loading');
+        if (load) load.hidden = true;
+        if (msg) document.getElementById('fallback-msg').textContent = msg;
+        box.hidden = false;
+        function render(s) {
+          var ul = document.getElementById('fallback-links');
+          ul.innerHTML = '';
+          L.fallbackLinks(s, token).forEach(function (l) {
+            var li = document.createElement('li');
+            var a = document.createElement('a');
+            a.href = l.href; a.textContent = l.emoji + ' ' + l.label;
+            li.appendChild(a); ul.appendChild(li);
+          });
+        }
+        if (state) return render(state);
+        fetch('api/ville?t=' + encodeURIComponent(token)).then(function (r) { return r.json(); })
+          .then(function (s) { if (s && s.ok) render(s); else document.getElementById('fallback-msg').textContent = 'Ce lien n’est plus valable : rouvre Jeanpip City depuis l’Accueil Slack.'; })
+          .catch(function () { document.getElementById('fallback-msg').textContent = 'Jeanpip City ne répond pas. Réessaie dans un instant.'; });
+      };
+      setTimeout(function () { if (!window.__villeStarted) window.__villeFallback('Jeanpip City ne démarre pas en 3D sur ce navigateur. Voici tous ses bâtiments :'); }, 20000);
+    }());
+  </script>
+  <script nomodule>window.__villeFallback();</script>
+  <script type="module" src="ville.js?v=__ASSET_VERSION__"></script>
+</body>
+</html>

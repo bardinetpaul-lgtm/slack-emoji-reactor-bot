@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="theme-color" content="#1f6fb2">
+  <title>Boutique de boosters · Jeanpip</title>
+  <!-- Chemins relatifs : la page est servie sur …/boutique (derrière un préfixe de proxy) -->
+  <link rel="stylesheet" href="boutique.css?v=__ASSET_VERSION__">
+</head>
+<body>
+  <div class="awning" aria-hidden="true"></div>
+  <header class="topbar">
+    <div class="brand"><i class="losange">🎁</i>JEANPIP <span>BOUTIQUE</span></div>
+    <div class="wallet">
+      <div class="balance"><b id="balance">…</b> JP$</div>
+      <div class="today">ton solde</div>
+    </div>
+    <a class="pill-btn" id="back" href="ville">← Retour à Jeanpip City</a>
+  </header>
+
+  <main class="stage">
+    <p class="pause" id="pause" role="status" hidden></p>
+    <p class="intro">Chaque booster contient <b>8 cartes</b>. Plus il est cher, plus tu as de chances de tomber sur du 🔵 rare, 🟣 épique ou 🟡 légendaire. L'achat est débité tout de suite, puis ton booster s'ouvre ici.</p>
+    <div class="shelf" id="shelf" aria-live="polite"></div>
+    <p class="msg" id="msg" role="status"></p>
+    <p class="note">Le message habituel arrive aussi dans Slack : tu peux ouvrir ton booster plus tard depuis l'onglet <b>Messages</b>.</p>
+  </main>
+
+  <script src="boutique.js?v=__ASSET_VERSION__"></script>
+</body>
+</html>
