@@ -77,15 +77,17 @@ function lockedByDecks(userId) {
 }
 
 /**
- * Doublons revendables, par rareté :
+ * Doublons revendables, par rareté (hors exemplaires réservés par un échange) :
  * { common: [{ url, title, spare }], … } triés du plus d'exemplaires en trop au moins.
  */
 function sellable(userId) {
   const locked = lockedByDecks(userId);
+  // Exemplaires réservés par un échange ouvert (v3.9) : import paresseux, trades.js requiert resale.js
+  const reserved = require('./trades').reservedCounts(userId);
   const out = Object.fromEntries(RARITY_ORDER.map((r) => [r, []]));
   for (const card of collections.getCollection(userId)) {
     if (!PRICES[card.rarity]) continue;
-    const spare = card.count - Math.max(1, locked.get(card.url) || 0);
+    const spare = card.count - (reserved.get(card.url) || 0) - Math.max(1, locked.get(card.url) || 0);
     if (spare > 0) out[card.rarity].push({ url: card.url, title: card.title, spare });
   }
   for (const r of RARITY_ORDER) out[r].sort((a, b) => b.spare - a.spare);

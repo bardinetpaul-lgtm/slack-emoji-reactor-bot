@@ -26,6 +26,12 @@ process.env.WEB_PUBLIC_URL = 'http://jeanpip.test';
 process.env.WEB_SECRET = 'test-secret';
 let PORT = 0;   // port libre attribué par le système (évite les collisions)
 
+// v3.9 : faux module d'échanges (cartes réservées pilotées par le test)
+const reservedByUser = {};
+const tradesPath = path.join(TMP, 'src', 'trades.js');
+if (!fs.existsSync(tradesPath)) fs.writeFileSync(tradesPath, '');   // le vrai module est remplacé par le faux ci-dessous
+require.cache[tradesPath] = { id: tradesPath, filename: tradesPath, loaded: true, exports: { reservedCounts: (u) => new Map(Object.entries(reservedByUser[u] || {})) } };
+
 const origLog = console.log;
 console.log = () => {};
 const web = require(path.join(TMP, 'src', 'web.js'));
@@ -228,6 +234,11 @@ const pathOf = (url) => url.replace('http://jeanpip.test/', '');
   check('combat : le Capitaine hors deck a son personnage (abeilles des Renforts visibles)', Boolean(assets.keyOf[capCard.url]) && assets.symbols.includes(`id="${assets.keyOf[capCard.url]}"`));
   check('API deck : les cartes Hors série possédées sont proposées (anti-spam + Octobre Rose)', dget.json && [SPAM_CARDS[0].url, ROSE_CARDS[0].url].every((u) => dget.json.catalogue.some((c) => c.url === u)));
   check('API deck : mes cartes seulement (aucune non possédée) + mes decks', dget.json && dget.json.catalogue.length === ownedA && dget.json.catalogue.every((c) => c.copies > 0) && dget.json.decks.length === 3 && dget.json.active === 1);
+  // 🔒 v3.9 : une carte réservée par un échange n'est plus proposée à l'éditeur
+  reservedByUser.UA = { [SPAM_CARDS[0].url]: 1 };
+  const dres = await request('GET', `api/deck?t=${encodeURIComponent(dt)}`);
+  check('API deck : une carte (×1) réservée par un échange disparaît du catalogue', dres.json && !dres.json.catalogue.some((c) => c.url === SPAM_CARDS[0].url) && dres.json.catalogue.length === ownedA - 1);
+  delete reservedByUser.UA;
   const dpost = await request('POST', `api/deck?t=${encodeURIComponent(dt)}`, { active: 0, decks: [{ name: 'Nouveau', cards: deckA }, {}, {}] });
   check('API deck : enregistrement', dpost.json && dpost.json.ok);
   check('API deck : jeton refusé', (await request('GET', 'api/deck?t=UA.00')).status === 403);

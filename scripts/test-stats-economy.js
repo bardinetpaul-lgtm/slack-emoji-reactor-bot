@@ -108,6 +108,25 @@ check('classement par JP$', pu.tables.items[0].key === 'booster/rare');
 check('familles', pu.tables.families.find((x) => x.family === 'booster').count === 3);
 check('série par article', pu.series.byItem['booster/common'].join() === '0,2');
 
+// 🤝 Échanges (v3.9) : des JP$ qui changent de main, ni créés ni consommés
+const trade = [
+  ['2026-09-12T08:00:00.000Z', 'UA', -10, 'spend', 'trade_hold', 'T1:hold'],
+  ['2026-09-12T09:00:00.000Z', 'UB', 10, 'earn', 'trade_sale', 'T1:sale'],
+  ['2026-09-12T10:00:00.000Z', 'UA', -4, 'spend', 'trade_hold', 'T2:hold'],
+  ['2026-09-12T11:00:00.000Z', 'UA', 4, 'earn', 'trade_refund', 'T2:refund'],
+];
+for (const r of trade) ins.run(r[0], r[1], r[2], r[3], r[4], null, r[5]);
+bal.run('UA', 35); bal.run('UB', 15);
+const ft = time.normalizeFilters({ from: '2026-09-12T00:00:00+02:00', to: '2026-09-12T23:59:59+02:00', grain: 'day' });
+const ecoT = economy(ft, { db, boosterPrice: 20 });
+check('échanges : ni créés ni consommés', ecoT.kpis.created === 0 && ecoT.kpis.consumed === 0 && ecoT.kpis.net === 0);
+check('échanges : transferts = 10 JP$ versés aux vendeurs', ecoT.kpis.transfers === 10);
+check('échanges : détail par source', ecoT.tables.transfers.map((x) => `${x.key}:${x.credits}`).join() === 'trade_sale:10,trade_refund:4,trade_hold:-14');
+check('échanges : absents des tables créés / consommés', !ecoT.tables.bySource.length && !ecoT.tables.byUse.length);
+check('échanges : masse inchangée (52)', ecoT.kpis.mass === 52 && ecoT.kpis.ledgerGap === 0);
+check('échanges : une mise de côté n’est pas un achat', purchases(ft, { db }).kpis.purchases === 0);
+check('période sans échange : transferts = 0', eco.kpis.transfers === 0 && economy(f, { db, boosterPrice: 20 }).kpis.created === 42);
+
 try { require(path.join(TMP, 'src', 'db.js')).close(); } catch { /* base jamais ouverte */ }   // Windows : fichier ouvert = non supprimable
 fs.rmSync(TMP, { recursive: true, force: true });
 console.log(failures ? `\n❌ ${failures} échec(s)` : '\n🎉 Stats Économie OK');

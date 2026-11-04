@@ -168,6 +168,10 @@ ${pause.icon} *Pas de booster ${pause.short}*, ni achat ni ouverture : retour ${
   // ♻️ v3.6 : revente des doublons
   blocks.push(buildResaleBlock(userId, pause, now), { type: 'divider' });
 
+  // 🤝 v3.9 : échanges de cartes entre joueurs (src/tradesSlack.js)
+  const tradesSlack = require('./tradesSlack');
+  blocks.push(...tradesSlack.buildTradeBlocks(userId, now), { type: 'divider' });
+
   // 📒 Classeur Panini (page web, bureaux uniquement)
   if (ctx.collectionUrl) {
     blocks.push(section(

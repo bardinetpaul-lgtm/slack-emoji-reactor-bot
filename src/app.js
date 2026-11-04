@@ -56,6 +56,7 @@ const looks = require('./game/looks');
 const cards = require('./game/cards');
 const arenaSlack = require('./arenaSlack');
 const bugsSlack = require('./bugsSlack');
+const tradesSlack = require('./tradesSlack');
 const events = require('./events');
 
 // 🗄️ Base SQLite (crédits + journal des stats) : sans elle, pas de démarrage
@@ -1527,6 +1528,7 @@ app.action(/^broadcast_(join|leave)$/, async ({ ack, body, action, client, logge
       logger.info(`📮 <@${userId}> a REJOINT la liste de diffusion`);
     } else {
       broadcast.unsubscribe(userId);
+      await tradesSlack.onUnsubscribe(client, userId);   // 🤝 v3.9 : ses échanges en cours sont annulés
       logger.info(`📮 <@${userId}> est SORTI de la liste de diffusion`);
     }
 
@@ -1683,6 +1685,14 @@ bugsSlack.register(app, {
   isAdmin: (userId) => JEANPIP_ADMINS.includes(userId),
   // 🏖️ v3.3 : le week-end, ni les admins ni le joueur ne sont notifiés (le bug reste listé dans l'Accueil admin)
   sendDM: async (client, userId, msg) => (weekendMuted(console, `DM « bug signalé » à <@${userId}>`) ? null : sendDM(client, userId, msg)),
+  openModal,
+  refreshHome: refreshHomeIfSeen,
+});
+
+// 🤝 v3.9 : échanges de cartes (demande à une personne, DM Accepter / Refuser / Contre-offre)
+tradesSlack.register(app, {
+  // 🏖️ Pas de DM automatique pendant une pause (comme les bugs)
+  sendDM: async (client, userId, msg) => (weekendMuted(console, `DM « échange » à <@${userId}>`) ? null : sendDM(client, userId, msg)),
   openModal,
   refreshHome: refreshHomeIfSeen,
 });
@@ -2423,6 +2433,12 @@ async function announceClosures(client, logger) {
     .catch((error) => console.error('❌ Fin des raids :', error.message));
   raidTick();
   setInterval(raidTick, RAID_CHECK_MS);
+
+  // 🤝 v3.9 : échanges (demandes expirées, fins d'enchère), rattrapés au démarrage puis toutes les 10 s
+  const tradeTick = () => tradesSlack.runTick(app.client, console)
+    .catch((error) => console.error('❌ Minuterie des échanges :', error.message));
+  tradeTick();
+  setInterval(tradeTick, 10 * 1000);
 
   // 🙈 v3.2 : arrivée du stock du jour → le bouton d'achat apparaît dans tous les Accueils ouverts
   const dropTick = () => checkBoosterDrop(app.client, console)

@@ -76,8 +76,8 @@ function sideOf(match, userId) {
 
 function createMatchFor(userA, userB, now = Date.now(), { arena } = {}) {
   if (isBusy(userA) || isBusy(userB)) return { ok: false, reason: 'busy' };
-  const deckA = deckRules.resolveDeck(arenaStore.getDeck(userA), collections.getCollection(userA));
-  const deckB = deckRules.resolveDeck(arenaStore.getDeck(userB), collections.getCollection(userB));
+  const deckA = deckRules.resolveDeck(arenaStore.getDeck(userA), collections.getAvailableCollection(userA));
+  const deckB = deckRules.resolveDeck(arenaStore.getDeck(userB), collections.getAvailableCollection(userB));
   if (!deckA || !deckB) return { ok: false, reason: 'cards' };
 
   seq += 1;
@@ -125,10 +125,11 @@ function setDeck(id, userId, urls, captain = null) {
   const side = match && sideOf(match, userId);
   if (!side) return { ok: false, reason: 'not_player' };
   if (match.status !== 'preparing') return { ok: false, reason: 'not_preparing' };
-  const check = deckRules.validateDeck(collections.getCollection(userId), urls);
+  const available = collections.getAvailableCollection(userId);   // sans les cartes réservées par un échange
+  const check = deckRules.validateDeck(available, urls);
   if (!check.ok) return check;
   match.players[side].deckUrls = urls.slice();
-  match.players[side].captain = captainOf(collections.getCollection(userId), urls, captain);
+  match.players[side].captain = captainOf(available, urls, captain);
   match.players[side].replaced = [];
   arenaStore.setDeck(userId, urls.filter((u) => !shop.isToken(u)), match.players[side].captain);   // devient le deck par défaut (sans les achats)
   broadcast(match);
@@ -200,7 +201,7 @@ function startMatch(match, now) {
   const players = {};
   for (const side of ['A', 'B']) {
     const p = match.players[side];
-    const collection = collections.getCollection(p.userId);
+    const collection = collections.getAvailableCollection(p.userId);
     // Re-vérifie le deck au dernier moment (une carte a pu disparaître)
     const resolved = deckRules.resolveDeck(p.deckUrls, collection);
     if (!resolved) return cancel(match, 'cards', now);
@@ -375,7 +376,7 @@ function view(match, userId) {
   };
 
   if (match.status === 'preparing') {
-    const collection = collections.getCollection(userId);
+    const collection = collections.getAvailableCollection(userId);
     const byUrl = Object.fromEntries(collection.map((c) => [c.url, c]));
     const me = match.players[side];
     return {

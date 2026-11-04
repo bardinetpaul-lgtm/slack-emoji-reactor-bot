@@ -177,8 +177,45 @@ function spend(userId, amount, meta = {}) {
   }
 }
 
+// ─────────────────────────────────────────────
+// 🔁 Mouvements uniques (échanges v3.9)
+//    Un mouvement identifié par (joueur, source, ref) n'est écrit qu'une fois :
+//    rejouer une clôture après un plantage ne rembourse ni ne paie deux fois.
+// ─────────────────────────────────────────────
+
+const SAME_MOVE = 'SELECT 1 FROM credit_moves WHERE user_id = ? AND source = ? AND ref = ? LIMIT 1';
+
+/**
+ * Comme addCredit, mais rien si un mouvement (userId, meta.source, meta.ref) existe déjà.
+ * → true si le mouvement est écrit maintenant, false sinon (déjà fait, montant nul ou erreur).
+ */
+function addCreditOnce(userId, amount, meta) {
+  ensureImported();
+  if (!meta || !meta.source || meta.ref == null) throw new Error('addCreditOnce : source et ref obligatoires');
+  const db = getDb();
+  try {
+    return db.transaction(() => {
+      if (!amount || db.prepare(SAME_MOVE).get(userId, meta.source, meta.ref)) return false;
+      writeMove(db, userId, readBalance(db, userId) + amount, amount, 'earn', meta);
+      return true;
+    })();
+  } catch (e) {
+    console.error('[credits] écriture:', e.message);
+    return false;
+  }
+}
+
+/** Premier mouvement de cette source et de cette ref : { userId, amount } ou null. */
+function findMove(source, ref) {
+  ensureImported();
+  const row = getDb().prepare('SELECT user_id AS userId, amount FROM credit_moves WHERE source = ? AND ref = ? ORDER BY id LIMIT 1').get(source, ref);
+  return row || null;
+}
+
 module.exports = {
   addCredit,
+  addCreditOnce,
+  findMove,
   getBalance,
   setBalance,
   spend,

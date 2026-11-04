@@ -159,4 +159,4 @@ function buildAlbum(userId) {
   return { sections: list, stats, version };
 }
 
-module.exports = { buildAlbum, numberFromTitle };
+module.exports = { buildAlbum, numberFromTitle, numberBank };
