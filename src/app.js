@@ -2416,6 +2416,12 @@ async function announceClosures(client, logger) {
   raidTick();
   setInterval(raidTick, RAID_CHECK_MS);
 
+  // 🤝 v3.9 : échanges (demandes expirées, fins d'enchère), rattrapés au démarrage puis toutes les 10 s
+  const tradeTick = () => tradesSlack.runTick(app.client, console)
+    .catch((error) => console.error('❌ Minuterie des échanges :', error.message));
+  tradeTick();
+  setInterval(tradeTick, 10 * 1000);
+
   // 🙈 v3.2 : arrivée du stock du jour → le bouton d'achat apparaît dans tous les Accueils ouverts
   const dropTick = () => checkBoosterDrop(app.client, console)
     .catch((error) => console.error('❌ Arrivée du stock :', error.message));

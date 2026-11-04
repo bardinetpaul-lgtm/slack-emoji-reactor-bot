@@ -16,6 +16,18 @@
 
 const RELEASES = [
   {
+    version: '3.9.0',
+    date: '2026-11-04',
+    title: 'Échanges et enchères entre joueurs',
+    changes: [
+      '🤝 Nouveau : échange tes cartes avec les autres joueurs, contre des JP$, d’autres cartes, ou les deux. Tout se passe dans le bloc *Échanges* de ton Accueil.',
+      '📨 Trois façons d’échanger : *demander une carte* à un joueur précis, lancer une *demande générale* à tous ceux qui l’ont, ou *mettre une de tes cartes aux enchères*.',
+      '💬 Une offre ne te plaît pas ? Réponds par une *contre-offre*. Une demande et une contre-offre durent *1 h* ; sans réponse, tout est rendu.',
+      '🔨 Une enchère dure *12 h* (une fin entre 20h et 9h est repoussée à 10h). Tous les inscrits sont prévenus, la plus haute enchère emporte la carte. Si quelqu’un enchérit plus haut que toi, tes JP$ te sont rendus tout de suite.',
+      '📣 Seuls les joueurs inscrits à la liste `/jeanpip` peuvent échanger et recevoir les annonces. Pas d’échange pendant le week-end ou une fermeture.',
+    ],
+  },
+  {
     version: '3.8.0',
     date: '2026-10-29',
     title: 'Les boosters ont leur propre ambiance',

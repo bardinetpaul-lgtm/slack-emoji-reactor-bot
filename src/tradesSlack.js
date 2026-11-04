@@ -131,6 +131,7 @@ const cardLine = (card) => `*${codeOf(card)}* (${(RARITY_LABEL[card.rarity] || R
 // ─────────────────────────────────────────────
 
 function homeLine(t, userId) {
+  if (t.kind === 'auction') return auctionHomeLine(t, userId);   // section « Enchères et minuterie »
   const code = `*${codeOf(t.card || {})}*`;
   if (t.kind === 'direct' && t.buyer === userId) return `→ Tu demandes ${code} à <@${t.seller}> · fin à ${hour(t.expiresAt)}`;
   if (t.kind === 'direct') return `← <@${t.buyer}> te demande ${code} · réponds avant ${hour(t.expiresAt)} (dans tes messages)`;
@@ -358,11 +359,6 @@ function register(app, ctx) {
     await ack();
     await ctx.openModal(client, body, buildSoonModal('Demande générale'), logger);
   });
-  app.action('trade_auction_open', async ({ ack, body, client, logger }) => {
-    await ack();
-    await ctx.openModal(client, body, buildSoonModal('Enchères'), logger);
-  });
-
   // 👤 Choix du vendeur : la modale se complète avec ses numéros et l'offre
   app.action('trade_direct_seller', async ({ ack, body, action, client }) => {
     await ack();
@@ -417,6 +413,7 @@ function register(app, ctx) {
     if (res.ok || (res.trade && res.trade.status !== 'open')) {
       const { trade } = res;
       console.log(`🤝 ${trade.id} : ${trade.status} (${trade.reason}) par <@${userId}>`);
+      if (res.ok && event === 'accepted') recordDone(trade);
       await updateSellerDM(client, trade, userId, body);
       await dm(client, trade.buyer, buildBuyerResultDM(trade, res.ok ? event : 'cancelled'));
       if (!res.ok) await reply(client, body, errorFor(res.error, userId, { asBuyer: false, now }));
@@ -429,6 +426,7 @@ function register(app, ctx) {
   });
   sellerAction('trade_accept', trades.accept, 'accepted');
   sellerAction('trade_refuse', trades.refuse, 'refused');
+  registerAuction(app, ctx);   // 🔨 section « Enchères et minuterie »
 }
 
 /**
@@ -452,3 +450,395 @@ module.exports = {
   register,
   onUnsubscribe,
 };
+
+// ═══════════════════════════════════════════════════════════
+//  🔨 ENCHÈRES ET MINUTERIE (v3.9, tâche 8)
+//    • Accueil « Mettre aux enchères » → modale (mes cartes cessibles,
+//      prix de départ ≥ plancher, heure de fin calculée) ;
+//    • DM d'annonce à chaque inscrit sauf le vendeur (image, prix actuel,
+//      fin, bouton Enchérir), mis à jour à chaque enchère ;
+//    • DM au précédent meilleur enchérisseur quand il est dépassé ;
+//    • runTick(client, logger) : trades.tick() puis les DM de fin
+//      (enchères réglées, demandes expirées ou annulées) ;
+//    • événement trade_done à chaque échange conclu (recordDone).
+//  Pendant une pause : aucun DM (ctx.sendDM est réduit au silence).
+// ═══════════════════════════════════════════════════════════
+
+const events = require('./events');
+const { cardThumbUrl } = require('./cardImages');
+const { parisDay } = require('./octobreRose');
+
+Object.assign(ERROR_TEXT, {
+  ends_in_pause: 'Cette enchère finirait pendant une pause (week-end ou fermeture de l\'entreprise) : relance-la un autre jour.',
+  too_low: 'Enchère trop basse.',
+  already_best: 'Tu es déjà le meilleur enchérisseur : attends qu\'on te dépasse.',
+  ended: 'Cette enchère est terminée.',
+  blocked: 'Tu ne peux pas enchérir en ce moment (pas inscrit, en pause, en plein raid ou sous pénalité anti-farm).',
+  self_bid: 'Tu ne peux pas enchérir sur ta propre enchère.',
+  not_found: 'Cet échange n\'existe plus.',
+  card_lost: 'La carte n\'est plus disponible (partie, volée ou placée dans un deck).',
+  unsubscribed: 'Un des joueurs a quitté la liste /jeanpip.',
+  stopped: 'Cet échange n\'a pas pu aboutir.',
+});
+
+/** DM du vendeur d'une demande, par sorte (la section « demande générale » peut ajouter la sienne). */
+const SELLER_DM_BUILDERS = { direct: buildSellerDM };
+
+/** « mercredi 4/11 à 10h00 », heure de Paris. */
+function whenText(ms) {
+  const day = new Date(ms).toLocaleDateString('fr-FR', { timeZone: 'Europe/Paris', weekday: 'long', day: 'numeric', month: 'numeric' });
+  return `${day} à ${hour(ms)}`;
+}
+
+/** Image de la carte pour Slack (adresse publique, comme le classeur), ou null. */
+function cardImage(card) {
+  const known = cardIndex.byCode(codeOf(card)) || {};
+  const src = cardThumbUrl({ url: card.url, type: card.type || known.type || 'image' });
+  if (!src) return null;
+  if (/^https?:\/\//.test(src)) return src;
+  const base = (process.env.WEB_PUBLIC_URL || '').trim().replace(/\/+$/, '');
+  return base ? `${base}/${src}` : null;
+}
+
+const imageBlock = (card) => {
+  const url = cardImage(card);
+  return url ? [{ type: 'image', image_url: url, alt_text: String(card.title || codeOf(card)).slice(0, 2000) }] : [];
+};
+
+const bestOf = (trade) => (trade.bids && trade.bids.length ? trade.bids[trade.bids.length - 1] : null);
+
+/** Un échange conclu → événement trade_done (statistiques). `offer` : ce que l'acheteur a donné (défaut : son offre, ou l'enchère gagnante). */
+function recordDone(trade, offer = null) {
+  const best = bestOf(trade);
+  const given = offer || (trade.kind === 'auction' ? { jp: best ? best.jp : 0, cards: [] } : trade.offer || {});
+  events.record('trade_done', trade.buyer, {
+    tradeId: trade.id,
+    kind: trade.kind,
+    card: trade.card && trade.card.url,
+    jp: given.jp || 0,
+    cards: given.cards || [],
+    seller: trade.seller,
+  });
+}
+
+/** Ligne de l'Accueil pour une enchère (vendeur ou enchérisseur). */
+function auctionHomeLine(t, userId) {
+  const best = bestOf(t);
+  const price = `${best ? best.jp : t.startPrice} JP$`;
+  const code = `*${codeOf(t.card || {})}*`;
+  if (t.seller === userId) return `🔨 Ta carte ${code} est aux enchères · prix actuel ${price} · fin ${whenText(t.endsAt)}`;
+  if (best && best.userId === userId) return `🥇 Tu mènes l'enchère sur ${code} (${price}) · fin ${whenText(t.endsAt)}`;
+  return `🔨 Tu as été dépassé sur l'enchère ${code} (${price}) · fin ${whenText(t.endsAt)} (dans tes messages)`;
+}
+
+function auctionStatusLine(trade) {
+  const best = bestOf(trade);
+  if (trade.status === 'done') return `✅ *Adjugée* à <@${trade.buyer}> pour *${best ? best.jp : 0} JP$*.`;
+  if (trade.status === 'expired') return `⌛ *Terminée sans enchère* : la carte reste à <@${trade.seller}>.`;
+  return `🚫 *Enchère annulée* : ${ERROR_TEXT[trade.reason] || ERROR_TEXT.ended}`;
+}
+
+/** Modale « Mettre aux enchères ». */
+function buildAuctionModal(seller, now = Date.now()) {
+  const title = 'Mettre aux enchères';
+  const pause = weekend.pauseFor(seller, now);
+  if (pause) return infoModal(title, pauseText(pause));
+  const reason = trades.blockReason(seller, now);
+  if (reason) return infoModal(title, ERROR_TEXT[reason]);
+  const endsAt = trades.auctionEnd(now);
+  if (weekend.isPausedDay(parisDay(endsAt))) return infoModal(title, `⏸️ ${ERROR_TEXT.ends_in_pause}`);
+  const free = trades.cessible(seller);
+  const mine = cardIndex.listCards().filter((c) => free.has(c.url));
+  if (!mine.length) return infoModal(title, '😕 Tu n\'as aucune carte à mettre aux enchères (les cartes de tes decks et celles déjà en jeu ne comptent pas).');
+
+  const picked = cardPicker(mine, { multi: false, placeholder: 'Choisis une carte', textHint: 'HW3' });
+  return {
+    type: 'modal',
+    callback_id: 'trade_auction_submit',
+    title: plainText(title),
+    submit: plainText('🔨 Lancer'),
+    close: plainText('Annuler'),
+    blocks: [
+      section('🔨 *Mets une de tes cartes aux enchères.* Tous les joueurs inscrits à `/jeanpip` sont prévenus et peuvent enchérir en JP$. La plus haute enchère emporte la carte.'),
+      { type: 'input', block_id: 'card', label: plainText('Carte mise en vente'), ...picked },
+      {
+        type: 'input',
+        block_id: 'price',
+        optional: true,
+        label: plainText('Prix de départ en JP$'),
+        element: { type: 'number_input', action_id: 'value', is_decimal_allowed: false, min_value: '1', placeholder: plainText('Le minimum de la carte') },
+        hint: plainText('Au moins le prix de rachat de la banque (commune 1, rare 2, épique 5, hors série 10, légendaire 20). Vide : ce minimum.'),
+      },
+      context(`⏰ Durée : 12 h. Lancée maintenant, elle finit *${whenText(endsAt)}* (une fin entre 20h et 9h est repoussée à 10h). Ta carte est réservée jusque-là ; sans enchère, elle te reste.`),
+    ],
+  };
+}
+
+/** DM d'une enchère, vu par `viewerId` (annonce, ou suivi pour le vendeur). */
+function buildAuctionDM(trade, viewerId = null) {
+  const best = bestOf(trade);
+  const open = trade.status === 'open';
+  const isSeller = viewerId === trade.seller;
+  const lines = [
+    isSeller ? `🔨 *Ta carte ${cardLine(trade.card)} est aux enchères*` : `🔨 *<@${trade.seller}> met aux enchères sa carte* ${cardLine(trade.card)}`,
+    best ? `💰 Prix actuel : *${best.jp} JP$* (meilleure offre : <@${best.userId}>)` : `💰 Prix de départ : *${trade.startPrice} JP$* (aucune enchère pour l'instant)`,
+  ];
+  if (open) lines.push(`⏰ Fin : *${whenText(trade.endsAt)}*`);
+  if (open && best && best.userId === viewerId) lines.push('🥇 Tu es le meilleur enchérisseur pour l\'instant.');
+  const blocks = [section(lines.join('\n')), ...imageBlock(trade.card)];
+  if (open && !isSeller) {
+    blocks.push({ type: 'actions', block_id: `auction_${trade.id}`, elements: [button('🔨 Enchérir', 'trade_bid_open', { value: trade.id, style: 'primary' })] });
+  } else if (!open) {
+    blocks.push(context(auctionStatusLine(trade)));
+  }
+  return { text: `🔨 Enchère : ${codeOf(trade.card)} à ${best ? best.jp : trade.startPrice} JP$`, blocks };
+}
+
+/** Modale « Enchérir » (minimum = trades.minBid). */
+function buildBidModal(trade, userId, now = Date.now()) {
+  const title = 'Enchérir';
+  if (!trade || trade.kind !== 'auction' || trade.status !== 'open' || now >= trade.endsAt) return infoModal(title, ERROR_TEXT.ended);
+  if (trade.seller === userId) return infoModal(title, ERROR_TEXT.self_bid);
+  const pause = weekend.pauseFor(userId, now);
+  if (pause) return infoModal(title, pauseText(pause));
+  const reason = trades.blockReason(userId, now);
+  if (reason) return infoModal(title, ERROR_TEXT[reason]);
+  const best = bestOf(trade);
+  if (best && best.userId === userId) return infoModal(title, `🥇 ${ERROR_TEXT.already_best}`);
+  const min = trades.minBid(trade);
+  return {
+    type: 'modal',
+    callback_id: 'trade_bid_submit',
+    private_metadata: trade.id,
+    title: plainText(title),
+    submit: plainText('🔨 Enchérir'),
+    close: plainText('Annuler'),
+    blocks: [
+      section(`🔨 Enchère de <@${trade.seller}> : ${cardLine(trade.card)}\n${best ? `💰 Prix actuel : *${best.jp} JP$*` : `💰 Prix de départ : *${trade.startPrice} JP$*`} · fin *${whenText(trade.endsAt)}*`),
+      ...imageBlock(trade.card),
+      {
+        type: 'input',
+        block_id: 'jp',
+        label: plainText('Ton enchère en JP$'),
+        element: { type: 'number_input', action_id: 'value', is_decimal_allowed: false, min_value: String(min), initial_value: String(min) },
+        hint: plainText(`Au moins ${min} JP$.`),
+      },
+      context(`💰 Ton solde : *${credits.getBalance(userId)} JP$*. Ton enchère est mise de côté tout de suite, et rendue si quelqu'un enchérit plus haut.`),
+    ],
+  };
+}
+
+function buildOutbidDM(trade, userId) {
+  const best = bestOf(trade);
+  const mine = [...(trade.bids || [])].reverse().find((b) => b.userId === userId);
+  const text = `😬 *Tu as été dépassé* sur l'enchère de <@${trade.seller}> pour la carte ${cardLine(trade.card)} : nouvelle offre *${best.jp} JP$*.\n↩️ Tes *${mine ? mine.jp : 0} JP$* te sont rendus. Fin *${whenText(trade.endsAt)}*.`;
+  return {
+    text: text.replace(/\*/g, ''),
+    blocks: [section(text), { type: 'actions', block_id: `outbid_${trade.id}`, elements: [button('🔨 Enchérir encore', 'trade_bid_open', { value: trade.id, style: 'primary' })] }],
+  };
+}
+
+/** DM de fin d'enchère. outcome : 'sold' | 'no_bid' | 'cancelled' ; who : 'seller' | 'winner' | 'bidder'. */
+function buildAuctionEndDM(trade, outcome, who) {
+  const best = bestOf(trade);
+  const card = cardLine(trade.card);
+  let text;
+  if (outcome === 'sold') {
+    text = who === 'seller'
+      ? `✅ *Ta carte ${card} est vendue !* <@${trade.buyer}> la remporte pour *${best.jp} JP$*, versés sur ton solde.`
+      : `🎉 *Tu remportes l'enchère !* La carte ${card} est dans ton classeur, pour *${best.jp} JP$*.`;
+  } else if (outcome === 'no_bid') {
+    text = `⌛ *Ton enchère sur la carte ${card} est terminée sans enchère* : la carte reste dans ton classeur.`;
+  } else {
+    text = who === 'seller'
+      ? `🚫 *Ton enchère sur la carte ${card} est annulée* : ${ERROR_TEXT.card_lost}`
+      : `🚫 *L'enchère de <@${trade.seller}> sur la carte ${card} est annulée* : ${ERROR_TEXT.card_lost}\n↩️ Tes *${best ? best.jp : 0} JP$* te sont rendus.`;
+  }
+  return { text: text.replace(/\*/g, ''), blocks: [section(text)] };
+}
+
+/** DM de fin d'une demande générale (la demande à une personne a buildBuyerResultDM). */
+function buildRequestEndDM(trade, event) {
+  const back = trade.offer && trade.offer.jp > 0 ? `\n↩️ Tes *${trade.offer.jp} JP$* te sont rendus.` : '';
+  const card = cardLine(trade.card);
+  const text = event === 'expired'
+    ? `⌛ *Ta demande générale pour la carte ${card} a expiré* sans preneur.${back}`
+    : `🚫 *Ta demande générale pour la carte ${card} est annulée* : ${ERROR_TEXT[trade.reason] || ERROR_TEXT.closed}${back}`;
+  return { text: text.replace(/\*/g, ''), blocks: [section(text)] };
+}
+
+function buildCounterEndDM(trade, sellerId, event) {
+  const text = event === 'counter_expired'
+    ? `⌛ *La contre-offre de <@${sellerId}>* pour la carte ${cardLine(trade.card)} a expiré.`
+    : `🚫 *La contre-offre de <@${sellerId}>* pour la carte ${cardLine(trade.card)} est annulée.`;
+  return { text: text.replace(/\*/g, ''), blocks: [section(text)] };
+}
+
+// ── Envoi (avec le ctx de register : sendDM réduit au silence pendant une pause) ──
+const tickLog = (what, e) => console.error(`❌ Échanges (${what}) :`, e.data ? e.data.error : e.message);
+
+async function safeDM(client, userId, msg) {
+  if (!registered || !userId) return null;
+  try { return await registered.sendDM(client, userId, msg); } catch (e) { tickLog(`DM <@${userId}>`, e); return null; }
+}
+
+async function updateDM(client, ref, msg) {
+  try { await client.chat.update({ channel: ref.channel, ts: ref.ts, text: msg.text, blocks: msg.blocks }); } catch (e) { tickLog('mise à jour d\'un DM', e); }
+}
+
+async function refreshAll(client, users) {
+  if (!registered) return;
+  await Promise.all([...new Set(users)].filter(Boolean).map((u) => registered.refreshHome(client, u, console)));
+}
+
+/** Met à jour tous les DM d'une enchère (prix actuel, ou résultat). */
+async function updateAuctionDMs(client, trade) {
+  for (const [userId, ref] of Object.entries(trade.dms || {})) await updateDM(client, ref, buildAuctionDM(trade, userId));
+}
+
+/** Met à jour les DM des vendeurs d'une demande close. */
+async function updateSellerDMs(client, trade) {
+  const build = SELLER_DM_BUILDERS[trade.kind];
+  if (!build) return;
+  for (const [userId, ref] of Object.entries(trade.dms || {})) {
+    if (userId !== trade.buyer) await updateDM(client, ref, build(trade, userId));
+  }
+}
+
+async function handleTickEvent(client, ev, involved) {
+  const { trade, event } = ev;
+  involved.add(trade.seller);
+  involved.add(trade.buyer);
+  if (trade.kind === 'auction') {
+    for (const b of trade.bids || []) involved.add(b.userId);
+    // 'settled' + outcome 'cancelled' (carte placée dans un deck…) = annulation, comme 'cancelled' (carte partie)
+    const outcome = event === 'settled' ? ev.outcome : 'cancelled';
+    const best = bestOf(trade);
+    console.log(`🔨 ${trade.id} : enchère ${outcome}${best ? ` (${best.jp} JP$, <@${best.userId}>)` : ''}`);
+    if (outcome === 'sold') {
+      recordDone(trade);
+      await safeDM(client, trade.seller, buildAuctionEndDM(trade, 'sold', 'seller'));
+      await safeDM(client, trade.buyer, buildAuctionEndDM(trade, 'sold', 'winner'));
+    } else if (outcome === 'no_bid') {
+      await safeDM(client, trade.seller, buildAuctionEndDM(trade, 'no_bid', 'seller'));
+    } else {
+      await safeDM(client, trade.seller, buildAuctionEndDM(trade, 'cancelled', 'seller'));
+      if (best) await safeDM(client, best.userId, buildAuctionEndDM(trade, 'cancelled', 'bidder'));
+    }
+    await updateAuctionDMs(client, trade);
+    return;
+  }
+
+  if (event === 'counter_expired' || event === 'counter_cancelled') {
+    involved.add(ev.counter);
+    await safeDM(client, trade.buyer, buildCounterEndDM(trade, ev.counter, event));
+    return;
+  }
+  // Demande annulée « pour pause » : elle a pu expirer avant la pause (bot redémarré le week-end) → texte neutre
+  const shown = trade.reason === 'pause' ? { ...trade, reason: 'stopped' } : trade;
+  for (const u of Object.keys(trade.dms || {})) involved.add(u);
+  console.log(`🤝 ${trade.id} : ${event} (${trade.reason})`);
+  const msg = trade.kind === 'direct' ? buildBuyerResultDM(shown, event === 'expired' ? 'expired' : 'cancelled') : buildRequestEndDM(shown, event);
+  await safeDM(client, trade.buyer, msg);
+  await updateSellerDMs(client, shown);
+}
+
+/**
+ * Minuterie (toutes les 10 s, et au démarrage pour rattraper un arrêt) :
+ * fait avancer les échanges et prévient les joueurs. → les événements traités.
+ */
+async function runTick(client, logger = console) {
+  const evs = trades.tick(Date.now());
+  if (!evs.length) return evs;
+  const involved = new Set();
+  for (const ev of evs) {
+    try { await handleTickEvent(client, ev, involved); } catch (e) { logger.error(`❌ Échanges (minuterie ${ev.trade && ev.trade.id}) :`, e.message); }
+  }
+  await refreshAll(client, [...involved]);
+  return evs;
+}
+
+function registerAuction(app, ctx) {
+  // 🏠 Bouton de l'Accueil
+  app.action('trade_auction_open', async ({ ack, body, client, logger }) => {
+    await ack();
+    await ctx.openModal(client, body, buildAuctionModal(body.user.id), logger);
+  });
+
+  // 🔨 Lancement : annonce à chaque inscrit sauf le vendeur, suivi pour le vendeur
+  app.view('trade_auction_submit', async ({ ack, body, view, client }) => {
+    const seller = body.user.id;
+    const now = Date.now();
+    const values = view.state.values;
+    const fail = (field, text) => ack({ response_action: 'errors', errors: { [values[field] ? field : 'card']: text } });
+
+    const pause = weekend.pauseFor(seller, now);
+    if (pause) return fail('card', pauseText(pause));
+    const wanted = readCodes(values.card && values.card.value);
+    if (wanted.bad.length || wanted.cards.length !== 1) return fail('card', wanted.bad.length ? `Numéro inconnu : ${wanted.bad[0]}.` : 'Choisis une carte.');
+    const raw = values.price && values.price.value && values.price.value.value;
+    const price = raw == null || String(raw).trim() === '' ? null : Number(raw);
+    if (price != null && !Number.isInteger(price)) return fail('price', ERROR_TEXT.bad_amount);
+
+    const card = wanted.cards[0];
+    const res = trades.createAuction({ seller, code: card.code, startPrice: price, now });
+    if (!res.ok) {
+      if (res.error === 'floor') return fail('price', `Prix de départ trop bas : ${trades.floor(card.rarity)} JP$ minimum pour cette carte.`);
+      if (res.error === 'blocked_seller') return fail('card', errorFor(res.error, seller, { asBuyer: false, now }));
+      return fail('card', ERROR_TEXT[res.error] || ERROR_TEXT.closed);
+    }
+    await ack();
+    const { trade, recipients } = res;
+    console.log(`🔨 <@${seller}> met ${trade.card.code} aux enchères à ${trade.startPrice} JP$ → ${trade.id} (${recipients.length} inscrit(s) prévenus)`);
+    for (const u of [seller, ...recipients]) {
+      const ref = await safeDM(client, u, buildAuctionDM(trade, u));
+      if (ref) trades.setDm(trade.id, u, ref);
+    }
+    await refreshAll(client, [seller]);
+  });
+
+  // 🔨 Bouton Enchérir (DM d'annonce ou DM « dépassé »)
+  app.action('trade_bid_open', async ({ ack, body, action, client, logger }) => {
+    await ack();
+    await ctx.openModal(client, body, buildBidModal(trades.getTrade(String(action.value || '')), body.user.id), logger);
+  });
+
+  // 💰 Enchère
+  app.view('trade_bid_submit', async ({ ack, body, view, client }) => {
+    const userId = body.user.id;
+    const now = Date.now();
+    const tradeId = view.private_metadata;
+    const fail = (text) => ack({ response_action: 'errors', errors: { jp: text } });
+
+    const pause = weekend.pauseFor(userId, now);
+    if (pause) return fail(pauseText(pause));
+    const field = view.state.values.jp && view.state.values.jp.value;
+    const raw = field && field.value;
+    if (raw == null || String(raw).trim() === '') return fail('Indique ton enchère en JP$.');
+
+    const res = trades.bid(tradeId, userId, Number(raw), now);
+    if (!res.ok) {
+      switch (res.error) {
+        case 'too_low': return fail(`${ERROR_TEXT.too_low} Au moins ${trades.minBid(res.trade)} JP$.`);
+        case 'self': return fail(ERROR_TEXT.self_bid);
+        case 'balance': return fail(`${ERROR_TEXT.balance} (${credits.getBalance(userId)} JP$)`);
+        case 'blocked': { const reason = trades.blockReason(userId, now); return fail(reason ? ERROR_TEXT[reason] : ERROR_TEXT.blocked); }
+        case 'already_best': return fail(ERROR_TEXT.already_best);
+        default: return fail(ERROR_TEXT.ended);
+      }
+    }
+    await ack();
+    const { trade, outbid } = res;
+    console.log(`🔨 ${trade.id} : <@${userId}> enchérit ${bestOf(trade).jp} JP$${outbid ? ` (dépasse <@${outbid}>)` : ''}`);
+    if (outbid) await safeDM(client, outbid, buildOutbidDM(trade, outbid));
+    await updateAuctionDMs(client, trade);
+    await refreshAll(client, [userId, outbid, trade.seller]);
+  });
+}
+
+module.exports.SELLER_DM_BUILDERS = SELLER_DM_BUILDERS;
+module.exports.buildAuctionModal = buildAuctionModal;
+module.exports.buildAuctionDM = buildAuctionDM;
+module.exports.buildBidModal = buildBidModal;
+module.exports.recordDone = recordDone;
+module.exports.runTick = runTick;
