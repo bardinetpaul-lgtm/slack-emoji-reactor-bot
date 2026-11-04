@@ -82,7 +82,7 @@ function _transferCard(from, to, card) {
   return true;
 }
 
-/** Ferme un échange (sans l'écrire) et rend tous les JP$ encore en réserve. */
+/** Ferme un échange (sans l'écrire), rend tous les JP$ encore en réserve et annule les contre-offres ouvertes. */
 function _close(trade, status, now = Date.now(), reason = null) {
   trade.status = status;
   trade.closedAt = now;
@@ -91,6 +91,7 @@ function _close(trade, status, now = Date.now(), reason = null) {
     if (amount > 0) _refund(userId, amount, trade.id);
   }
   trade.held = {};
+  for (const c of Object.values(trade.counters || {})) if (c.status === 'open') c.status = 'cancelled';
   return trade;
 }
 
@@ -219,6 +220,8 @@ function sellerAction(tradeId, sellerId) {
  *   | 'blocked_seller' | 'blocked_buyer' | 'unavailable' | 'cards_unavailable', trade? }
  */
 function accept(tradeId, sellerId, now = Date.now()) {
+  const general = _load().trades[tradeId];
+  if (general && general.kind === 'general') return acceptGeneral(tradeId, sellerId, now);
   const { data, trade, error } = sellerAction(tradeId, sellerId);
   if (error) return { ok: false, error };
   if (blockReason(sellerId, now)) return { ok: false, error: 'blocked_seller', trade };
@@ -277,3 +280,207 @@ module.exports = {
   _close,
   _cessibleCount,
 };
+
+// ═══════════════════════════════════════════════════════════
+//  2. DEMANDE GÉNÉRALE ET CONTRE-OFFRES (kind 'general')
+//  Demande générale : l'offre part à tous les propriétaires inscrits
+//  qui peuvent céder la carte ; le premier qui accepte conclut.
+//  Contre-offre (demande générale ou à une personne) : une seule par
+//  vendeur, elle REMPLACE ce que l'acheteur donne (JP$ et cartes).
+//  Ses cartes ne sont pas réservées : revérifiées à l'acceptation.
+//  Elle a son propre délai d'1 h ; celui de la demande ne bouge pas.
+//  Toute clôture de l'échange annule les contre-offres encore ouvertes.
+//  trade.counters[sellerId] = { jp, cards, at, expiresAt, status }
+//  status : 'open' | 'accepted' | 'refused' | 'cancelled'
+// ═══════════════════════════════════════════════════════════
+
+/** Montant et cartes d'une offre, nettoyés. → { amount, offered } */
+function cleanOffer(jp, cards) {
+  return {
+    amount: Math.max(0, Math.floor(Number(jp) || 0)),
+    offered: (Array.isArray(cards) ? cards : []).filter(Boolean),
+  };
+}
+
+/** Copie de l'état sans cet échange (ses cartes réservées redeviennent libres). */
+function withoutTrade(data, tradeId) {
+  const others = { ...data, trades: { ...data.trades } };
+  delete others.trades[tradeId];
+  return others;
+}
+
+/**
+ * L'acheteur demande la carte `code` à tous ceux qui peuvent la céder.
+ * → { ok: true, trade, recipients: [userId] } | { ok: false, error: 'blocked_buyer'
+ *   | 'unavailable' | 'empty' | 'cards_unavailable' | 'floor' | 'no_owner' | 'balance' }
+ */
+function createGeneral({ buyer, code, jp = 0, cards = [], now = Date.now() }) {
+  if (!buyer || blockReason(buyer, now)) return { ok: false, error: 'blocked_buyer' };
+  const data = _load();
+  const card = cardIndex.byCode(code);
+  if (!card) return { ok: false, error: 'unavailable' };
+
+  const { amount, offered } = cleanOffer(jp, cards);
+  if (!amount && !offered.length) return { ok: false, error: 'empty' };
+  if (offered.length && !cardsAvailable(buyer, offered, data)) return { ok: false, error: 'cards_unavailable' };
+  if (!offered.length && amount < floor(card.rarity)) return { ok: false, error: 'floor' };
+
+  const recipients = broadcast.getSubscribers().filter((u) => u !== buyer
+    && !blockReason(u, now) && _cessibleCount(u, card.url, data) >= 1);
+  if (!recipients.length) return { ok: false, error: 'no_owner' };
+
+  const id = _nextId(data, now);
+  if (amount && !_hold(buyer, amount, id)) return { ok: false, error: 'balance' };
+
+  const trade = {
+    id,
+    kind: 'general',
+    buyer,
+    seller: null, // fixé à la conclusion
+    card: { url: card.url, title: card.title, rarity: card.rarity, code: card.code },
+    offer: { jp: amount, cards: offered },
+    held: amount ? { [buyer]: amount } : {},
+    status: 'open',
+    createdAt: now,
+    expiresAt: now + REQUEST_MS,
+    counters: {},
+    bids: [],
+    dms: {},
+    closedAt: null,
+    reason: null,
+  };
+  data.trades[id] = trade;
+  _save(data);
+  return { ok: true, trade, recipients };
+}
+
+/**
+ * Un propriétaire accepte l'offre d'origine d'une demande générale (appelé par accept).
+ * Sa carte manque : refus pour lui seul, la demande reste ouverte pour les autres.
+ * → { ok: true, trade } | { ok: false, error: 'not_found' | 'closed' | 'expired' | 'not_seller'
+ *   | 'blocked_seller' | 'blocked_buyer' | 'unavailable' | 'cards_unavailable', trade? }
+ */
+function acceptGeneral(tradeId, sellerId, now = Date.now()) {
+  const data = _load();
+  const trade = data.trades[tradeId];
+  if (!trade) return { ok: false, error: 'not_found' };
+  if (trade.status !== 'open') return { ok: false, error: 'closed', trade };
+  if (now >= trade.expiresAt) return { ok: false, error: 'expired', trade };
+  if (!sellerId || sellerId === trade.buyer) return { ok: false, error: 'not_seller', trade };
+  if (blockReason(sellerId, now)) return { ok: false, error: 'blocked_seller', trade };
+  if (blockReason(trade.buyer, now)) return { ok: false, error: 'blocked_buyer', trade };
+  if (_cessibleCount(sellerId, trade.card.url, data) < 1) return { ok: false, error: 'unavailable', trade };
+  if (!cardsAvailable(trade.buyer, trade.offer.cards, withoutTrade(data, trade.id))) {
+    _close(trade, 'cancelled', now, 'cards_unavailable');
+    _save(data);
+    return { ok: false, error: 'cards_unavailable', trade };
+  }
+
+  trade.seller = sellerId;
+  _transferCard(sellerId, trade.buyer, trade.card);
+  for (const url of trade.offer.cards) _transferCard(trade.buyer, sellerId, { url });
+  const paid = (trade.held && trade.held[trade.buyer]) || 0;
+  if (paid > 0) _pay(sellerId, paid, trade.id);
+  trade.held = {};
+  _close(trade, 'done', now, 'accepted');
+  _save(data);
+  return { ok: true, trade };
+}
+
+/**
+ * Le vendeur (demande à une personne) ou un propriétaire (demande générale)
+ * propose ses conditions : `jp` et `cards` remplacent ce que l'acheteur donne.
+ * → { ok: true, trade } | { ok: false, error: 'not_found' | 'closed' | 'expired' | 'not_seller'
+ *   | 'already_countered' | 'blocked_seller' | 'unavailable' | 'empty' | 'floor'
+ *   | 'cards_unavailable', trade? }
+ */
+function counter(tradeId, sellerId, { jp = 0, cards = [] } = {}, now = Date.now()) {
+  const data = _load();
+  const trade = data.trades[tradeId];
+  if (!trade || (trade.kind !== 'direct' && trade.kind !== 'general')) return { ok: false, error: 'not_found' };
+  if (trade.status !== 'open') return { ok: false, error: 'closed', trade };
+  if (now >= trade.expiresAt) return { ok: false, error: 'expired', trade };
+  const allowed = trade.kind === 'general' ? (sellerId && sellerId !== trade.buyer) : trade.seller === sellerId;
+  if (!allowed) return { ok: false, error: 'not_seller', trade };
+  trade.counters = trade.counters || {};
+  if (trade.counters[sellerId]) return { ok: false, error: 'already_countered', trade };
+  if (blockReason(sellerId, now)) return { ok: false, error: 'blocked_seller', trade };
+  if (_cessibleCount(sellerId, trade.card.url, data) < 1) return { ok: false, error: 'unavailable', trade };
+
+  const { amount, offered } = cleanOffer(jp, cards);
+  if (!amount && !offered.length) return { ok: false, error: 'empty', trade };
+  if (!offered.length && amount < floor(trade.card.rarity)) return { ok: false, error: 'floor', trade };
+  if (offered.length && !cardsAvailable(trade.buyer, offered, withoutTrade(data, trade.id))) {
+    return { ok: false, error: 'cards_unavailable', trade };
+  }
+
+  trade.counters[sellerId] = { jp: amount, cards: offered, at: now, expiresAt: now + REQUEST_MS, status: 'open' };
+  _save(data);
+  return { ok: true, trade };
+}
+
+/** Contrôles communs à acceptCounter / refuseCounter. → { data, trade, co } | { error, trade? } */
+function buyerCounterAction(tradeId, buyerId, sellerId) {
+  const data = _load();
+  const trade = data.trades[tradeId];
+  if (!trade) return { error: 'not_found' };
+  if (trade.status !== 'open') return { error: 'closed', trade };
+  if (trade.buyer !== buyerId) return { error: 'not_buyer', trade };
+  const co = trade.counters && trade.counters[sellerId];
+  if (!co) return { error: 'no_counter', trade };
+  if (co.status !== 'open') return { error: 'counter_closed', trade };
+  return { data, trade, co };
+}
+
+/**
+ * L'acheteur accepte la contre-offre de `sellerId` : le complément est prélevé
+ * (ou l'excédent rendu), les cartes d'origine absentes de la contre-offre sont libérées.
+ * Échec propre (aucun mouvement de JP$ ni de carte) si une condition manque.
+ * → { ok: true, trade } | { ok: false, error: 'not_found' | 'closed' | 'not_buyer' | 'no_counter'
+ *   | 'counter_closed' | 'expired' | 'blocked_buyer' | 'blocked_seller' | 'unavailable'
+ *   | 'cards_unavailable' | 'balance', trade? }
+ */
+function acceptCounter(tradeId, buyerId, sellerId, now = Date.now()) {
+  const { data, trade, co, error } = buyerCounterAction(tradeId, buyerId, sellerId);
+  if (error) return { ok: false, error, trade };
+  if (now >= co.expiresAt) return { ok: false, error: 'expired', trade };
+  if (blockReason(buyerId, now)) return { ok: false, error: 'blocked_buyer', trade };
+  if (blockReason(sellerId, now)) return { ok: false, error: 'blocked_seller', trade };
+  if (_cessibleCount(sellerId, trade.card.url, data) < 1) return { ok: false, error: 'unavailable', trade };
+  if (!cardsAvailable(buyerId, co.cards, withoutTrade(data, trade.id))) return { ok: false, error: 'cards_unavailable', trade };
+
+  // Complément prélevé (ou excédent rendu) : held[acheteur] = prix de la contre-offre
+  trade.held = trade.held || {};
+  const diff = co.jp - (trade.held[buyerId] || 0);
+  if (diff > 0 && !_hold(buyerId, diff, trade.id)) return { ok: false, error: 'balance', trade };
+  if (diff < 0) _refund(buyerId, -diff, trade.id);
+  trade.held[buyerId] = co.jp;
+
+  trade.seller = sellerId;
+  _transferCard(sellerId, buyerId, trade.card);
+  for (const url of co.cards) _transferCard(buyerId, sellerId, { url });
+  if (co.jp > 0) _pay(sellerId, co.jp, trade.id);
+  trade.held = {};
+  co.status = 'accepted';
+  _close(trade, 'done', now, 'counter_accepted');
+  _save(data);
+  return { ok: true, trade };
+}
+
+/**
+ * L'acheteur refuse la contre-offre de `sellerId`. La demande reste ouverte :
+ * son offre d'origine est toujours valable. → { ok, trade } | { ok: false, error }
+ */
+function refuseCounter(tradeId, buyerId, sellerId, now = Date.now()) {
+  const { data, trade, co, error } = buyerCounterAction(tradeId, buyerId, sellerId);
+  if (error) return { ok: false, error, trade };
+  co.status = 'refused';
+  co.closedAt = now;
+  _save(data);
+  return { ok: true, trade };
+}
+
+module.exports.createGeneral = createGeneral;
+module.exports.counter = counter;
+module.exports.acceptCounter = acceptCounter;
+module.exports.refuseCounter = refuseCounter;
