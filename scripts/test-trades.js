@@ -198,6 +198,30 @@ test('échange carte contre carte accepté : les cartes se croisent', () => {
   assert.strictEqual(collections.getCollection('U_B').find((c) => c.url === 'ca').rarity, 'common');
 });
 
+test('montant en JP$ : entier ≥ 0 seulement (0 réservé au carte contre carte)', () => {
+  collections.addCards('U_B', [{ ...HW1 }]);   // B en a de nouveau un (cédé à A juste avant)
+  const bal = credits.getBalance('U_A');
+  for (const jp of [-5, 10.5, NaN, '12']) {
+    assert.strictEqual(trades.createDirect({ buyer: 'U_A', seller: 'U_B', code: 'HW1', jp, cards: [], now: NOW }).error, 'bad_amount', String(jp));
+  }
+  assert.strictEqual(trades.createDirect({ buyer: 'U_A', seller: 'U_B', code: 'HW1', jp: -1, cards: ['ca'], now: NOW }).error, 'bad_amount');
+  assert.strictEqual(credits.getBalance('U_A'), bal, 'aucun débit');
+});
+
+test('délai dépassé : accepter et refuser répondent « expired », rien ne bouge', () => {
+  const r = trades.createDirect({ buyer: 'U_A', seller: 'U_B', code: 'HW1', jp: 20, cards: ['ca'], now: NOW });
+  assert.ok(r.ok, JSON.stringify(r));
+  const late = NOW + trades.REQUEST_MS;
+  const snap = () => [credits.getBalance('U_A'), credits.getBalance('U_B'), count('U_A', HW1.url), count('U_B', HW1.url), count('U_A', 'ca'), count('U_B', 'ca')];
+  const before = snap();
+  assert.strictEqual(trades.accept(r.trade.id, 'U_B', late).error, 'expired');
+  assert.strictEqual(trades.refuse(r.trade.id, 'U_B', late).error, 'expired');
+  assert.deepStrictEqual(snap(), before);
+  assert.strictEqual(trades.getTrade(r.trade.id).status, 'open', 'la minuterie fermera l\'échange');
+  assert.deepStrictEqual(trades.getTrade(r.trade.id).held, { U_A: 20 });
+  assert.ok(trades.accept(r.trade.id, 'U_B', late - 1).ok, 'juste avant la fin : accepté');
+});
+
 test('enchère ouverte du vendeur : sa carte est réservée', () => {
   const data = trades._load();
   data.trades.TEST_AUC = { id: 'TEST_AUC', kind: 'auction', seller: 'U_B', buyer: null, card: { url: 'cb', code: '#0' }, offer: { jp: 0, cards: [] }, status: 'open', counters: {}, bids: [], dms: {} };

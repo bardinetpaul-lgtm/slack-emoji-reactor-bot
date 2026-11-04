@@ -160,7 +160,8 @@ function openTradesOf(userId) {
 /**
  * L'acheteur demande un exemplaire de la carte `code` au vendeur.
  * → { ok: true, trade } | { ok: false, error: 'self' | 'blocked_buyer' | 'blocked_seller'
- *   | 'unavailable' | 'empty' | 'cards_unavailable' | 'floor' | 'balance' }
+ *   | 'unavailable' | 'bad_amount' | 'empty' | 'cards_unavailable' | 'floor' | 'balance' }
+ * `jp` : entier ≥ 0 (0 seulement si des cartes sont proposées).
  */
 function createDirect({ buyer, seller, code, jp = 0, cards = [], now = Date.now() }) {
   if (!buyer || buyer === seller) return { ok: false, error: 'self' };
@@ -171,7 +172,8 @@ function createDirect({ buyer, seller, code, jp = 0, cards = [], now = Date.now(
   const card = cardIndex.byCode(code);
   if (!card || _cessibleCount(seller, card.url, data) < 1) return { ok: false, error: 'unavailable' };
 
-  const amount = Math.max(0, Math.floor(Number(jp) || 0));
+  const amount = jp == null ? 0 : jp;
+  if (!Number.isInteger(amount) || amount < 0) return { ok: false, error: 'bad_amount' };
   const offered = (Array.isArray(cards) ? cards : []).filter(Boolean);
   if (!amount && !offered.length) return { ok: false, error: 'empty' };
   if (offered.length && !cardsAvailable(buyer, offered, data)) return { ok: false, error: 'cards_unavailable' };
@@ -202,12 +204,16 @@ function createDirect({ buyer, seller, code, jp = 0, cards = [], now = Date.now(
   return { ok: true, trade };
 }
 
-/** Contrôles communs à accepter / refuser. → { data, trade } | { error } */
-function sellerAction(tradeId, sellerId) {
+/**
+ * Contrôles communs à accepter / refuser. → { data, trade } | { error }
+ * Délai dépassé : 'expired', sans rien bouger (la minuterie fermera l'échange).
+ */
+function sellerAction(tradeId, sellerId, now) {
   const data = _load();
   const trade = data.trades[tradeId];
   if (!trade) return { error: 'not_found' };
   if (trade.status !== 'open') return { error: 'closed' };
+  if (now >= trade.expiresAt) return { error: 'expired' };
   if (trade.seller !== sellerId) return { error: 'not_seller' };
   return { data, trade };
 }
@@ -215,11 +221,11 @@ function sellerAction(tradeId, sellerId) {
 /**
  * Le vendeur accepte : sa carte part chez l'acheteur, les cartes et JP$ proposés chez lui.
  * Si sa carte ou celles de l'acheteur ne sont plus là : échange annulé, JP$ rendus.
- * → { ok: true, trade } | { ok: false, error: 'not_found' | 'closed' | 'not_seller'
+ * → { ok: true, trade } | { ok: false, error: 'not_found' | 'closed' | 'expired' | 'not_seller'
  *   | 'blocked_seller' | 'blocked_buyer' | 'unavailable' | 'cards_unavailable', trade? }
  */
 function accept(tradeId, sellerId, now = Date.now()) {
-  const { data, trade, error } = sellerAction(tradeId, sellerId);
+  const { data, trade, error } = sellerAction(tradeId, sellerId, now);
   if (error) return { ok: false, error };
   if (blockReason(sellerId, now)) return { ok: false, error: 'blocked_seller', trade };
   if (blockReason(trade.buyer, now)) return { ok: false, error: 'blocked_buyer', trade };
@@ -247,7 +253,7 @@ function accept(tradeId, sellerId, now = Date.now()) {
 
 /** Le vendeur refuse : l'acheteur est remboursé. → { ok, trade } | { ok: false, error } */
 function refuse(tradeId, sellerId, now = Date.now()) {
-  const { data, trade, error } = sellerAction(tradeId, sellerId);
+  const { data, trade, error } = sellerAction(tradeId, sellerId, now);
   if (error) return { ok: false, error };
   _close(trade, 'refused', now, 'refused');
   _save(data);
