@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="theme-color" content="#1f6f4a">
+  <title>Banque · Jeanpip</title>
+  <!-- Chemins relatifs : la page est servie sur …/banque (derrière un préfixe de proxy) -->
+  <link rel="stylesheet" href="banque.css?v=__ASSET_VERSION__">
+</head>
+<body>
+  <div class="awning" aria-hidden="true"></div>
+  <nav class="backbar"><a class="back-link" id="back" href="ville">← Retour à Jeanpip City</a></nav>
+  <header class="topbar">
+    <div class="brand"><i class="losange">🏦</i>JEANPIP <span>BANQUE</span></div>
+    <div class="wallet">
+      <div class="balance"><b id="balance">…</b> JP$</div>
+      <div class="today" id="week"></div>
+    </div>
+    <a class="pill-btn" href="slack://open">Slack</a>
+  </header>
+
+  <main class="stage">
+    <section class="counter" aria-labelledby="counter-title">
+      <h1 class="counter-title" id="counter-title">♻️ Revendre mes doublons</h1>
+      <p class="intro" id="intro">Chargement…</p>
+      <p class="notice" id="notice" hidden></p>
+      <form id="form" hidden>
+        <div class="rows" id="rows"></div>
+        <div class="total">Tu touches <b id="total">0</b> JP$</div>
+        <div class="actions">
+          <button class="sell-btn" id="sell" type="submit" disabled>♻️ Revendre</button>
+        </div>
+      </form>
+      <p class="msg" id="msg" role="status" aria-live="polite"></p>
+    </section>
+
+    <ol class="howto">
+      <li><b>Choisis combien de doublons revendre</b> par rareté : le prix est fixe.</li>
+      <li><b>On revend d'abord les cartes dont tu as le plus d'exemplaires.</b> Tu gardes toujours un exemplaire de chaque carte, et ceux de tes decks d'Arène.</li>
+      <li><b>Un plafond par semaine</b> : il repart à zéro le lundi. Les cartes troll de l'anti-spam ne se revendent pas.</li>
+    </ol>
+  </main>
+
+  <script src="banque.js?v=__ASSET_VERSION__"></script>
+</body>
+</html>

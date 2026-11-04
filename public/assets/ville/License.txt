@@ -1,0 +1,19 @@
+Modèles 3D de la ville Jeanpip (Jeanpip City)
+=============================================
+
+Tous les fichiers .glb et Textures/colormap.png de ce dossier viennent de
+Kenney (www.kenney.nl), licence Creative Commons Zero (CC0 1.0) :
+http://creativecommons.org/publicdomain/zero/1.0/
+Usage personnel, éducatif et commercial autorisé, sans obligation de citer.
+Chaque sous-dossier garde la licence d'origine de son kit (License.txt).
+
+Kits utilisés (téléchargés le 2026-11-04 sur kenney.nl, seuls quelques modèles copiés) :
+  suburban/    City Kit Suburban 2.0     https://kenney.nl/assets/city-kit-suburban   (kenney_city-kit-suburban_20.zip)
+  commercial/  City Kit Commercial 2.1   https://kenney.nl/assets/city-kit-commercial (kenney_city-kit-commercial_2.1.zip)
+  industrial/  City Kit Industrial 2.0   https://kenney.nl/assets/city-kit-industrial (kenney_city-kit-industrial_2.0.zip)
+  roads/       City Kit Roads 2.2        https://kenney.nl/assets/city-kit-roads      (kenney_city-kit-roads.zip)
+  cars/        Car Kit 3.1               https://kenney.nl/assets/car-kit             (kenney_car-kit.zip)
+  watercraft/  Watercraft Kit 2.1        https://kenney.nl/assets/watercraft-kit      (kenney_watercraft-pack.zip)
+
+Les bâtiments du jeu (Arène, locaux Dimsi, Musée, Banque, Boutique, Kiosque,
+Salle des ventes, base de Keroman) sont modélisés en code (public/ville-scene/).

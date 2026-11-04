@@ -20,6 +20,17 @@
   const BASE = new URL('../', location.href);
   const userId = decodeURIComponent(location.pathname.split('/').filter(Boolean).pop() || '');
   const token = new URLSearchParams(location.search).get('t') || '';
+  // 🏙️ v4.0 : ouvert depuis la ville (…&v=<jeton ville>) → lien « ← Retour à la ville »
+  const villeToken = (() => {
+    // 🔒 v4.0 : le jeton de la ville n'est jamais dans l'adresse ; « v=1 » dit seulement
+    //    qu'on vient de Jeanpip City, le jeton est dans la mémoire de l'onglet.
+    try { return new URLSearchParams(location.search).has('v') ? sessionStorage.getItem('jeanpip.ville') : null; } catch { return null; }
+  })();
+  if (villeToken) {
+    const back = document.getElementById('back-ville');
+    back.href = `../ville?t=${encodeURIComponent(villeToken)}`;
+    back.hidden = false;
+  }
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const single = window.matchMedia('(max-width: 820px)');
 

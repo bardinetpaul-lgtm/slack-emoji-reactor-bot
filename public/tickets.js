@@ -8,6 +8,16 @@
   const token = new URLSearchParams(location.search).get('t') || '';
   const api = (p = '') => `api/tickets${p}?t=${encodeURIComponent(token)}`;
   const $ = (id) => document.getElementById(id);
+  // 🏙️ v4.0 : ouvert depuis la ville (…&v=<jeton ville>) → lien « ← Retour à la ville »
+  const villeToken = (() => {
+    // 🔒 v4.0 : le jeton de la ville n'est jamais dans l'adresse ; « v=1 » dit seulement
+    //    qu'on vient de Jeanpip City, le jeton est dans la mémoire de l'onglet.
+    try { return new URLSearchParams(location.search).has('v') ? sessionStorage.getItem('jeanpip.ville') : null; } catch { return null; }
+  })();
+  if (villeToken) {
+    $('back-ville').href = `ville?t=${encodeURIComponent(villeToken)}`;
+    $('back-ville').hidden = false;
+  }
   const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   // 📐 Zones du design (pixels de l'image 784 × 1168)

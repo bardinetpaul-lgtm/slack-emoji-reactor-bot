@@ -16,6 +16,22 @@
 
 const RELEASES = [
   {
+    version: '4.0.0',
+    date: '2026-11-04',
+    title: 'Jeanpip City',
+    changes: [
+      '🏙️ Nouveau : *Jeanpip City*, la ville du jeu en 3D. Ouvre-la avec le bouton « 🏙️ Entrer dans Jeanpip City », tout en haut de l’Accueil, juste sous ton solde. Fais tourner la vue à la souris, zoome avec la molette et promène-toi dans les rues.',
+      '🏢 Chaque bâtiment mène à sa partie du jeu : l’🏟️ *Arène* pour combattre, la 🎁 *Boutique* pour les boosters, la 🏦 *Banque* pour revendre tes doublons, le 🎟️ *Kiosque* pour les tickets à gratter, le 🏛️ *Musée* pour ton classeur. La 🔨 *Salle des ventes* arrive bientôt.',
+      '🏛️ Les *locaux Dimsi* sont la mairie de Jeanpip City : tu y trouves les nouveautés du jeu et le classement de l’Arène.',
+      '🏠 Si tu es inscrit à la liste de diffusion, tu as *ta maison* à Jeanpip City. Clique sur celle d’un collègue pour voir sa carte de visite.',
+      '🚶 Quand quelqu’un gagne des JP$, un petit personnage avec sa photo sort de chez lui et se promène dans les rues, avec une bulle « +1 JP$ ».',
+      '⚔️ Quand un combat a lieu, l’Arène s’allume : projecteurs, combattants sur le terrain, et tu peux aller le regarder en direct.',
+      '🎁 Les boosters, y compris *Octobre Rose*, s’achètent maintenant aussi dans la Boutique de Jeanpip City, avec les mêmes règles que dans Slack. Et tu peux revendre tes doublons à la Banque, avec le même plafond de la semaine.',
+      '↩️ Le classeur, les tickets et ton deck ont un lien « ← Retour à Jeanpip City » quand tu y entres depuis la ville.',
+      '🔒 Comme le classeur, Jeanpip City ne s’ouvre que depuis le réseau du bureau.',
+    ],
+  },
+  {
     version: '3.8.0',
     date: '2026-10-29',
     title: 'Les boosters ont leur propre ambiance',

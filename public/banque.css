@@ -1,0 +1,129 @@
+/* ═══════════════════════════════════════════════════════════
+   🏦 Banque Jeanpip : revente des doublons (v4.0)
+   Même allure que le Kiosque (tickets.css) : auvent, bandeau blanc,
+   cartes blanches arrondies ; couleurs de banque (vert, or).
+   ═══════════════════════════════════════════════════════════ */
+
+:root {
+  --bg: #eef4ea;
+  --ink: #17251c;
+  --muted: #5d6f62;
+  --bank: #1f6f4a;
+  --green: #1f8a3b;
+  --gold: #c9a24a;
+  --red: #b8141a;
+  --title: 'Bebas Neue', Impact, 'Arial Narrow', sans-serif;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; min-height: 100%; }
+body {
+  background:
+    radial-gradient(ellipse at 50% 18%, #fbfff8 0%, #fbfff800 60%),
+    repeating-linear-gradient(135deg, #dfe9d8 0 2px, transparent 2px 22px),
+    linear-gradient(#eef4ea, #d9e6d0);
+  background-attachment: fixed;
+  color: var(--ink);
+  font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ── Auvent rayé + enseigne ────────────────── */
+.awning {
+  position: relative; height: 46px;
+  background: repeating-linear-gradient(90deg, var(--bank) 0 44px, #fff 44px 88px);
+  box-shadow: inset 0 -6px 10px #0000001f;
+}
+.awning::after {
+  content: ''; position: absolute; left: 0; right: 0; top: 100%; height: 16px;
+  background:
+    radial-gradient(circle at 22px 0, var(--bank) 21px, transparent 22px) 0 0 / 88px 16px repeat-x,
+    radial-gradient(circle at 66px 0, #fff 21px, transparent 22px) 0 0 / 88px 16px repeat-x;
+  filter: drop-shadow(0 4px 3px #0000002a);
+}
+.backbar { max-width: 560px; margin: 24px auto 0; padding: 0 16px; }
+.back-link { color: var(--bank); font-weight: 700; font-size: 14px; text-decoration: none; }
+.back-link:hover { text-decoration: underline; }
+.topbar {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  max-width: 560px; margin: 10px auto 16px; padding: 10px 14px;
+  background: #fff; border-radius: 16px; box-shadow: 0 6px 18px #1f4a2a1f, 0 0 0 1px #00000010;
+}
+.brand { display: flex; align-items: center; gap: 6px; font-family: var(--title); font-size: 26px; letter-spacing: 1px; color: var(--bank); }
+.brand span { background: var(--bank); color: #fff; font-size: 15px; padding: 2px 7px 0; border-radius: 6px; letter-spacing: 1.5px; }
+.losange { font-style: normal; font-size: 20px; }
+.wallet { text-align: center; line-height: 1.15; }
+.balance { font-size: 16px; font-weight: 600; }
+.balance b { font-family: var(--title); font-size: 30px; color: var(--green); }
+.today { font-size: 12px; color: var(--muted); font-weight: 600; }
+.pill-btn {
+  color: var(--ink); text-decoration: none; font-size: 13px; font-weight: 700;
+  border: 1.5px solid #17251c33; border-radius: 999px; padding: 6px 12px; background: #fff;
+}
+
+/* ── Le guichet ────────────────────────────── */
+.stage { display: flex; flex-direction: column; align-items: center; padding: 0 16px 24px; }
+.counter, .howto {
+  width: min(100%, 528px); background: #fff; border-radius: 16px;
+  box-shadow: 0 6px 18px #1f4a2a1f, 0 0 0 1px #00000010;
+}
+.counter { padding: 16px 18px 14px; border-top: 6px solid var(--gold); }
+.counter-title { margin: 0 0 6px; font-family: var(--title); font-weight: 400; font-size: 28px; letter-spacing: 1px; color: var(--bank); }
+.intro { margin: 0 0 12px; font-size: 14px; line-height: 1.45; color: var(--muted); }
+.intro b { color: var(--ink); }
+.notice {
+  margin: 4px 0 8px; padding: 12px 14px; border-radius: 12px;
+  background: #fff7e0; border: 1.5px solid #c9a24a80; font-size: 15px; font-weight: 600; line-height: 1.4;
+}
+
+.rows { display: flex; flex-direction: column; gap: 10px; }
+.row {
+  display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 4px 12px;
+  padding: 10px 12px; border-radius: 12px; background: #f5f9f2; border: 1px solid #00000010;
+}
+.row-label { font-weight: 700; font-size: 15px; }
+.row-price { color: var(--green); font-weight: 800; white-space: nowrap; }
+.row-hint { grid-column: 1; font-size: 12px; color: var(--muted); }
+.stepper { grid-column: 2; grid-row: 1 / span 2; display: flex; align-items: center; gap: 6px; }
+.stepper button {
+  width: 34px; height: 34px; border-radius: 50%; border: 1.5px solid #17251c40; background: #fff;
+  font: 800 18px Inter, system-ui, sans-serif; cursor: pointer; color: var(--ink);
+}
+.stepper button:disabled { opacity: .35; cursor: not-allowed; }
+.stepper input {
+  width: 64px; height: 36px; text-align: center; font: 700 16px Inter, system-ui, sans-serif;
+  border: 1.5px solid #17251c40; border-radius: 10px; -moz-appearance: textfield;
+}
+.stepper input::-webkit-inner-spin-button, .stepper input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+
+.total { margin: 14px 0 0; text-align: center; font-size: 16px; }
+.total b { font-family: var(--title); font-size: 28px; color: var(--green); font-weight: 400; }
+.actions { display: flex; justify-content: center; margin-top: 8px; }
+.sell-btn {
+  font: 800 17px Inter, system-ui, sans-serif; border-radius: 999px; padding: 12px 26px; cursor: pointer; border: 0;
+  background: var(--bank); color: #fff; box-shadow: 0 6px 20px #1f6f4a66;
+}
+.sell-btn:disabled { background: #8a958d; box-shadow: none; cursor: not-allowed; }
+.sell-btn:not(:disabled):hover { filter: brightness(1.1); }
+.msg { margin: 10px 0 0; text-align: center; color: var(--muted); font-size: 14px; min-height: 1.2em; }
+.msg.ok { color: var(--green); font-weight: 700; }
+.msg.err { color: var(--red); font-weight: 700; }
+
+/* ── Mode d'emploi ─────────────────────────── */
+.howto {
+  margin: 18px 0 0; padding: 14px 16px; list-style: none; counter-reset: step;
+  color: var(--ink); font-size: 14px; line-height: 1.45;
+}
+.howto li { position: relative; padding-left: 36px; counter-increment: step; }
+.howto li::before {
+  content: counter(step); position: absolute; left: 0; top: 0; width: 26px; height: 26px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--bank); color: #fff; font: 17px var(--title);
+}
+.howto li + li { margin-top: 10px; }
+.howto b { color: var(--bank); }
+
+@media (max-width: 420px) {
+  .brand { font-size: 22px; }
+  .balance b { font-size: 26px; }
+}

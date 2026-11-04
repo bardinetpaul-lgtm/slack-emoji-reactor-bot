@@ -1,0 +1,91 @@
+/* ═══════════════════════════════════════════════════════════
+   🎁 Boutique de boosters (ville Jeanpip, v4.0)
+   Même esprit que le Kiosque (tickets.css) : auvent rayé, enseigne,
+   étagère de boosters. Polices système (aucun CDN).
+   ═══════════════════════════════════════════════════════════ */
+
+:root {
+  --bg: #eaf3fb;
+  --ink: #14263a;
+  --muted: #5b6d80;
+  --shop: #1f6fb2;
+  --blue: #2a86d1;
+  --gold: #c9a24a;
+  --ok: #1f8a3b;
+  --warn: #b8141a;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; min-height: 100%; }
+body {
+  background:
+    radial-gradient(ellipse at 50% 18%, #ffffff 0%, #ffffff00 60%),
+    repeating-linear-gradient(135deg, #d6e7f5 0 2px, transparent 2px 22px),
+    linear-gradient(#eaf3fb, #cfe2f2);
+  background-attachment: fixed;
+  color: var(--ink);
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ── Auvent rayé + enseigne ─────── */
+.awning {
+  position: relative; height: 46px;
+  background: repeating-linear-gradient(90deg, var(--shop) 0 44px, #fff 44px 88px);
+  box-shadow: inset 0 -6px 10px #0000001f;
+}
+.awning::after {
+  content: ''; position: absolute; left: 0; right: 0; top: 100%; height: 16px;
+  background:
+    radial-gradient(circle at 22px 0, var(--shop) 21px, transparent 22px) 0 0 / 88px 16px repeat-x,
+    radial-gradient(circle at 66px 0, #fff 21px, transparent 22px) 0 0 / 88px 16px repeat-x;
+  filter: drop-shadow(0 4px 3px #0000002a);
+}
+.topbar {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+  max-width: 720px; margin: 26px auto 16px; padding: 10px 14px;
+  background: #fff; border-radius: 16px; box-shadow: 0 6px 18px #12467a1f, 0 0 0 1px #00000010;
+}
+.brand { display: flex; align-items: center; gap: 6px; font-weight: 800; font-size: 22px; letter-spacing: 1px; color: var(--shop); }
+.brand span { background: var(--shop); color: #fff; font-size: 13px; padding: 3px 7px; border-radius: 6px; letter-spacing: 1.5px; }
+.losange { font-style: normal; font-size: 20px; }
+.wallet { text-align: center; line-height: 1.15; }
+.balance { font-size: 16px; font-weight: 600; }
+.balance b { font-size: 28px; font-weight: 800; color: var(--ok); }
+.today { font-size: 12px; color: var(--muted); font-weight: 600; }
+.pill-btn {
+  color: var(--ink); text-decoration: none; font-size: 13px; font-weight: 700;
+  border: 1.5px solid #14263a33; border-radius: 999px; padding: 6px 12px; background: #fff;
+}
+.pill-btn:hover { background: #f0f6fc; }
+
+/* ── Étagère ─────────────────────── */
+.stage { max-width: 720px; margin: 0 auto; padding: 0 16px 32px; }
+.intro, .note { color: var(--muted); font-size: 14px; line-height: 1.45; text-align: center; }
+.pause {
+  background: #fff4d6; border: 2px solid var(--gold); border-radius: 12px;
+  padding: 12px 14px; font-weight: 600; text-align: center;
+}
+.shelf { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px; margin: 18px 0; }
+.booster {
+  display: flex; flex-direction: column; gap: 8px; align-items: stretch;
+  background: #fff; border-radius: 16px; padding: 16px 14px;
+  box-shadow: 0 8px 20px #12467a22, 0 0 0 1px #00000010;
+}
+.booster.seasonal { box-shadow: 0 8px 20px #b8146a2e, 0 0 0 2px #e05a9a; }
+.booster .emoji { font-size: 44px; text-align: center; line-height: 1; }
+.booster h2 { margin: 0; font-size: 18px; text-align: center; }
+.booster .price { text-align: center; font-weight: 800; font-size: 20px; color: var(--shop); }
+.booster .label { text-align: center; font-size: 12px; color: var(--muted); }
+.booster .block { font-size: 13px; line-height: 1.4; color: var(--warn); background: #fff1f1; border-radius: 10px; padding: 8px 10px; white-space: pre-line; }
+.buy-btn {
+  margin-top: auto; border: 0; border-radius: 12px; padding: 12px 14px; cursor: pointer;
+  font: inherit; font-weight: 800; font-size: 16px; color: #fff; background: var(--blue);
+  box-shadow: 0 4px 0 #165b93;
+}
+.buy-btn:hover:not(:disabled) { filter: brightness(1.06); }
+.buy-btn:active:not(:disabled) { transform: translateY(2px); box-shadow: 0 2px 0 #165b93; }
+.buy-btn:disabled { background: #9fb3c6; box-shadow: none; cursor: not-allowed; }
+.msg { min-height: 1.4em; text-align: center; font-weight: 600; white-space: pre-line; }
+.msg.err { color: var(--warn); }
+.msg.ok { color: var(--ok); }

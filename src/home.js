@@ -88,6 +88,11 @@ function buildHomeView(userId, ctx) {
   const blocks = [
     { type: 'header', text: { type: 'plain_text', text: '🤖 Jeanpip', emoji: true } },
     section(`💰 *Ton solde : ${formatCredits(balance)} JP$*\n_+${ctx.creditsPerJeanpipLabel} JP$ à chaque réaction :${ctx.targetEmoji}: que tu poses (Jeanpip délivré, hors spam/farm), ${settings.getDailyJeanpipLimit()} par jour au maximum._`),
+    // 🏙️ v4.0 : la ville Jeanpip en 3D (page web, bureaux uniquement)
+    ...(ctx.villeUrl ? [section(
+      `🏙️ *Jeanpip City* — tout le jeu en 3D : Arène, Boutique, Banque, Kiosque, Musée… Clique sur un bâtiment pour y entrer.`,
+      { ...button('🏙️ Entrer dans Jeanpip City', 'open_ville_web'), url: ctx.villeUrl },
+    )] : []),
     ...(pause ? [section(`${pause.title}\nPas de Jeanpip, de raid, de booster, de ticket ni de nouveau combat : on ${pause.kind === 'leave' ? 'te laisse tranquille' : 'laisse les collègues tranquilles'}. Ton classeur et ton deck restent ouverts.`)] : []),
     { type: 'divider' },
   ];

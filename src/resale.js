@@ -26,6 +26,8 @@ const collections = require('./collections');
 const credits = require('./credits');
 const settings = require('./settings');
 const arenaStore = require('./game/arenaStore');
+const weekend = require('./weekend');
+const raid = require('./raid');
 
 const RESALE_PATH = path.join(__dirname, '..', 'data', 'resale.json');
 
@@ -142,6 +144,33 @@ function sell(userId, wanted, now = Date.now()) {
   return { ok: true, gained, sold, balance, remaining: Math.max(0, settings.getResaleWeeklyCap() - u.earned) };
 }
 
+/**
+ * 🏙️ v4.0 : revente avec les mêmes refus que la fenêtre Slack, partagée
+ * Slack (app.view('resale_submit')) / web (src/banqueWeb.js).
+ * → { ok: false, error: 'pause', pause } | { ok: false, error: 'raid' } | retour de sell()
+ * Synchrone (aucun await) : deux clics ne revendent pas deux fois les mêmes cartes.
+ */
+function trySell(userId, wanted, now = Date.now()) {
+  const pause = weekend.pauseFor(userId, now);
+  if (pause) return { ok: false, error: 'pause', pause };
+  if (raid.raidsAgainst(userId).length) return { ok: false, error: 'raid' };
+  return sell(userId, wanted && typeof wanted === 'object' ? wanted : {}, now);
+}
+
+const fmt = (n) => String(n).replace('.', ',');   // = formatCredits (src/admin.js)
+
+/** Texte d'un refus, mot pour mot celui de la fenêtre Slack. */
+function errorText(res) {
+  switch (res.error) {
+    case 'pause': return `${res.pause.icon} Pas de revente ${res.pause.short}.`;
+    case 'raid': return '🚨 Tu subis un raid : pas de revente avant sa fin.';
+    case 'empty': return 'Indique combien de cartes revendre.';
+    case 'too_many': return `Tu n'en as que ${res.available} en double.`;
+    case 'cap': return `Ça dépasse ton plafond : tu peux encore toucher ${fmt(res.remaining)} JP$ cette semaine.`;
+    default: return 'Revente impossible.';
+  }
+}
+
 module.exports = {
-  PRICES, RARITY_ORDER, LABELS, weekOf, earnedThisWeek, remainingThisWeek, lockedByDecks, sellable, sellableCounts, sell, RESALE_PATH,
+  PRICES, RARITY_ORDER, LABELS, weekOf, earnedThisWeek, remainingThisWeek, lockedByDecks, sellable, sellableCounts, sell, trySell, errorText, RESALE_PATH,
 };
