@@ -356,7 +356,7 @@ function register(app, ctx) {
   });
   app.action('trade_general_open', async ({ ack, body, client, logger }) => {
     await ack();
-    await ctx.openModal(client, body, buildSoonModal('Demande générale'), logger);
+    await ctx.openModal(client, body, buildGeneralModal(body.user.id), logger);
   });
   app.action('trade_auction_open', async ({ ack, body, client, logger }) => {
     await ack();
@@ -412,6 +412,7 @@ function register(app, ctx) {
     const tradeId = String(action.value || '').split('|')[0];
     const pause = weekend.pauseFor(userId, now);
     if (pause) return reply(client, body, pauseText(pause));
+    if ((trades.getTrade(tradeId) || {}).kind === 'general') return generalSellerClick(ctx, actionId, { body, client, tradeId, now });
 
     const res = decide(tradeId, userId, now);
     if (res.ok || (res.trade && res.trade.status !== 'open')) {
@@ -429,6 +430,7 @@ function register(app, ctx) {
   });
   sellerAction('trade_accept', trades.accept, 'accepted');
   sellerAction('trade_refuse', trades.refuse, 'refused');
+  registerGeneral(app, ctx);
 }
 
 /**
@@ -452,3 +454,401 @@ module.exports = {
   register,
   onUnsubscribe,
 };
+
+// ═══════════════════════════════════════════════════════════
+//  📣 DEMANDE GÉNÉRALE ET CONTRE-OFFRES (tâche 7b)
+//    • demande générale : modale (numéro → offre), DM à chaque
+//      propriétaire inscrit qui peut céder la carte (Accepter / Refuser /
+//      Contre-offre) ; le premier qui accepte conclut, les autres DM
+//      passent à « déjà conclue » ;
+//    • contre-offre (demande générale ou à une personne) : modale du
+//      vendeur (JP$ + cartes de l'acheteur, numéros seulement), DM à
+//      l'acheteur (Accepter / Refuser la contre-offre).
+//  Références des DM (trade.dms) : clé = joueur pour le DM de demande,
+//  `counter_<vendeur>` pour le DM de contre-offre reçu par l'acheteur.
+// ═══════════════════════════════════════════════════════════
+
+Object.assign(ERROR_TEXT, {
+  no_owner: 'Personne ne peut te céder cette carte pour le moment : aucun joueur inscrit et disponible n\'en a un exemplaire libre.',
+  already_countered: 'Tu as déjà fait une contre-offre pour cette demande : une seule par personne.',
+  not_buyer: 'Cette contre-offre ne t\'est pas adressée.',
+  no_counter: 'Cette contre-offre n\'existe plus.',
+  counter_closed: 'Cette contre-offre est déjà acceptée, refusée ou expirée.',
+});
+
+const COUNTER_KEY = 'counter_';
+const counterKey = (sellerId) => `${COUNTER_KEY}${sellerId}`;
+
+/** Montant JP$ d'un champ number_input : vide = 0, sinon Number() (une chaîne invalide → 'bad_amount'). */
+function readJp(values) {
+  const raw = values.jp && values.jp.value && values.jp.value.value;
+  return raw == null || String(raw).trim() === '' ? 0 : Number(raw);
+}
+
+/** Cartes cessibles de l'acheteur, sans compter celles réservées par CET échange. */
+function buyerFreeCards(trade) {
+  const data = trades._load();
+  delete data.trades[trade.id];
+  return trades.cessible(trade.buyer, data);
+}
+
+/** Liste des numéros : en gras si `free` les contient, barrés sinon. */
+function codeListLines(title, free) {
+  const all = cardIndex.listCards();
+  return [title, ...byRarity(all).map(([r, list]) => `${RARITY_LABEL[r]} : ${list.map((c) => (free.has(c.url) ? `*${c.code}*` : `~${c.code}~`)).join(' ')}`)];
+}
+
+// ─────────────────────────────────────────────
+// 🪟 Modales
+// ─────────────────────────────────────────────
+
+/** Demande générale : un numéro (tous les codes) et l'offre. */
+function buildGeneralModal(buyer, now = Date.now()) {
+  const pause = weekend.pauseFor(buyer, now);
+  if (pause) return infoModal('Demande générale', pauseText(pause));
+  const reason = trades.blockReason(buyer, now);
+  if (reason) return infoModal('Demande générale', ERROR_TEXT[reason]);
+
+  const all = cardIndex.listCards();
+  const wanted = cardPicker(all, { multi: false, placeholder: 'Choisis un numéro', textHint: 'HW3' });
+  const blocks = [
+    section('📣 *Demande à tout le monde* : ta demande part en message à tous les joueurs inscrits qui peuvent te céder cette carte. Le premier qui accepte conclut l\'échange.'),
+    { type: 'input', block_id: 'card', label: plainText('Carte recherchée'), ...wanted },
+    {
+      type: 'input',
+      block_id: 'jp',
+      optional: true,
+      label: plainText('Ton offre en JP$'),
+      element: { type: 'number_input', action_id: 'value', is_decimal_allowed: false, min_value: '0', placeholder: plainText('0') },
+      hint: plainText('Sans carte en échange : au moins le prix de rachat de la banque (commune 1, rare 2, épique 5, hors série 10, légendaire 20).'),
+    },
+  ];
+  const mineFree = trades.cessible(buyer);
+  const mine = all.filter((c) => mineFree.has(c.url));
+  if (mine.length) {
+    const offered = cardPicker(mine, { multi: true, placeholder: 'Choisis tes cartes', textHint: '#12, HW3' });
+    blocks.push({ type: 'input', block_id: 'cards', optional: true, label: plainText('Et / ou tes cartes en échange'), ...offered });
+  } else {
+    blocks.push(context('Tu n\'as aucune carte à proposer en échange : offre des JP$.'));
+  }
+  blocks.push(context(`💰 Ton solde : *${credits.getBalance(buyer)} JP$*. Les JP$ proposés sont mis de côté tout de suite, et rendus si personne n'accepte dans l'heure.`));
+  return {
+    type: 'modal',
+    callback_id: 'trade_general_submit',
+    title: plainText('Demande générale'),
+    submit: plainText('📣 Envoyer'),
+    close: plainText('Annuler'),
+    blocks,
+  };
+}
+
+/**
+ * Contre-offre du vendeur `sellerId` : JP$ et/ou cartes de l'acheteur.
+ * Le vendeur ne voit que des numéros (jamais d'image ni le classeur de l'acheteur).
+ */
+function buildCounterModal(trade, sellerId, now = Date.now()) {
+  const title = 'Contre-offre';
+  if (!trade || trade.status !== 'open') return infoModal(title, ERROR_TEXT.closed);
+  if (now >= trade.expiresAt) return infoModal(title, ERROR_TEXT.expired);
+  const pause = weekend.pauseFor(sellerId, now);
+  if (pause) return infoModal(title, pauseText(pause));
+  if (trade.counters && trade.counters[sellerId]) return infoModal(title, ERROR_TEXT.already_countered);
+  const reason = trades.blockReason(sellerId, now);
+  if (reason) return infoModal(title, ERROR_TEXT[reason]);
+
+  const blocks = [section(`💬 *Ta contre-offre à <@${trade.buyer}>* pour ta carte ${cardLine(trade.card)}.\nSon offre : ${describeOffer(trade.offer)}. Ta contre-offre la *remplace* : indique tout ce que tu veux recevoir. Une seule contre-offre possible.`)];
+  blocks.push({
+    type: 'input',
+    block_id: 'jp',
+    optional: true,
+    label: plainText('JP$ demandés'),
+    element: { type: 'number_input', action_id: 'value', is_decimal_allowed: false, min_value: '0', placeholder: plainText('0') },
+    hint: plainText('Sans carte : au moins le prix de rachat de la banque (commune 1, rare 2, épique 5, hors série 10, légendaire 20).'),
+  });
+  const free = buyerFreeCards(trade);
+  const theirs = cardIndex.listCards().filter((c) => free.has(c.url));
+  blocks.push(...chunkSections(codeListLines(`*Les cartes de <@${trade.buyer}>* — en gras : disponibles · ~barrées~ : non disponibles`, free)));
+  if (theirs.length) {
+    const picker = cardPicker(theirs, { multi: true, placeholder: 'Choisis ses cartes', textHint: '#12, HW3' });
+    blocks.push({ type: 'input', block_id: 'cards', optional: true, label: plainText('Et / ou ses cartes'), ...picker });
+  } else {
+    blocks.push(context(`<@${trade.buyer}> n'a aucune carte à céder : demande des JP$.`));
+  }
+  blocks.push(context(`⏳ <@${trade.buyer}> aura 1 h pour accepter ou refuser.`));
+  return {
+    type: 'modal',
+    callback_id: 'trade_counter_submit',
+    private_metadata: `${trade.id}|${sellerId}`,
+    title: plainText(title),
+    submit: plainText('💬 Envoyer'),
+    close: plainText('Annuler'),
+    blocks,
+  };
+}
+
+// ─────────────────────────────────────────────
+// 💬 Messages
+// ─────────────────────────────────────────────
+
+/** Ce que le vendeur a reçu (contre-offre acceptée ou offre d'origine). */
+const receivedOffer = (trade) => (trade.reason === 'counter_accepted' && trade.counters && trade.counters[trade.seller]) || trade.offer;
+
+function counterStatusLine(trade, sellerId) {
+  const co = trade.counters && trade.counters[sellerId];
+  if (!co) return '';
+  switch (co.status) {
+    case 'open': return `💬 Ta contre-offre : ${describeOffer(co)} · en attente de <@${trade.buyer}> jusqu'à *${hour(co.expiresAt)}*.`;
+    case 'refused': return `✖️ <@${trade.buyer}> a refusé ta contre-offre (${describeOffer(co)}).`;
+    case 'expired': return `⌛ Ta contre-offre (${describeOffer(co)}) a expiré sans réponse.`;
+    case 'cancelled': return `🚫 Ta contre-offre (${describeOffer(co)}) est annulée.`;
+    default: return '';
+  }
+}
+
+function requestClosedLine(trade, ownerId) {
+  switch (trade.status) {
+    case 'done':
+      if (trade.seller === ownerId) return `✅ *Échange conclu* : la carte est partie chez <@${trade.buyer}>, tu as reçu ${describeOffer(receivedOffer(trade))}.`;
+      return `🔒 *Déjà conclue* : un autre joueur a cédé la carte à <@${trade.buyer}>.`;
+    case 'refused':
+      return trade.reason === 'counter_refused'
+        ? `✖️ *<@${trade.buyer}> a refusé ta contre-offre* : la demande est close.`
+        : `✖️ *Tu as refusé cette demande.* <@${trade.buyer}> a été prévenu.`;
+    case 'expired': return '⌛ *Demande expirée* : personne n\'a conclu à temps.';
+    case 'cancelled': return `🚫 *Échange annulé*${ERROR_TEXT[trade.reason] ? ` : ${ERROR_TEXT[trade.reason]}` : '.'}`;
+    default: return '';
+  }
+}
+
+/**
+ * DM de demande reçu par `ownerId` (demande générale ou à une personne),
+ * avec l'état de sa contre-offre. `declined` : il a refusé une demande générale.
+ */
+function buildRequestDM(trade, ownerId, { declined = false } = {}) {
+  const general = trade.kind === 'general';
+  const intro = general
+    ? `📣 *<@${trade.buyer}> cherche la carte* ${cardLine(trade.card)} : demande envoyée à tous ceux qui peuvent la céder.`
+    : `🤝 *<@${trade.buyer}> te demande ta carte* ${cardLine(trade.card)}`;
+  const head = `${intro}\nSon offre : ${describeOffer(trade.offer)}${trade.offer.jp > 0 ? ' (déjà mis de côté)' : ''}.`;
+  const co = trade.counters && trade.counters[ownerId];
+  const blocks = [];
+  if (trade.status === 'open' && !declined) {
+    blocks.push(section(`${head}\n⏳ Réponds avant *${hour(trade.expiresAt)}*${general ? ' : le premier qui accepte conclut' : ', sinon la demande expire'}.`));
+    if (co) blocks.push(context(counterStatusLine(trade, ownerId)));
+    const elements = [
+      button('✅ Accepter', 'trade_accept', { value: trade.id, style: 'primary' }),
+      button('✖️ Refuser', 'trade_refuse', { value: trade.id }),
+    ];
+    if (!co) elements.push(button('💬 Contre-offre', 'trade_counter_open', { value: `${trade.id}|${ownerId}` }));
+    blocks.push({ type: 'actions', block_id: `trade_${trade.id}`, elements });
+  } else {
+    const line = trade.status === 'open' ? '✖️ *Tu as décliné cette demande.*' : requestClosedLine(trade, ownerId);
+    blocks.push(section(head), context(line));
+  }
+  return { text: `${general ? '📣' : '🤝'} ${codeOf(trade.card)} : demande de <@${trade.buyer}>`, blocks };
+}
+
+/** DM de contre-offre reçu par l'acheteur (boutons tant qu'elle est ouverte). */
+function buildCounterBuyerDM(trade, sellerId) {
+  const co = (trade.counters && trade.counters[sellerId]) || { jp: 0, cards: [], status: 'cancelled' };
+  const held = (trade.held && trade.held[trade.buyer]) || 0;
+  const diff = co.jp - held;
+  let money = '';
+  if (diff > 0) money = `\n💰 Si tu acceptes, le complément de *${diff} JP$* est prélevé sur ton solde.`;
+  else if (diff < 0) money = `\n💰 Si tu acceptes, *${-diff} JP$* te sont rendus.`;
+  const head = `💬 *<@${sellerId}> te fait une contre-offre* pour la carte ${cardLine(trade.card)}.\nTon offre : ${describeOffer(trade.offer)}\nSa contre-offre : ${describeOffer(co)}`;
+  const blocks = [];
+  if (trade.status === 'open' && co.status === 'open') {
+    blocks.push(section(`${head}${money}\n⏳ Réponds avant *${hour(co.expiresAt)}*.`));
+    blocks.push({
+      type: 'actions',
+      block_id: `trade_counter_${trade.id}_${sellerId}`,
+      elements: [
+        button('✅ Accepter la contre-offre', 'trade_counter_accept', { value: `${trade.id}|${sellerId}`, style: 'primary' }),
+        button('✖️ Refuser', 'trade_counter_refuse', { value: `${trade.id}|${sellerId}` }),
+      ],
+    });
+  } else {
+    let line;
+    if (co.status === 'accepted') line = '✅ *Contre-offre acceptée* : la carte est dans ton classeur.';
+    else if (co.status === 'refused') {
+      line = trade.kind === 'direct'
+        ? '✖️ *Tu as refusé cette contre-offre* : la demande est close, ce que tu avais mis de côté t\'est rendu.'
+        : '✖️ *Tu as refusé cette contre-offre.* Ta demande reste ouverte pour les autres joueurs.';
+    } else if (co.status === 'expired') line = '⌛ *Contre-offre expirée.*';
+    else if (trade.status === 'done') line = '🔒 *Déjà conclue* avec un autre joueur.';
+    else line = `🔒 *Demande close*${trade.status === 'expired' ? ' : elle a expiré' : ''}.`;
+    blocks.push(section(head), context(line));
+  }
+  return { text: `💬 ${codeOf(trade.card)} : contre-offre de <@${sellerId}>`, blocks };
+}
+
+// ─────────────────────────────────────────────
+// 🔌 Branchement Slack (registerGeneral, appelé par register)
+// ─────────────────────────────────────────────
+
+function generalHelpers(ctx) {
+  const log = (what, e) => console.error(`❌ Échanges (${what}) :`, e.data ? e.data.error : e.message);
+  const dm = async (client, userId, msg) => { try { return await ctx.sendDM(client, userId, msg); } catch (e) { log(`DM <@${userId}>`, e); return null; } };
+  const refresh = (client, users) => Promise.all([...new Set(users)].filter(Boolean).map((u) => ctx.refreshHome(client, u, console)));
+  const reply = async (client, body, text) => {
+    if (!body.channel) return;
+    try { await client.chat.postEphemeral({ channel: body.channel.id, user: body.user.id, text }); } catch (e) { log('réponse au clic', e); }
+  };
+  const update = async (client, ref, msg) => {
+    if (!ref) return;
+    try { await client.chat.update({ channel: ref.channel, ts: ref.ts, text: msg.text, blocks: msg.blocks }); } catch (e) { log('mise à jour DM', e); }
+  };
+  /** Republie tous les DM de l'échange (demandes reçues, contre-offres reçues par l'acheteur). */
+  const updateAll = (client, trade) => Promise.all(Object.entries(trade.dms || {}).map(([key, ref]) => (key.startsWith(COUNTER_KEY)
+    ? update(client, ref, buildCounterBuyerDM(trade, key.slice(COUNTER_KEY.length)))
+    : update(client, ref, buildRequestDM(trade, key)))));
+  return { log, dm, refresh, reply, update, updateAll };
+}
+
+/** Message mrkdwn → { text, blocks }. */
+const textDM = (text) => ({ text: text.replace(/\*/g, ''), blocks: [section(text)] });
+
+/** Clic Accepter / Refuser sur une demande GÉNÉRALE (routé depuis le handler de register). */
+async function generalSellerClick(ctx, actionId, { body, client, tradeId, now }) {
+  const h = generalHelpers(ctx);
+  const userId = body.user.id;
+  const clicked = body.channel && body.message ? { channel: body.channel.id, ts: body.message.ts } : null;
+
+  if (actionId === 'trade_refuse') {
+    // Refuser une demande générale = la décliner pour soi : rien ne change pour les autres
+    const trade = trades.getTrade(tradeId);
+    if (!trade) return h.reply(client, body, ERROR_TEXT.closed);
+    const ref = (trade.dms && trade.dms[userId]) || clicked;
+    await h.update(client, ref, buildRequestDM(trade, userId, { declined: trade.status === 'open' }));
+    if (trade.status !== 'open') await h.reply(client, body, ERROR_TEXT.closed);
+    return;
+  }
+
+  const res = trades.accept(tradeId, userId, now);
+  const { trade } = res;
+  if (res.ok || (trade && trade.status !== 'open')) {
+    if (!(trade.dms && trade.dms[userId]) && clicked) trade.dms = { ...(trade.dms || {}), [userId]: clicked };
+    console.log(`📣 ${trade.id} : ${trade.status} (${trade.reason}) par <@${userId}>`);
+    await h.updateAll(client, trade);
+    if (res.ok) await h.dm(client, trade.buyer, buildBuyerResultDM(trade, 'accepted'));
+    else if (res.error === 'cards_unavailable') await h.dm(client, trade.buyer, buildBuyerResultDM({ ...trade, seller: userId }, 'cancelled'));
+    if (!res.ok) await h.reply(client, body, errorFor(res.error, userId, { asBuyer: false, now }));
+    await h.refresh(client, [trade.buyer, userId]);
+    return;
+  }
+  await h.reply(client, body, errorFor(res.error, userId, { asBuyer: false, now }));
+}
+
+function registerGeneral(app, ctx) {
+  const h = generalHelpers(ctx);
+
+  // 📣 Envoi de la demande générale
+  app.view('trade_general_submit', async ({ ack, body, view, client }) => {
+    const buyer = body.user.id;
+    const now = Date.now();
+    const values = view.state.values;
+    const fail = (field, text) => ack({ response_action: 'errors', errors: { [values[field] ? field : 'card']: text } });
+
+    const pause = weekend.pauseFor(buyer, now);
+    if (pause) return fail('card', pauseText(pause));
+    const wanted = readCodes(values.card && values.card.value);
+    if (wanted.bad.length || wanted.cards.length !== 1) return fail('card', wanted.bad.length ? `Numéro inconnu : ${wanted.bad[0]}.` : 'Choisis une carte.');
+    const offered = readCodes(values.cards && values.cards.value);
+    if (offered.bad.length) return fail('cards', `Numéro inconnu : ${offered.bad.join(', ')}.`);
+
+    const res = trades.createGeneral({ buyer, code: wanted.cards[0].code, jp: readJp(values), cards: offered.cards.map((c) => c.url), now });
+    if (!res.ok) {
+      let text = errorFor(res.error, buyer, { asBuyer: true, now });
+      if (res.error === 'floor') text = `${ERROR_TEXT.floor} : ${trades.floor(wanted.cards[0].rarity)} JP$ minimum pour cette carte.`;
+      return fail(res.error === 'no_owner' ? 'card' : (FIELD_OF[res.error] || 'card'), text);
+    }
+    await ack();
+    const { trade, recipients } = res;
+    console.log(`📣 <@${buyer}> cherche ${trade.card.code} (${trade.offer.jp} JP$ + ${trade.offer.cards.length} carte(s)) → ${trade.id}, ${recipients.length} propriétaire(s)`);
+    for (const owner of recipients) {
+      const ref = await h.dm(client, owner, buildRequestDM(trade, owner));
+      if (ref) trades.setDm(trade.id, owner, ref);
+    }
+    const n = recipients.length;
+    await h.dm(client, buyer, textDM(`📣 *Demande générale envoyée* à ${n} joueur${n > 1 ? 's' : ''} qui peu${n > 1 ? 'vent' : 't'} te céder la carte ${cardLine(trade.card)}.\nTon offre : ${describeOffer(trade.offer)}. Le premier qui accepte conclut ; sans réponse avant *${hour(trade.expiresAt)}*, tout t'est rendu.`));
+    await h.refresh(client, [buyer]);
+  });
+
+  // 💬 Ouverture de la modale de contre-offre (depuis le DM de demande)
+  app.action('trade_counter_open', async ({ ack, body, action, client, logger }) => {
+    await ack();
+    const userId = body.user.id;
+    const now = Date.now();
+    const pause = weekend.pauseFor(userId, now);
+    if (pause) return h.reply(client, body, pauseText(pause));
+    const trade = trades.getTrade(String(action.value || '').split('|')[0]);
+    if (trade && trade.kind === 'direct' && trade.seller !== userId) return h.reply(client, body, ERROR_TEXT.not_seller);
+    await ctx.openModal(client, body, buildCounterModal(trade, userId, now), logger);
+  });
+
+  // 📨 Envoi de la contre-offre
+  app.view('trade_counter_submit', async ({ ack, body, view, client }) => {
+    const sellerId = body.user.id;
+    const now = Date.now();
+    const values = view.state.values;
+    const tradeId = String(view.private_metadata || '').split('|')[0];
+    const fail = (field, text) => ack({ response_action: 'errors', errors: { [values[field] ? field : 'jp']: text } });
+
+    const pause = weekend.pauseFor(sellerId, now);
+    if (pause) return fail('jp', pauseText(pause));
+    const asked = readCodes(values.cards && values.cards.value);
+    if (asked.bad.length) return fail('cards', `Numéro inconnu : ${asked.bad.join(', ')}.`);
+
+    const res = trades.counter(tradeId, sellerId, { jp: readJp(values), cards: asked.cards.map((c) => c.url) }, now);
+    if (!res.ok) {
+      let text = errorFor(res.error, sellerId, { asBuyer: false, now });
+      if (res.error === 'floor' && res.trade) text = `${ERROR_TEXT.floor} : ${trades.floor(res.trade.card.rarity)} JP$ minimum pour cette carte.`;
+      if (res.error === 'cards_unavailable') text = 'Une des cartes demandées n\'est plus disponible chez l\'acheteur.';
+      return fail(res.error === 'cards_unavailable' ? 'cards' : 'jp', text);
+    }
+    await ack();
+    const { trade } = res;
+    const co = trade.counters[sellerId];
+    console.log(`💬 ${trade.id} : contre-offre de <@${sellerId}> (${co.jp} JP$ + ${co.cards.length} carte(s))`);
+    await h.update(client, trade.dms && trade.dms[sellerId], buildRequestDM(trade, sellerId));
+    const ref = await h.dm(client, trade.buyer, buildCounterBuyerDM(trade, sellerId));
+    if (ref) trades.setDm(trade.id, counterKey(sellerId), ref);
+    await h.refresh(client, [trade.buyer, sellerId]);
+  });
+
+  // ✅ / ✖️ Réponse de l'acheteur à une contre-offre
+  const buyerAction = (actionId, decide, accepted) => app.action(actionId, async ({ ack, body, action, client }) => {
+    await ack();
+    const userId = body.user.id;
+    const now = Date.now();
+    const pause = weekend.pauseFor(userId, now);
+    if (pause) return h.reply(client, body, pauseText(pause));
+    const [tradeId, sellerId] = String(action.value || '').split('|');
+
+    const res = decide(tradeId, userId, sellerId, now);
+    const trade = res.trade || trades.getTrade(tradeId);
+    if (!res.ok) {
+      await h.reply(client, body, errorFor(res.error, userId, { asBuyer: true, now }));
+      if (trade && trade.buyer === userId && res.error !== 'balance') await h.updateAll(client, trade);
+      return;
+    }
+    const co = trade.counters[sellerId];
+    console.log(`💬 ${trade.id} : contre-offre de <@${sellerId}> → ${co.status} par <@${userId}>`);
+    await h.updateAll(client, trade);
+    if (accepted) {
+      await h.dm(client, sellerId, textDM(`✅ *<@${userId}> a accepté ta contre-offre !* Ta carte ${cardLine(trade.card)} est partie, tu as reçu ${describeOffer(co)}.`));
+    } else {
+      const rest = trade.kind === 'direct' ? ' La demande est close.' : ' Tu peux encore accepter son offre d\'origine tant que la demande est ouverte.';
+      await h.dm(client, sellerId, textDM(`✖️ *<@${userId}> a refusé ta contre-offre* pour la carte ${cardLine(trade.card)}.${rest}`));
+    }
+    await h.refresh(client, [userId, sellerId]);
+  });
+  buyerAction('trade_counter_accept', trades.acceptCounter, true);
+  buyerAction('trade_counter_refuse', trades.refuseCounter, false);
+}
+
+module.exports.buildGeneralModal = buildGeneralModal;
+module.exports.buildCounterModal = buildCounterModal;
+module.exports.buildRequestDM = buildRequestDM;
+module.exports.buildCounterBuyerDM = buildCounterBuyerDM;
