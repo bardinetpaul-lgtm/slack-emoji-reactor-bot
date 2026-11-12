@@ -16,6 +16,15 @@
 
 const RELEASES = [
   {
+    version: '4.1.1',
+    date: '2026-11-05',
+    title: 'Échanges : 2 demandes par jour',
+    changes: [
+      '🚦 Pour éviter les avalanches de messages, chaque joueur peut lancer *2 demandes d’échange par jour* : demande à un joueur, demande générale et mise aux enchères comprises. Une demande refusée ou expirée compte quand même.',
+      '✅ Répondre aux demandes, faire une contre-offre et enchérir restent illimités. Le compteur repart à zéro chaque nuit à minuit, et ton Accueil t’indique combien de demandes il te reste.',
+    ],
+  },
+  {
     version: '4.1.0',
     date: '2026-11-04',
     title: 'Échanges, enchères et bruitages',
