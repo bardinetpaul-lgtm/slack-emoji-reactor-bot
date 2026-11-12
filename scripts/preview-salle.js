@@ -39,7 +39,7 @@ const byId = new Map(PEOPLE.map((p) => [p.userId, p]));
 const avatar = (p) => (p.hasPhoto ? `api/ville/avatar/${encodeURIComponent(p.userId)}?${query}` : null);
 const person = (id) => { const p = byId.get(id); return { userId: p.userId, name: p.name, avatar: avatar(p) }; };
 
-const FLOOR = { common: 1, rare: 2, epic: 5, legendary: 20, rose: 10, halloween: 10 };
+const FLOOR = { common: 1, rare: 2, epic: 5, legendary: 20, rose: 30, halloween: 30 };
 const COLORS = { common: '#7d8796', rare: '#2f6fd6', epic: '#8e3fd6', legendary: '#c98a10', rose: '#e0407f', halloween: '#e0701a' };
 const cardImage = (code) => `api/card-image/${encodeURIComponent(code)}`;
 const cardThumb = (code) => `api/card-thumb/${encodeURIComponent(code)}`;

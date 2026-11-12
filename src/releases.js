@@ -16,6 +16,14 @@
 
 const RELEASES = [
   {
+    version: '4.3.0',
+    date: '2026-11-12',
+    title: 'Les cartes Hors série valent plus cher',
+    changes: [
+      '♻️ Les cartes du *Hors série* (🎀 Octobre Rose et 🎃 Halloween) se revendent maintenant *30 JP$* l’exemplaire en double, au lieu de 10. Le prix de départ minimum d’un échange ou d’une enchère sur ces cartes monte aussi à 30 JP$.',
+    ],
+  },
+  {
     version: '4.2.0',
     date: '2026-11-12',
     title: 'La Salle des ventes ouvre',

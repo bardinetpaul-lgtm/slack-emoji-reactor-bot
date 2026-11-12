@@ -64,7 +64,7 @@ const moves = (u, source) => db.getDb().prepare('SELECT amount, ref FROM credit_
 
 broadcast.subscribe('U_A');
 broadcast.subscribe('U_B');
-credits.addCredit('U_A', 100, { source: 'test' });
+credits.addCredit('U_A', 120, { source: 'test' });
 collections.addCards('U_B', [{ ...HW1 }, ...card('cb', 'common', 3)]);
 collections.addCards('U_A', card('ca', 'common', 2));
 arenaStore.setDecks('U_B', { active: 0, decks: [{ cards: ['cb'] }, {}, {}] });
@@ -76,7 +76,7 @@ test('constantes et plancher', () => {
   assert.strictEqual(trades.AUCTION_MS, 43200000);
   assert.strictEqual(trades.floor('common'), 1);
   assert.strictEqual(trades.floor('rare'), 2);
-  assert.strictEqual(trades.floor('halloween'), 10);
+  assert.strictEqual(trades.floor('halloween'), 30);
   assert.strictEqual(trades.floor('legendary'), 20);
   assert.strictEqual(trades.floor('extra'), 1);
   assert.strictEqual(trades.floor(undefined), 1);
@@ -89,20 +89,20 @@ test('cessible : dernier exemplaire oui, exemplaire du deck non', () => {
 });
 
 let tradeHW;
-test('plancher : 9 JP$ refusé, 10 JP$ accepté et mis en réserve', () => {
-  const r9 = trades.createDirect({ buyer: 'U_A', seller: 'U_B', code: 'HW1', jp: 9, cards: [], now: NOW });
+test('plancher : 29 JP$ refusé, 30 JP$ accepté et mis en réserve', () => {
+  const r9 = trades.createDirect({ buyer: 'U_A', seller: 'U_B', code: 'HW1', jp: 29, cards: [], now: NOW });
   assert.deepStrictEqual(r9, { ok: false, error: 'floor' });
-  assert.strictEqual(credits.getBalance('U_A'), 100);
-  const r = trades.createDirect({ buyer: 'U_A', seller: 'U_B', code: 'HW1', jp: 10, cards: [], now: NOW });
+  assert.strictEqual(credits.getBalance('U_A'), 120);
+  const r = trades.createDirect({ buyer: 'U_A', seller: 'U_B', code: 'HW1', jp: 30, cards: [], now: NOW });
   assert.ok(r.ok, JSON.stringify(r));
   tradeHW = r.trade;
   assert.strictEqual(credits.getBalance('U_A'), 90);
-  assert.deepStrictEqual(moves('U_A', 'trade_hold'), [{ amount: -10, ref: `${tradeHW.id}:hold` }]);
+  assert.deepStrictEqual(moves('U_A', 'trade_hold'), [{ amount: -30, ref: `${tradeHW.id}:hold` }]);
   assert.strictEqual(tradeHW.status, 'open');
   assert.strictEqual(tradeHW.kind, 'direct');
   assert.strictEqual(tradeHW.card.code, 'HW1');
   assert.strictEqual(tradeHW.expiresAt, NOW + trades.REQUEST_MS);
-  assert.deepStrictEqual(trades.getTrade(tradeHW.id).offer, { jp: 10, cards: [] });
+  assert.deepStrictEqual(trades.getTrade(tradeHW.id).offer, { jp: 30, cards: [] });
 });
 
 let tradeSwap;
@@ -141,17 +141,17 @@ test('pendant l\'offre : la carte proposée est réservée (échanges et revente
   assert.strictEqual(trades.openTradesOf('U_B').length, 2);
 });
 
-test('accepter : HW1 passe chez A, B touche 10 JP$, une seule fois', () => {
+test('accepter : HW1 passe chez A, B touche 30 JP$, une seule fois', () => {
   const before = credits.getBalance('U_B');
   const r = trades.accept(tradeHW.id, 'U_B', NOW);
   assert.ok(r.ok, JSON.stringify(r));
   assert.strictEqual(r.trade.status, 'done');
   assert.strictEqual(count('U_A', HW1.url), 1);
   assert.strictEqual(count('U_B', HW1.url), 0);
-  assert.strictEqual(credits.getBalance('U_B'), before + 10);
-  assert.deepStrictEqual(moves('U_B', 'trade_sale'), [{ amount: 10, ref: `${tradeHW.id}:sale` }]);
+  assert.strictEqual(credits.getBalance('U_B'), before + 30);
+  assert.deepStrictEqual(moves('U_B', 'trade_sale'), [{ amount: 30, ref: `${tradeHW.id}:sale` }]);
   assert.deepStrictEqual(trades.accept(tradeHW.id, 'U_B', NOW), { ok: false, error: 'closed' });
-  assert.strictEqual(credits.getBalance('U_B'), before + 10, 'pas de double paiement');
+  assert.strictEqual(credits.getBalance('U_B'), before + 30, 'pas de double paiement');
   assert.strictEqual(trades.accept('nope', 'U_B', NOW).error, 'not_found');
 });
 
@@ -166,20 +166,20 @@ test('carte disparue avant l\'acceptation : annulé, rien ne bouge', () => {
 
 test('refuser : A remboursé', () => {
   collections.addCards('U_B', [{ ...HW1 }]);
-  const r = trades.createDirect({ buyer: 'U_A', seller: 'U_B', code: 'HW1', jp: 12, cards: [], now: NOW });
+  const r = trades.createDirect({ buyer: 'U_A', seller: 'U_B', code: 'HW1', jp: 32, cards: [], now: NOW });
   assert.ok(r.ok);
-  assert.strictEqual(credits.getBalance('U_A'), 78);
+  assert.strictEqual(credits.getBalance('U_A'), 58);
   assert.strictEqual(trades.refuse(r.trade.id, 'U_A', NOW).error, 'not_seller');
   const rr = trades.refuse(r.trade.id, 'U_B', NOW);
   assert.ok(rr.ok);
   assert.strictEqual(trades.getTrade(r.trade.id).status, 'refused');
   assert.strictEqual(credits.getBalance('U_A'), 90);
-  assert.deepStrictEqual(moves('U_A', 'trade_refund'), [{ amount: 12, ref: `${r.trade.id}:refund` }]);
+  assert.deepStrictEqual(moves('U_A', 'trade_refund'), [{ amount: 32, ref: `${r.trade.id}:refund` }]);
   assert.strictEqual(trades.refuse(r.trade.id, 'U_B', NOW).error, 'closed');
 });
 
 test('B perd HW1 pendant une demande en JP$ : unavailable, A remboursé, cancelled', () => {
-  const r = trades.createDirect({ buyer: 'U_A', seller: 'U_B', code: 'HW1', jp: 15, cards: [], now: NOW });
+  const r = trades.createDirect({ buyer: 'U_A', seller: 'U_B', code: 'HW1', jp: 35, cards: [], now: NOW });
   assert.ok(r.ok);
   collections.removeCards('U_B', [HW1.url]);
   const a = trades.accept(r.trade.id, 'U_B', NOW);

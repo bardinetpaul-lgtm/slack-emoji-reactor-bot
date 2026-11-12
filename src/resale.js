@@ -32,7 +32,7 @@ const raid = require('./raid');
 const RESALE_PATH = path.join(__dirname, '..', 'data', 'resale.json');
 
 /** JP$ par exemplaire revendu. Une rareté absente (spam) ne se revend pas. */
-const PRICES = { common: 0.5, rare: 2, epic: 5, legendary: 20, rose: 10, halloween: 10 };
+const PRICES = { common: 0.5, rare: 2, epic: 5, legendary: 20, rose: 30, halloween: 30 };
 const RARITY_ORDER = ['common', 'rare', 'epic', 'rose', 'halloween', 'legendary'];
 const LABELS = {
   common: '⚪ Communes', rare: '🔵 Rares', epic: '🟣 Épiques', rose: '🎀 Octobre Rose', halloween: '🎃 Halloween', legendary: '🟡 Légendaires',

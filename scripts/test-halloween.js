@@ -245,7 +245,7 @@ const at = (iso) => { NOW = RealDate.parse(iso); };
 
   // ── Revente ──
   collections.addCards('U_ALB', [card3]);  // un doublon
-  check(resale.PRICES ? resale.PRICES.halloween === 10 : true, 'revente : 10 JP$ l\'exemplaire en double');
+  check(resale.PRICES ? resale.PRICES.halloween === 30 : true, 'revente : 30 JP$ l\'exemplaire en double');
   const sellable = resale.summary ? resale.summary('U_ALB') : null;
   check(!sellable || JSON.stringify(sellable).includes('Halloween'), 'revente : la rareté Halloween est listée');
 
