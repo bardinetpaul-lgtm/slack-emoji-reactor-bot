@@ -102,13 +102,22 @@ check('withVille sans lien → null', L.withVille(null, 'k') === null);
 // ── 🧭 Repli sans WebGL : un lien par destination ───────────
 const state = {
   arena: { live: true, myMatchUrl: null, tvUrl: 'tv/arena?k=1' },
-  links: { museum: 'collection/U1?t=c', kiosk: 'tickets?t=k', deck: 'deck?t=d', boutique: 'boutique?t=v', banque: 'banque?t=v' },
+  links: { museum: 'collection/U1?t=c', kiosk: 'tickets?t=k', deck: 'deck?t=d', boutique: 'boutique?t=v', banque: 'banque?t=v', salle: 'salle?t=s' },
+  auctions: { open: 3 },
 };
 const links = L.fallbackLinks(state, 'TOK');
 const hrefs = links.map((l) => l.href);
-check('repli : Boutique, Banque, Kiosque, Musée, Deck, JP TV, Slack',
-  ['boutique?t=v&v=1', 'banque?t=v&v=1', 'tickets?t=k&v=1', 'collection/U1?t=c&v=1', 'deck?t=d&v=1', 'tv/arena?k=1&v=1', 'slack://open']
+check('repli : Boutique, Banque, Kiosque, Musée, Salle des ventes, Deck, JP TV, Slack',
+  ['boutique?t=v&v=1', 'banque?t=v&v=1', 'tickets?t=k&v=1', 'collection/U1?t=c&v=1', 'salle?t=s&v=1', 'deck?t=d&v=1', 'tv/arena?k=1&v=1', 'slack://open']
     .every((h) => hrefs.includes(h)));
+check('repli : la Salle des ventes affiche le nombre d\'enchères', links.some((l) => l.href === 'salle?t=s&v=1' && /Salle des ventes/.test(l.label) && /3 enchères en cours/.test(l.label)));
+check('repli : sans lien salle (ancien serveur) → pas d\'entrée Salle des ventes', !L.fallbackLinks({ links: {} }, 'TOK').some((l) => /Salle/.test(l.label)));
+
+// ── 🔨 Panneau de la Salle des ventes ───────────────────────
+check('panneau : 0 → « Aucune enchère »', L.auctionText(0) === 'Aucune enchère');
+check('panneau : 1 → « 1 enchère en cours »', L.auctionText(1) === '1 enchère en cours');
+check('panneau : 3 → « 3 enchères en cours »', L.auctionText(3) === '3 enchères en cours');
+check('panneau : valeur absente ou invalide → « Aucune enchère »', L.auctionText(undefined) === 'Aucune enchère' && L.auctionText('x') === 'Aucune enchère' && L.auctionText(-2) === 'Aucune enchère');
 const mine = L.fallbackLinks({ ...state, arena: { live: false, myMatchUrl: 'arena/m1?t=z', tvUrl: null } }, 'TOK');
 check('repli : mon combat en premier s\'il y en a un', mine[0].href === 'arena/m1?t=z&v=1');
 check('repli : pas de JP TV si rien à l\'antenne', !mine.some((l) => /^tv\//.test(l.href)));

@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="theme-color" content="#6b1d2a">
+  <title>Salle des ventes · Jeanpip</title>
+  <!-- Chemins relatifs : la page est servie sur …/salle (derrière un préfixe de proxy) -->
+  <link rel="stylesheet" href="salle.css?v=__ASSET_VERSION__">
+</head>
+<body>
+  <div class="awning" aria-hidden="true"></div>
+  <nav class="backbar"><a class="back-link" id="back" href="ville">← Retour à Jeanpip City</a></nav>
+  <header class="topbar">
+    <div class="brand"><i class="losange" aria-hidden="true">🔨</i>SALLE <span>DES VENTES</span></div>
+    <div class="wallet">
+      <div class="balance"><b id="balance">…</b> JP$</div>
+      <div class="today" id="count"></div>
+    </div>
+    <a class="pill-btn" href="slack://open">Slack</a>
+  </header>
+
+  <main class="stage">
+    <h1 class="sr-only">🔨 Salle des ventes</h1>
+    <p class="notice" id="notice" role="alert" hidden></p>
+    <p class="msg" id="msg" role="status" aria-live="polite"></p>
+
+    <section class="panel" aria-labelledby="live-title">
+      <h2 class="panel-title" id="live-title">🔨 Enchères en cours</h2>
+      <p class="intro" id="live-intro">Chargement…</p>
+      <div class="auctions" id="auctions"></div>
+    </section>
+
+    <section class="panel" aria-labelledby="sell-title">
+      <h2 class="panel-title" id="sell-title">🏷️ Mettre une carte en vente</h2>
+      <p class="intro" id="sell-intro">Choisis une de tes cartes et un prix de départ. Le meilleur enchérisseur l'emporte à la fin.</p>
+      <p class="empty" id="sell-closed" hidden>Pas de mise en vente pour l'instant (voir le message en haut de la page).</p>
+      <div id="sell-pick">
+        <label class="field-label" for="sell-search">Chercher une carte (numéro ou nom)</label>
+        <input class="search" id="sell-search" type="search" autocomplete="off" placeholder="Ex. 42 ou Jeanpip">
+        <div class="sellable" id="sellable" role="group" aria-label="Tes cartes que tu peux vendre"></div>
+        <p class="empty" id="sell-empty" hidden></p>
+      </div>
+      <form class="sell-form" id="sell-form" hidden novalidate>
+        <div class="chosen" id="sell-chosen"></div>
+        <label class="field-label" for="sell-price">Prix de départ (en JP$)</label>
+        <div class="price-row">
+          <input class="amount" id="sell-price" type="number" inputmode="numeric" min="1" step="1" required aria-describedby="sell-floor">
+          <span class="hint" id="sell-floor"></span>
+        </div>
+        <p class="reminder">⏱️ L'enchère dure 12 h ; si elle finit la nuit (20 h – 9 h), elle se termine le lendemain à 10 h. Tous les inscrits sont prévenus par DM.</p>
+        <p class="field-err" id="sell-err" role="alert"></p>
+        <div class="confirm" id="sell-confirm" hidden>
+          <p class="confirm-text" id="sell-confirm-text"></p>
+        </div>
+        <div class="actions">
+          <button class="ghost-btn" id="sell-cancel" type="button">Changer de carte</button>
+          <button class="main-btn" id="sell-go" type="submit">Continuer</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="panel" aria-labelledby="recent-title">
+      <h2 class="panel-title" id="recent-title">📜 Dernières ventes</h2>
+      <ol class="recent" id="recent"></ol>
+      <p class="empty" id="recent-empty" hidden>Aucune vente terminée pour l'instant.</p>
+    </section>
+
+    <ol class="howto">
+      <li><b>Enchéris au moins le montant proposé.</b> Tes JP$ sont mis de côté, et rendus tout de suite si quelqu'un te dépasse.</li>
+      <li><b>À la fin, le meilleur enchérisseur reçoit la carte</b> et le vendeur touche les JP$. Sans aucune enchère, la carte reste au vendeur.</li>
+      <li><b>Tu ne peux pas enchérir sur ta propre carte</b>, ni sur toi-même quand tu mènes déjà.</li>
+    </ol>
+  </main>
+
+  <script src="salle.js?v=__ASSET_VERSION__"></script>
+</body>
+</html>

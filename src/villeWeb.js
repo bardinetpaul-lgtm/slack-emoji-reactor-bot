@@ -4,7 +4,7 @@
 //
 //    GET /ville?t=                    → la page (public/ville.html)
 //    GET /api/ville?t=                → état initial de la ville
-//    GET /api/ville/stream?t=         → flux SSE : jp, arena, house, ping
+//    GET /api/ville/stream?t=         → flux SSE : jp, arena, house, auctions, ping
 //    GET /api/ville/card/<userId>?t=  → carte de visite d'un joueur
 //    GET /api/ville/avatar/<userId>?t=→ photo Slack (proxy, 1 h en mémoire)
 //
@@ -19,6 +19,8 @@
 //    • 'jp'    à chaque gain de réaction (cityBus), à tout le monde ;
 //    • 'arena' { live, tvUrl } quand l'antenne change (contrôle 2 s) ;
 //    • 'house' { action, house } quand les inscrits changent (30 s) ;
+//    • 'auctions' { open } : enchères en cours, à l'ouverture du flux
+//      puis à chaque changement (contrôle 10 s, v4.2) ;
 //    • ': ping' toutes les 15 s.
 //  Au plus 3 flux par joueur : un 4e ferme son plus ancien, qui reçoit
 //  d'abord 'replaced' {} (la page ne se reconnecte pas). Un client
@@ -42,10 +44,12 @@ const matches = require('./game/matches');
 const arenaStore = require('./game/arenaStore');
 const tvFeed = require('./game/tvFeed');
 const dailyStreak = require('./game/dailyStreak');
+const trades = require('./trades');
 
 const PING_MS = 15 * 1000;
 const ARENA_CHECK_MS = 2 * 1000;
 const HOUSES_CHECK_MS = 30 * 1000;
+const AUCTIONS_CHECK_MS = 10 * 1000;
 const RANKING_SIZE = 10;
 const MAX_CLIENTS = 300;
 const MAX_STREAMS_PER_USER = 3;
@@ -107,6 +111,17 @@ function myMatchUrl(userId) {
   return m ? ctx.arenaUrl(m.id, userId) || null : null;
 }
 
+/** Nombre d'enchères en cours (ouvertes et pas encore terminées). */
+function openAuctions(now = Date.now()) {
+  try {
+    return Object.values(trades._load().trades)
+      .filter((t) => t && t.kind === 'auction' && t.status === 'open' && Number(t.endsAt) > now).length;
+  } catch (e) {
+    ctx.logger.warn(`[ville] enchères : ${e.message}`);
+    return 0;
+  }
+}
+
 async function housesFor(query) {
   const list = villePlots.list(broadcast.getSubscribers());
   return Promise.all(list.map(async ({ userId, plot }) => ({ ...(await person(userId, query)), plot })));
@@ -134,7 +149,8 @@ async function state(userId, query, now = Date.now()) {
     pause: pause ? { title: plain(pause.title), kind: pause.kind, icon: pause.icon } : null,
     houses,
     arena: { ...arenaOnAir(userId, now), myMatchUrl: myMatchUrl(userId) },
-    links: { museum: links.museum, kiosk: links.kiosk, deck: links.deck, boutique: links.boutique, banque: links.banque },
+    auctions: { open: openAuctions(now) },
+    links: { museum: links.museum, kiosk: links.kiosk, deck: links.deck, boutique: links.boutique, banque: links.banque, salle: links.salle },
     mairie: {
       release: { version: rel.version, title: rel.title, date: rel.date, changes: (rel.changes || []).map(plain) },
       ranking,
@@ -259,9 +275,10 @@ async function getAvatar(userId, now = Date.now()) {
 // ─────────────────────────────────────────────
 
 const clients = new Set();   // { res, userId, query }
-let loop = null;             // { arenaTimer, housesTimer, pingTimer }
+let loop = null;             // { arenaTimer, housesTimer, auctionsTimer, pingTimer }
 let lastArena = null;        // clé « live|tvUrl » du dernier envoi
 let lastHouses = null;       // Map userId → plot
+let lastAuctions = null;     // dernier nombre d'enchères en cours envoyé
 
 /**
  * Écrit sur le flux. Si le client n'absorbe plus (write → false), il est
@@ -284,8 +301,8 @@ function rawWrite(c, chunk, essential) {
   }
 }
 
-// 'jp' = décor (peut être sauté) ; 'arena' et 'house' = état de la ville
-const ESSENTIAL = new Set(['arena', 'house']);
+// 'jp' = décor (peut être sauté) ; 'arena', 'house' et 'auctions' = état de la ville
+const ESSENTIAL = new Set(['arena', 'house', 'auctions']);
 
 function writeTo(c, event, data) {
   rawWrite(c, `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`, ESSENTIAL.has(event));
@@ -328,6 +345,18 @@ function checkArena() {
   }
 }
 
+function checkAuctions() {
+  try {
+    if (!clients.size) return;
+    const open = openAuctions();
+    if (open === lastAuctions) return;
+    lastAuctions = open;
+    sendAll('auctions', () => ({ open }));
+  } catch (e) {
+    ctx.logger.error('[ville] enchères :', e.message);
+  }
+}
+
 async function checkHouses() {
   try {
     const now = new Map(villePlots.list(broadcast.getSubscribers()).map((h) => [h.userId, h.plot]));
@@ -352,11 +381,13 @@ async function checkHouses() {
 function startLoop() {
   if (loop) return;
   lastArena = null;
+  lastAuctions = null;
   lastHouses = new Map(villePlots.list(broadcast.getSubscribers()).map((h) => [h.userId, h.plot]));
   bus.on('jp', jpListener);
   loop = {
     arenaTimer: setInterval(checkArena, ARENA_CHECK_MS),
     housesTimer: setInterval(checkHouses, HOUSES_CHECK_MS),
+    auctionsTimer: setInterval(checkAuctions, AUCTIONS_CHECK_MS),
     pingTimer: setInterval(() => { for (const c of [...clients]) rawWrite(c, ': ping\n\n', false); }, PING_MS),
   };
 }
@@ -365,11 +396,13 @@ function stopLoop() {
   if (!loop) return;
   clearInterval(loop.arenaTimer);
   clearInterval(loop.housesTimer);
+  clearInterval(loop.auctionsTimer);
   clearInterval(loop.pingTimer);
   bus.removeListener('jp', jpListener);
   loop = null;
   lastHouses = null;
   lastArena = null;
+  lastAuctions = null;
 }
 
 function dropClient(c) {
@@ -406,6 +439,12 @@ function handleStream(req, res, userId, query) {
     const a = arenaOnAir(userId);
     if (lastArena === null) lastArena = `${a.live}|${a.tvUrl}`;
     writeTo(c, 'arena', a);
+  } catch { /* le contrôle suivant s'en charge */ }
+  // Enchères en cours tout de suite (même raison)
+  try {
+    const open = openAuctions();
+    if (lastAuctions === null) lastAuctions = open;
+    writeTo(c, 'auctions', { open });
   } catch { /* le contrôle suivant s'en charge */ }
   req.on('close', () => dropClient(c));
   res.on('error', () => dropClient(c));
@@ -449,4 +488,5 @@ module.exports = {
   _clientCount: () => clients.size,
   _checkHouses: checkHouses,
   _checkArena: checkArena,
+  _checkAuctions: checkAuctions,
 };

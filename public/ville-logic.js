@@ -36,7 +36,7 @@
     { id: 'musee', i: -1, j: 0, emoji: '🏛️', label: 'Musée', sub: 'Ton classeur' },
     { id: 'banque', i: 1, j: 0, emoji: '🏦', label: 'Banque', sub: 'Revente des doublons' },
     { id: 'boutique', i: -1, j: -1, emoji: '🎁', label: 'Boutique de boosters' },
-    { id: 'ventes', i: 1, j: -1, emoji: '🔨', label: 'Salle des ventes', sub: 'Bientôt' },
+    { id: 'ventes', i: 1, j: -1, emoji: '🔨', label: 'Salle des ventes', sub: 'Enchères de cartes' },
     { id: 'port-w', i: -1, j: 1, emoji: '', label: '' },
     { id: 'port-c', i: 0, j: 1, emoji: '', label: '' },
     { id: 'port-e', i: 1, j: 1, emoji: '', label: '' },
@@ -379,6 +379,13 @@
     return `${base}${base.includes('?') ? '&' : '?'}v=1${hash}`;
   }
 
+  /** Texte du panneau de la Salle des ventes : « Aucune enchère », « 1 enchère en cours », « 3 enchères en cours ». */
+  function auctionText(open) {
+    const n = Math.max(0, Math.floor(Number(open) || 0));
+    if (!n) return 'Aucune enchère';
+    return `${n} enchère${n > 1 ? 's' : ''} en cours`;
+  }
+
   /** Liste simple de destinations (navigateur sans 3D). */
   function fallbackLinks(state, token) {
     const s = state || {};
@@ -391,6 +398,7 @@
     add('🏦', 'Banque (revente des doublons)', links.banque);
     add('🎟️', 'Kiosque (tickets ESSAI !)', links.kiosk);
     add('🏛️', 'Musée (ton classeur)', links.museum);
+    add('🔨', `Salle des ventes (${auctionText(s.auctions && s.auctions.open).toLowerCase()})`, links.salle);
     add('🃏', 'Arène : mon deck', links.deck);
     if (arena.tvUrl) add('📺', 'Regarder le combat (JP TV)', arena.tvUrl);
     out.push({ emoji: '💬', label: 'Retour à l\'Accueil Slack', href: 'slack://open' });
@@ -469,6 +477,6 @@
     nodeNear, nodePos, neighbors, planWalk,
     parisParts, parisHour, sunTimes, lightAt,
     WalkerQueue, QualityMeter,
-    withVille, fallbackLinks, hashColor, hashStr, mulberry32,
+    withVille, fallbackLinks, auctionText, hashColor, hashStr, mulberry32,
   };
 }));
