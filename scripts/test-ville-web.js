@@ -5,7 +5,8 @@
 //  jeton (absent, faux, « tickets| »), état initial, maisons = inscrits
 //  seulement avec parcelles stables, promeneurs (fromHouse), carte de
 //  visite (solde privé), photo Slack (proxy + cache), combat à l'antenne
-//  et refus de diffusion, événements « house », fermeture du flux.
+//  et refus de diffusion, événements « house », enchères en cours
+//  (état + événement « auctions », v4.2), fermeture du flux.
 //  Usage : node scripts/test-ville-web.js
 // ═══════════════════════════════════════════════════════════
 const fs = require('fs');
@@ -39,6 +40,7 @@ const credits = req('credits.js');
 const releases = req('releases.js');
 const villeToken = req('villeToken.js');
 const villeWeb = req('villeWeb.js');
+const trades = req('trades.js');
 const { bus } = req('cityBus.js');
 console.log = origLog;
 
@@ -138,6 +140,12 @@ const launch = (a, b) => {
   return m.id;
 };
 const q = (u) => villeToken.query(u);
+// Enchères posées directement dans data/trades.json (seuls kind, status et endsAt comptent ici)
+function setTrades(list) {
+  const data = { seq: list.length, trades: {} };
+  list.forEach((t, i) => { data.trades[`T${i + 1}`] = { id: `T${i + 1}`, seller: 'UB', card: { url: 'x', title: 'x', rarity: 'common', code: '1' }, bids: [], ...t }; });
+  trades._save(data);
+}
 
 (async () => {
   const bank = media.getAllMedia();
@@ -187,6 +195,20 @@ const q = (u) => villeToken.query(u);
   check('état : mairie = version en cours + classement', st.mairie.release.version === rel.version && st.mairie.release.title === rel.title
     && st.mairie.release.date === rel.date && Array.isArray(st.mairie.release.changes) && Array.isArray(st.mairie.ranking));
   check('état : aucun solde d\'un autre joueur', !st.houses.some((h) => 'balance' in h));
+  check('état : lien relatif vers la Salle des ventes', typeof st.links.salle === 'string' && st.links.salle.startsWith('salle?t='));
+  check('état : aucune enchère au départ (auctions.open = 0)', st.auctions && st.auctions.open === 0);
+  const H = 3600000;
+  setTrades([
+    { kind: 'auction', status: 'open', endsAt: Date.now() + 5 * H },
+    { kind: 'auction', status: 'open', endsAt: Date.now() + 2 * H },
+    { kind: 'auction', status: 'open', endsAt: Date.now() - 1000 }, // terminée, pas encore réglée
+    { kind: 'auction', status: 'done', endsAt: Date.now() - H },
+    { kind: 'auction', status: 'cancelled', endsAt: Date.now() + H },
+    { kind: 'direct', status: 'open', expiresAt: Date.now() + H },
+    { kind: 'general', status: 'open', expiresAt: Date.now() + H },
+  ]);
+  const stA = (await request(`api/ville?${q('UA')}`)).json;
+  check('état : auctions.open ne compte que les enchères ouvertes et pas terminées (2)', stA.auctions.open === 2);
 
   // ── 🏠 Parcelles stables ──
   const plotsBefore = Object.fromEntries(st.houses.map((h) => [h.userId, h.plot]));
@@ -209,6 +231,8 @@ const q = (u) => villeToken.query(u);
   check('flux : ouvert avec les en-têtes du direct', await until(() => s.headers)
     && s.status === 200 && /text\/event-stream/.test(s.headers['content-type'])
     && /no-transform/.test(s.headers['cache-control']) && s.headers['x-accel-buffering'] === 'no');
+  check('flux : « auctions » envoyé à l\'ouverture avec le nombre en cours (2)', await until(() => s.events.some((e) => e.event === 'auctions'))
+    && s.events.find((e) => e.event === 'auctions').data.open === 2);
   check('flux : un seul écouteur « jp » sur le bus', await until(() => villeWeb._clientCount() === 1) && bus.listenerCount('jp') === 1);
   const s2 = openStream(`api/ville/stream?${q('UB')}`);
   check('flux : deux villes ouvertes, toujours un seul écouteur', await until(() => villeWeb._clientCount() === 2) && bus.listenerCount('jp') === 1);
@@ -289,6 +313,24 @@ const q = (u) => villeToken.query(u);
     && Number.isInteger(e.data.house.plot) && e.data.house.name === 'Léa')));
   check('flux : house remove (désinscrit)', s.events.some((e) => e.event === 'house' && e.data.action === 'remove' && e.data.house.userId === 'UB'
     && e.data.house.plot === plotsBefore.UB));
+
+  // ── 🔨 Enchères en cours (contrôle de la boucle) ──
+  const auctionsOf = (x) => x.events.filter((e) => e.event === 'auctions');
+  const nA = auctionsOf(s).length;
+  villeWeb._checkAuctions();
+  await wait(200);
+  check('flux : pas de nouvel « auctions » sans changement', auctionsOf(s).length === nA);
+  setTrades([
+    { kind: 'auction', status: 'open', endsAt: Date.now() + 5 * H },
+    { kind: 'auction', status: 'open', endsAt: Date.now() + 2 * H },
+    { kind: 'auction', status: 'open', endsAt: Date.now() + 3 * H },
+  ]);
+  villeWeb._checkAuctions();
+  check('flux : « auctions » { open:3 } après une nouvelle enchère, reçu par chaque ville', await until(() => auctionsOf(s).length === nA + 1 && auctionsOf(s2).some((e) => e.data.open === 3))
+    && auctionsOf(s)[nA].data.open === 3);
+  setTrades([]);
+  villeWeb._checkAuctions();
+  check('flux : « auctions » { open:0 } quand il n\'y en a plus', await until(() => auctionsOf(s).length === nA + 2) && auctionsOf(s)[nA + 1].data.open === 0);
 
   // ── 🚦 Trois flux au plus par joueur ──
   const sc = [];

@@ -8,13 +8,16 @@
 //    • un combat en cours à l'Arène (alterne toutes les 50 s) ;
 //    • un gain de JP$ toutes les 2 à 5 s (inscrits et non-inscrits) ;
 //    • une maison ajoutée puis retirée de temps en temps ;
+//    • des enchères en cours dont le nombre change toutes les 20 s
+//      (3 → 1 → 0 → 2…, événement « auctions ») ;
 //    • des pages factices pour la Boutique, la Banque, le Kiosque, le
-//      Musée, le deck, JP TV et le combat (avec le lien de retour).
+//      Musée, la Salle des ventes, le deck, JP TV et le combat (avec le
+//      lien de retour).
 //  Aucune donnée réelle n'est lue ni écrite.
 //
 //  Usage : node scripts/preview-ville.js [port] [--houses=25] [--mine] [--calm] [--pause]
 //    --mine  : le joueur a un combat en cours (clic sur l'Arène = sa page)
-//    --calm  : pas de combat ni de promeneurs automatiques
+//    --calm  : pas de combat ni de promeneurs automatiques (2 enchères fixes)
 //    --pause : la ville est en pause (bandeau du week-end)
 //  Puis ouvrir l'adresse affichée. Ajouter &hour=22 pour voir la nuit,
 //  &replaced=1 pour voir l'avis « ouverte dans un autre onglet » (après 5 s).
@@ -51,6 +54,9 @@ let nextPlot = NHOUSES + 1;
 
 let live = !CALM;
 const tvUrl = () => (live ? 'tv/arena?k=preview' : null);
+const AUCTION_STEPS = [3, 1, 0, 2];
+let auctionStep = 0;
+const openAuctions = () => (CALM ? 2 : AUCTION_STEPS[auctionStep]);
 
 function stateFor() {
   return {
@@ -60,7 +66,8 @@ function stateFor() {
     pause: flag('pause') ? { title: 'Pause du week-end', kind: 'weekend', icon: '😴' } : null,
     houses: [...houses].map(([userId, plot]) => ({ ...person(byId.get(userId)), plot })),
     arena: { live, myMatchUrl: MINE ? `arena/m-preview?${query}` : null, tvUrl: tvUrl() },
-    links: { museum: `collection/${ME}?t=c0ffee`, kiosk: 'tickets?t=k1osk', deck: 'deck?t=d3ck', boutique: `boutique?${query}`, banque: `banque?${query}` },
+    auctions: { open: openAuctions() },
+    links: { museum: `collection/${ME}?t=c0ffee`, kiosk: 'tickets?t=k1osk', deck: 'deck?t=d3ck', boutique: `boutique?${query}`, banque: `banque?${query}`, salle: `salle?${query}` },
     mairie: {
       release: {
         version: '4.0.0', title: 'Jeanpip City', date: '2026-11-04',
@@ -91,6 +98,7 @@ function scheduleJp() {
 scheduleJp();
 if (!CALM) {
   setInterval(() => { live = !live; sendAll('arena', { live, tvUrl: tvUrl() }); }, 50000);
+  setInterval(() => { auctionStep = (auctionStep + 1) % AUCTION_STEPS.length; sendAll('auctions', { open: openAuctions() }); }, 20000);
   // un nouvel inscrit arrive, puis se désinscrit
   setInterval(() => {
     const p = players.find((x) => !houses.has(x.userId));
@@ -149,6 +157,7 @@ const server = http.createServer((req, res) => {
     if (p === '/api/ville/stream') {
       res.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-cache, no-transform', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });
       res.write(`event: arena\ndata: ${JSON.stringify({ live, tvUrl: tvUrl() })}\n\n`);
+      res.write(`event: auctions\ndata: ${JSON.stringify({ open: openAuctions() })}\n\n`);
       clients.add(res);
       req.on('close', () => clients.delete(res));
       // page ouverte avec ?replaced=1 : au bout de 5 s, ce flux est « remplacé »
@@ -181,7 +190,7 @@ const server = http.createServer((req, res) => {
     }
     return json(res, 404, { ok: false });
   }
-  if (/^\/(boutique|banque|tickets|deck|tv\/arena|arena\/[^/]+|collection\/[^/]+)$/.test(p)) return fakePage(res, p, url);
+  if (/^\/(boutique|banque|salle|tickets|deck|tv\/arena|arena\/[^/]+|collection\/[^/]+)$/.test(p)) return fakePage(res, p, url);
   // fichiers statiques de public/
   let decoded;
   try { decoded = decodeURIComponent(p); } catch { return send(res, 400, 'Bad request'); }

@@ -1,0 +1,246 @@
+/* ═══════════════════════════════════════════════════════════
+   🔨 Salle des ventes de Jeanpip City (v4.2)
+   Même allure que la Banque et la Boutique : auvent, bandeau blanc,
+   cartes blanches arrondies ; couleurs d'hôtel des ventes (bordeaux, or).
+   ═══════════════════════════════════════════════════════════ */
+
+:root {
+  --bg: #f6efe6;
+  --ink: #26171a;
+  --muted: #6e5c5f;
+  --house: #6b1d2a;
+  --house-soft: #f7ebe9;
+  --gold: #c9a24a;
+  --green: #1f8a3b;
+  --red: #b8141a;
+  --title: 'Bebas Neue', Impact, 'Arial Narrow', sans-serif;
+
+  /* Raretés (mêmes couleurs que le Musée) */
+  --common: #7d8796;
+  --rare: #2f6fd6;
+  --epic: #8e3fd6;
+  --legendary: #c98a10;
+  --extra: #d4651f;
+  --rose: #e0407f;
+  --halloween: #e0701a;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { margin: 0; min-height: 100%; }
+body {
+  background:
+    radial-gradient(ellipse at 50% 18%, #fffaf3 0%, #fffaf300 60%),
+    repeating-linear-gradient(135deg, #eadfce 0 2px, transparent 2px 22px),
+    linear-gradient(#f6efe6, #e8dccb);
+  background-attachment: fixed;
+  color: var(--ink);
+  font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+}
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
+
+/* ── Auvent rayé + enseigne ────────────────── */
+.awning {
+  position: relative; height: 46px;
+  background: repeating-linear-gradient(90deg, var(--house) 0 44px, #fff 44px 88px);
+  box-shadow: inset 0 -6px 10px #0000001f;
+}
+.awning::after {
+  content: ''; position: absolute; left: 0; right: 0; top: 100%; height: 16px;
+  background:
+    radial-gradient(circle at 22px 0, var(--house) 21px, transparent 22px) 0 0 / 88px 16px repeat-x,
+    radial-gradient(circle at 66px 0, #fff 21px, transparent 22px) 0 0 / 88px 16px repeat-x;
+  filter: drop-shadow(0 4px 3px #0000002a);
+}
+.backbar { max-width: 760px; margin: 24px auto 0; padding: 0 16px; }
+.back-link { color: var(--house); font-weight: 700; font-size: 14px; text-decoration: none; }
+.back-link:hover { text-decoration: underline; }
+.topbar {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  max-width: 728px; margin: 10px auto 16px; padding: 10px 14px;
+  background: #fff; border-radius: 16px; box-shadow: 0 6px 18px #4a1f271f, 0 0 0 1px #00000010;
+}
+@media (max-width: 760px) { .topbar { margin-left: 16px; margin-right: 16px; } }
+.brand { display: flex; align-items: center; gap: 6px; font-family: var(--title); font-size: 26px; letter-spacing: 1px; color: var(--house); }
+.brand span { background: var(--house); color: #fff; font-size: 15px; padding: 2px 7px 0; border-radius: 6px; letter-spacing: 1.5px; }
+.losange { font-style: normal; font-size: 20px; }
+.wallet { text-align: center; line-height: 1.15; }
+.balance { font-size: 16px; font-weight: 600; }
+.balance b { font-family: var(--title); font-size: 30px; color: var(--green); font-weight: 400; }
+.today { font-size: 12px; color: var(--muted); font-weight: 600; }
+.pill-btn {
+  color: var(--ink); text-decoration: none; font-size: 13px; font-weight: 700;
+  border: 1.5px solid #26171a33; border-radius: 999px; padding: 6px 12px; background: #fff;
+}
+
+/* ── Panneaux ──────────────────────────────── */
+.stage { display: flex; flex-direction: column; align-items: center; padding: 0 16px 28px; gap: 18px; }
+.panel, .howto {
+  width: min(100%, 728px); background: #fff; border-radius: 16px;
+  box-shadow: 0 6px 18px #4a1f271f, 0 0 0 1px #00000010;
+}
+.panel { padding: 16px 18px 16px; border-top: 6px solid var(--gold); }
+.panel-title { margin: 0 0 6px; font-family: var(--title); font-weight: 400; font-size: 28px; letter-spacing: 1px; color: var(--house); }
+.intro { margin: 0 0 12px; font-size: 14px; line-height: 1.45; color: var(--muted); }
+.empty { margin: 6px 0; font-size: 14px; color: var(--muted); font-style: italic; }
+.notice {
+  width: min(100%, 728px); margin: 0; padding: 12px 14px; border-radius: 12px;
+  background: #fff7e0; border: 1.5px solid #c9a24a80; font-size: 15px; font-weight: 600; line-height: 1.4;
+}
+.notice.err { background: #fdecec; border-color: #b8141a66; color: var(--red); }
+.msg { width: min(100%, 728px); margin: 0; text-align: center; font-size: 14px; color: var(--muted); min-height: 0; }
+.msg:empty { display: none; }
+.msg.ok { color: var(--green); font-weight: 700; }
+.msg.err { color: var(--red); font-weight: 700; }
+
+/* ── Raretés ───────────────────────────────── */
+.r-common    { --c: var(--common); }
+.r-rare      { --c: var(--rare); }
+.r-epic      { --c: var(--epic); }
+.r-legendary { --c: var(--legendary); }
+.r-extra     { --c: var(--extra); }
+.r-rose      { --c: var(--rose); }
+.r-halloween { --c: var(--halloween); }
+.rarity {
+  display: inline-block; font-size: 11px; font-weight: 800; letter-spacing: .4px; text-transform: uppercase;
+  color: #fff; background: var(--c, var(--common)); border-radius: 999px; padding: 2px 8px;
+}
+
+/* ── Enchères en cours ─────────────────────── */
+.auctions { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 14px; }
+.lot {
+  display: flex; flex-direction: column; border-radius: 14px; overflow: hidden; background: #fff;
+  border: 2px solid var(--c, var(--common)); box-shadow: 0 4px 12px #4a1f2718;
+}
+.lot.leading { box-shadow: 0 0 0 3px #1f8a3b55, 0 4px 12px #4a1f2718; }
+.art {
+  position: relative; aspect-ratio: 4 / 3; background: #efe7dd; overflow: hidden;
+}
+.art img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.art .noimg { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 42px; opacity: .5; }
+.badges { position: absolute; left: 8px; top: 8px; display: flex; flex-wrap: wrap; gap: 6px; }
+.badge {
+  font-size: 12px; font-weight: 800; padding: 3px 9px; border-radius: 999px; color: #fff;
+  box-shadow: 0 2px 6px #0000003a;
+}
+.badge.lead { background: var(--green); }
+.badge.mine { background: var(--house); }
+.lot-body { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px 12px; flex: 1; }
+.lot-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.code { font-family: var(--title); font-size: 20px; letter-spacing: .5px; color: var(--c, var(--ink)); }
+.lot-title { margin: 0; font-size: 16px; font-weight: 800; line-height: 1.25; overflow-wrap: anywhere; }
+.person { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+.person b { color: var(--ink); }
+.avatar {
+  width: 28px; height: 28px; border-radius: 50%; flex: none; object-fit: cover; background: #d9cbbb;
+  display: inline-flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 800; color: #fff;
+}
+.price { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.price-label { font-size: 13px; color: var(--muted); }
+.price-value { font-family: var(--title); font-size: 30px; color: var(--green); line-height: 1; }
+.timer { font-size: 13px; font-weight: 700; color: var(--house); }
+.timer.soon { color: var(--red); }
+.timer small { display: block; font-weight: 500; color: var(--muted); font-size: 12px; }
+.bid-form { display: flex; flex-direction: column; gap: 6px; margin-top: auto; }
+.bid-row { display: flex; gap: 8px; }
+.amount {
+  width: 100%; min-width: 0; height: 42px; padding: 0 10px; text-align: center; font: 700 17px Inter, system-ui, sans-serif;
+  border: 1.5px solid #26171a40; border-radius: 10px; -moz-appearance: textfield; background: #fff; color: var(--ink);
+}
+.amount::-webkit-inner-spin-button, .amount::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.amount[aria-invalid="true"] { border-color: var(--red); }
+.bid-row .amount { flex: 1; }
+.field-label { display: block; font-size: 13px; font-weight: 700; margin: 4px 0 4px; }
+.field-err { margin: 0; font-size: 13px; font-weight: 700; color: var(--red); min-height: 0; }
+.field-err:empty { display: none; }
+.info { margin: 0; font-size: 13px; color: var(--muted); font-weight: 600; }
+
+.main-btn, .ghost-btn {
+  font: 800 16px Inter, system-ui, sans-serif; border-radius: 999px; padding: 10px 18px; cursor: pointer;
+  min-height: 42px;
+}
+.main-btn { border: 0; background: var(--house); color: #fff; box-shadow: 0 6px 16px #6b1d2a55; white-space: nowrap; }
+.main-btn:disabled { background: #9a8d8f; box-shadow: none; cursor: not-allowed; }
+.main-btn:not(:disabled):hover { filter: brightness(1.15); }
+.ghost-btn { border: 1.5px solid #26171a40; background: #fff; color: var(--ink); }
+.ghost-btn:disabled { opacity: .5; cursor: not-allowed; }
+
+/* ── Mise en vente ─────────────────────────── */
+.search {
+  width: 100%; height: 42px; padding: 0 12px; font: 500 15px Inter, system-ui, sans-serif;
+  border: 1.5px solid #26171a40; border-radius: 10px; margin-bottom: 10px;
+}
+.sellable { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; max-height: 420px; overflow-y: auto; padding: 2px; }
+.pick {
+  display: flex; flex-direction: column; text-align: left; padding: 0; border-radius: 12px; overflow: hidden; cursor: pointer;
+  border: 2px solid var(--c, var(--common)); background: #fff; font: inherit; color: inherit;
+}
+.pick:hover { filter: brightness(.97); }
+.pick[aria-pressed="true"] { box-shadow: 0 0 0 3px var(--gold); }
+.pick:disabled { cursor: not-allowed; opacity: .6; }
+.pick .art { aspect-ratio: 4 / 3; }
+.pick-body { padding: 6px 8px 8px; display: flex; flex-direction: column; gap: 3px; }
+.pick-title { font-size: 13px; font-weight: 700; line-height: 1.2; overflow-wrap: anywhere; }
+.pick-meta { font-size: 12px; color: var(--muted); }
+.pick .code { font-size: 17px; }
+
+.sell-form { display: flex; flex-direction: column; gap: 6px; }
+.chosen { display: flex; gap: 12px; align-items: center; padding: 8px; border-radius: 12px; background: var(--house-soft); }
+.chosen .art { width: 96px; flex: none; border-radius: 8px; }
+.chosen-text { display: flex; flex-direction: column; gap: 4px; }
+.price-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.price-row .amount { width: 140px; }
+.hint { font-size: 13px; color: var(--muted); }
+.reminder { margin: 4px 0; padding: 10px 12px; border-radius: 10px; background: #fff7e0; font-size: 13px; line-height: 1.45; }
+.confirm { padding: 10px 12px; border-radius: 10px; border: 2px dashed var(--house); }
+.confirm-text { margin: 0; font-size: 15px; font-weight: 700; line-height: 1.4; }
+.actions { display: flex; justify-content: flex-end; gap: 10px; flex-wrap: wrap; margin-top: 4px; }
+
+/* ── Dernières ventes ──────────────────────── */
+.recent { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.sale {
+  display: grid; grid-template-columns: 64px 1fr auto; gap: 4px 12px; align-items: center;
+  padding: 8px 10px; border-radius: 12px; background: #faf5ef; border-left: 5px solid var(--c, var(--common));
+}
+.sale .art { grid-row: 1 / span 2; border-radius: 8px; }
+.sale-title { font-size: 14px; font-weight: 700; overflow-wrap: anywhere; }
+.sale-title .code { font-size: 16px; margin-right: 6px; }
+.sale-who { grid-column: 2; font-size: 12px; color: var(--muted); }
+.sale-who b { color: var(--ink); }
+.sale-price { grid-column: 3; grid-row: 1 / span 2; text-align: right; font-family: var(--title); font-size: 24px; color: var(--green); line-height: 1; }
+.sale-price small { display: block; font-family: Inter, system-ui, sans-serif; font-size: 11px; color: var(--muted); }
+
+/* ── Mode d'emploi ─────────────────────────── */
+.howto {
+  margin: 0; padding: 14px 16px; list-style: none; counter-reset: step;
+  color: var(--ink); font-size: 14px; line-height: 1.45;
+}
+.howto li { position: relative; padding-left: 36px; counter-increment: step; }
+.howto li::before {
+  content: counter(step); position: absolute; left: 0; top: 0; width: 26px; height: 26px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--house); color: #fff; font: 17px var(--title);
+}
+.howto li + li { margin-top: 10px; }
+.howto b { color: var(--house); }
+
+@media (max-width: 480px) {
+  .brand { font-size: 21px; }
+  .brand span { font-size: 13px; }
+  .balance b { font-size: 26px; }
+  .pill-btn { display: none; }
+  .panel { padding: 14px 12px; }
+  .panel-title { font-size: 24px; }
+  .main-btn, .ghost-btn { font-size: 15px; padding: 10px 12px; }
+  .auctions { grid-template-columns: 1fr; }
+  .sellable { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .sale { grid-template-columns: 52px 1fr auto; }
+  .actions { justify-content: stretch; }
+  .actions button { flex: 1; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }

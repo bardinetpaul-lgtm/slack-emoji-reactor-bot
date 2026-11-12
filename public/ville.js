@@ -97,12 +97,6 @@ function arenaPanel() {
     </div>`);
 }
 
-function auctionPanel() {
-  openPanel('🔨 Salle des ventes', `
-    <p><b>Bientôt !</b> Ici, tu pourras échanger tes cartes avec tes collègues et mettre tes doublons aux enchères.</p>
-    <p class="muted">Le chantier est en cours : reviens voir dans une prochaine version.</p>`);
-}
-
 function mairiePanel() {
   const m = state.mairie || {};
   const r = m.release || {};
@@ -157,11 +151,16 @@ function activate(id, userId) {
     case 'banque': return go(links.banque);
     case 'kiosque': return go(links.kiosk);
     case 'musee': return go(links.museum);
-    case 'ventes': return auctionPanel();
+    case 'ventes': return go(links.salle);
     case 'dimsi': return mairiePanel();
     case 'house': return cardPanel(userId);
     default: return undefined;
   }
+}
+
+/** Sous-titre d'une destination (la Salle des ventes affiche ses enchères en cours). */
+function destSub(d) {
+  return d.id === 'ventes' ? L.auctionText(state.auctions && state.auctions.open) : d.sub;
 }
 
 const DESTS = [
@@ -170,7 +169,7 @@ const DESTS = [
   { id: 'banque', emoji: '🏦', label: 'Banque', sub: 'Revendre tes doublons' },
   { id: 'kiosque', emoji: '🎟️', label: 'Kiosque', sub: 'Tickets ESSAI !' },
   { id: 'musee', emoji: '🏛️', label: 'Musée', sub: 'Ton classeur' },
-  { id: 'ventes', emoji: '🔨', label: 'Salle des ventes', sub: 'Bientôt' },
+  { id: 'ventes', emoji: '🔨', label: 'Salle des ventes', sub: 'Enchères de cartes' },
   { id: 'dimsi', emoji: '🏢', label: 'Locaux Dimsi', sub: 'Mairie : nouveautés, classement' },
 ];
 
@@ -184,7 +183,7 @@ function renderChrome() {
   $('pause').hidden = !p;
   if (p) $('pause').textContent = `${p.icon || '⏸️'} ${p.title || 'Pause'} : Jeanpip City reste ouverte, mais la Boutique, la Banque et le Kiosque attendent la reprise.`;
   const ul = $('menu-list');
-  ul.innerHTML = DESTS.map((d) => `<li><button type="button" data-id="${d.id}"><span>${d.emoji}</span><span>${esc(d.label)}<small>${esc(d.sub)}</small></span></button></li>`).join('')
+  ul.innerHTML = DESTS.map((d) => `<li><button type="button" data-id="${d.id}"><span>${d.emoji}</span><span>${esc(d.label)}<small>${esc(destSub(d))}</small></span></button></li>`).join('')
     + '<li><button type="button" data-id="slack"><span>💬</span><span>Retour à l’Accueil Slack<small>Ouvre Slack</small></span></button></li>';
   ul.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => {
     ul.hidden = true; $('menu-toggle').setAttribute('aria-expanded', 'false');
@@ -284,7 +283,7 @@ async function start3d() {
     suburban: ['building-type-a', 'building-type-b', 'building-type-c', 'building-type-d', 'building-type-f', 'building-type-h', 'building-type-j', 'building-type-l', 'building-type-o', 'building-type-t', 'building-type-u', 'tree-large', 'tree-small'],
     commercial: ['building-a', 'building-b', 'building-c', 'building-d', 'building-e', 'building-f', 'building-g', 'building-h', 'detail-parasol-a'],
     industrial: ['building-g', 'building-h', 'shipping-container-a', 'shipping-container-b', 'shipping-container-c'],
-    roads: ['light-curved', 'construction-cone', 'construction-barrier'],
+    roads: ['light-curved'],
     cars: ['sedan', 'taxi', 'van', 'hatchback-sports', 'suv', 'police', 'delivery'],
     watercraft: ['boat-fishing-small', 'boat-sail-a', 'boat-sail-b', 'boat-tug-a', 'boat-tug-b', 'boat-row-small', 'buoy', 'buoy-flag', 'ship-cargo-b'],
   };
@@ -434,7 +433,7 @@ async function start3d() {
     el.type = 'button';
     el.className = 'lbl lbl-building';
     el.dataset.id = b.id;
-    el.innerHTML = `<span class="em">${d.emoji}</span><span><span class="t">${esc(d.label)}</span><small>${esc(d.sub)}</small></span>`;
+    el.innerHTML = `<span class="em">${d.emoji}</span><span><span class="t">${esc(d.label)}</span><small>${esc(destSub(d))}</small></span>`;
     el.addEventListener('click', () => activate(b.id));
     el.addEventListener('pointerenter', () => setHover({ kind: 'landmark', id: b.id }));
     el.addEventListener('pointerleave', () => setHover(null));
@@ -463,6 +462,15 @@ async function start3d() {
   }
 
   // ── Arène en direct ──────────────────────────────────────
+  // 🔨 enchères en cours : tableau 3D + sous-titre de l'étiquette
+  function applyAuctions() {
+    const open = state.auctions ? state.auctions.open : 0;
+    if (lm.ventes && lm.ventes.setOpen) lm.ventes.setOpen(open);
+    const l = bLabels.get('ventes');
+    const small = l && l.el.querySelector('small');
+    if (small) small.textContent = L.auctionText(open);
+  }
+
   function applyArena() {
     const live = Boolean(state.arena && state.arena.live);
     lm.arena.setLive(live);
@@ -624,6 +632,7 @@ async function start3d() {
         state = { ...s, me: { ...s.me } };
         renderChrome();
         applyArena();
+        applyAuctions();
       } catch { /* on garde l'état courant */ }
     }, 400);
   }
@@ -655,6 +664,15 @@ async function start3d() {
         state.arena = { ...state.arena, live: Boolean(a.live), tvUrl: a.tvUrl || null };
         applyArena();
         if (changed) refreshState(); // mon lien de combat a pu changer
+      } catch { /* ignoré */ }
+    });
+    es.addEventListener('auctions', (e) => {
+      try {
+        const a = JSON.parse(e.data);
+        const open = Math.max(0, Math.floor(Number(a && a.open) || 0));
+        state.auctions = { ...state.auctions, open };
+        applyAuctions();
+        renderChrome(); // sous-titre du menu « Aller à… »
       } catch { /* ignoré */ }
     });
     // ouverte dans trop d'onglets : le serveur coupe ce flux (le plus ancien).
@@ -727,6 +745,7 @@ async function start3d() {
   buildDistricts();
   buildLife();
   applyArena();
+  applyAuctions();
   applyLight();
   setInterval(applyLight, 20000);
   connect();

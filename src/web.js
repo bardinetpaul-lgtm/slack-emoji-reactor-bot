@@ -20,6 +20,7 @@
 //    /ville, /api/ville/…             → 🏙️ Ville Jeanpip (src/villeWeb.js, v4.0)
 //    /boutique, /api/boutique/…       → 🎁 Boutique de boosters (src/boutiqueWeb.js)
 //    /banque, /api/banque/…           → 🏦 Banque, revente (src/banqueWeb.js)
+//    /salle, /api/salle/…             → 🔨 Salle des ventes, enchères (src/salleWeb.js, v4.2)
 //    GET  /<fichier>                  → statiques de public/
 //
 //  Désactivé si WEB_PUBLIC_URL est vide (ouverture Slack uniquement).
@@ -43,6 +44,7 @@ const scratchWeb = require('./scratchWeb');
 const villeWeb = require('./villeWeb');
 const boutiqueWeb = require('./boutiqueWeb');
 const banqueWeb = require('./banqueWeb');
+const salleWeb = require('./salleWeb');
 const villeToken = require('./villeToken');
 const collections = require('./collections');
 const { getAllMedia } = require('./media');
@@ -439,6 +441,7 @@ function createHandler(deps) {
       if (await villeWeb.route(req, res, url)) return undefined;
       if (await boutiqueWeb.route(req, res, url)) return undefined;
       if (await banqueWeb.route(req, res, url)) return undefined;
+      if (await salleWeb.route(req, res, url)) return undefined;
       if (await tvWeb.route(req, res, url)) return undefined;
       if (await statsWeb.route(req, res, url)) return undefined;
       if (await arenaWeb.route(req, res, url)) return undefined;
@@ -566,6 +569,7 @@ function villeLinks(userId) {
     ville: `ville?${villeToken.query(userId)}`,
     boutique: `boutique?${villeToken.query(userId)}`,
     banque: `banque?${villeToken.query(userId)}`,
+    salle: `salle?${villeToken.query(userId)}`,
     museum: collectionPath(userId),
     kiosk: strip(scratchWeb.buildTicketsUrl(userId)),
     deck: strip(arenaWeb.buildDeckUrl(userId)),
@@ -582,6 +586,7 @@ function configureVille({ client = null, logger = console, hooks = {} } = {}) {
   villeWeb.configure(context);
   boutiqueWeb.configure(context);
   banqueWeb.configure(context);
+  salleWeb.configure(context);
 }
 function strip(u) {
   return u && WEB_PUBLIC_URL && u.startsWith(`${WEB_PUBLIC_URL}/`) ? u.slice(WEB_PUBLIC_URL.length + 1) : u;

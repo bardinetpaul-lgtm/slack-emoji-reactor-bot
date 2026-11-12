@@ -5,7 +5,8 @@
 //  Chaque bâtiment a sa façade vers le sud (+z), vers la caméra.
 //
 //  create(K, L, models) → { list: [{ id, group, anchor, update? }],
-//                           arena: { setLive(bool), update }, trees, benches }
+//                           arena: { setLive(bool), update },
+//                           ventes: { setOpen(n) }, trees, benches }
 // ═══════════════════════════════════════════════════════════
 import * as THREE from 'three';
 
@@ -481,15 +482,16 @@ function shop(K, L, lm, out, models) {
   };
 }
 
-// ── 🔨 Salle des ventes (bientôt) ───────────────────────────
+// ── 🔨 Salle des ventes ─────────────────────────────────────
+//  Devant la façade, un tableau lumineux « N enchères en cours »
+//  (setOpen(n) le redessine ; l'ancienne texture est libérée).
 function auction(K, L, lm, out, models) {
   const b = new K.Builder();
   const brick = K.mat('brick', { color: K.P.brick });
   const brickD = K.mat('brickD', { color: 0x7d3e2a });
   const slate = K.mat('slate', { color: K.P.slate });
   const wood = K.mat('doorWood', { color: 0x5e3b25 });
-  const scaffold = K.mat('scaffold', { color: 0xb8bec6, metalness: 0.4 });
-  const plank = K.mat('plank');
+  const post = K.mat('salePost', { color: 0x4a3524 });
   floor(K, b, 0xc9c0ae);
   const w = 12; const d = 8; const z0 = -1.6; const h = 5.6;
   b.box(brick, w, h, d, 0, FLOOR_Y, z0);
@@ -501,30 +503,38 @@ function auction(K, L, lm, out, models) {
     b.cyl(wood, 1.1, 1.1, 0.25, 10, x, FLOOR_Y + 3.6, z0 + d / 2 + 0.05, { rx: Math.PI / 2, sy: 1 });
   }
   K.windows(b, { x: 0, z: z0, y0: FLOOR_Y + 1.2, w, d, floors: 1, floorH: 3, step: 2.4, size: [1.0, 2.0], faces: 'ew', lit: 0.3, rng: K.rand(51) });
-  // échafaudage sur le côté est
-  for (let k = 0; k < 4; k += 1) for (const dz of [0, 1.4]) b.cyl(scaffold, 0.06, 0.06, 7.5, 4, w / 2 + 0.8 + dz * 0, FLOOR_Y, z0 - d / 2 + 0.6 + k * 2.3 + dz);
-  for (let y = 2; y <= 7; y += 2.5) b.box(plank, 1.6, 0.12, d + 0.5, w / 2 + 1.4, FLOOR_Y + y, z0);
+  // tableau des enchères : deux poteaux et un cadre devant la façade
+  const bz = z0 + d / 2 + 2.4;
+  for (const x of [-2.9, 2.9]) b.box(post, 0.2, 3.3, 0.2, x, FLOOR_Y, bz);
+  b.box(post, 5.9, 1.75, 0.14, 0, FLOOR_Y + 1.45, bz);
   // panneau suspendu en forme de marteau
   b.box(K.mat('gavel', { color: 0x6b4a2b }), 0.14, 0.14, 1.6, -w / 2 - 0.1, FLOOR_Y + 4.2, z0 + d / 2 + 0.8);
   b.cyl(K.mat('gavel'), 0.32, 0.32, 1.0, 8, -w / 2 - 0.1, FLOOR_Y + 3.5, z0 + d / 2 + 1.5, { rz: Math.PI / 2 });
   const group = place(b.build('Salle des ventes'), lm);
   const sign = K.signMesh('SALLE DES VENTES', 7, 0.8, { w: 640, h: 72, bg: '#2b2f36', fg: '#f4ead2', font: '800 48px Georgia, serif', glow: 0.5 });
   sign.position.set(0, FLOOR_Y + 4.55, z0 + d / 2 + 0.06);
-  const soon = K.signMesh('BIENTÔT', 3.6, 0.9, { w: 384, h: 96, bg: '#f4d35e', fg: '#2b2f36', font: '900 66px Inter, Arial, sans-serif', border: '#2b2f36', glow: 0.6 });
-  soon.position.set(0, FLOOR_Y + 1.0, z0 + d / 2 + 2.6);
-  soon.rotation.z = -0.06;
-  const board = new THREE.Mesh(new THREE.BoxGeometry(0.12, 1.2, 0.12), K.mat('post'));
-  board.position.set(0, FLOOR_Y + 0.3, z0 + d / 2 + 2.55);
-  group.add(sign, soon, board);
-  // cônes et barrières de chantier (Kenney)
-  const props = [['roads/construction-cone', -4, 5.6, 0], ['roads/construction-cone', 4.2, 5.4, 0], ['roads/construction-barrier', -2.2, 5.8, Math.PI / 2], ['roads/construction-barrier', 2.2, 5.8, Math.PI / 2]];
-  for (const [key, x, z, ry] of props) {
-    const m = K.modelMesh(models, key, 10);
-    if (!m) continue;
-    m.position.set(x, FLOOR_Y, z); m.rotation.y = ry;
-    group.add(m);
+  // le tableau : même matériau que les enseignes (luit la nuit), texture redessinée à chaque changement
+  const boardOpts = (n) => ({
+    w: 640, h: 180, bg: '#1d2c4c', fg: n > 0 ? '#f4d35e' : '#c9d2de', border: '#f4d35e',
+    font: '800 64px Inter, Arial, sans-serif', sub: 'Clique pour voir les ventes', subFont: '600 30px Inter, Arial, sans-serif',
+  });
+  const board = K.signMesh(L.auctionText(0), 5.6, 1.55, { ...boardOpts(0), glow: 1.2 });
+  board.position.set(0, FLOOR_Y + 2.32, bz + 0.08);
+  group.add(sign, board);
+  let shown = 0;
+  function setOpen(n) {
+    const open = Math.max(0, Math.floor(Number(n) || 0));
+    if (open === shown) return;
+    shown = open;
+    const m = board.material;
+    const old = m.map;
+    const tex = K.textTexture(L.auctionText(open), boardOpts(open));
+    m.map = tex;
+    m.emissiveMap = tex;
+    m.needsUpdate = true;
+    if (old && old !== tex) old.dispose();
   }
-  return { id: 'ventes', group, anchor: new THREE.Vector3(lm.x, 13.5, lm.z - 1) };
+  return { id: 'ventes', group, anchor: new THREE.Vector3(lm.x, 13.5, lm.z - 1), setOpen };
 }
 
 export function create(K, L, models) {
@@ -539,5 +549,5 @@ export function create(K, L, models) {
     shop(K, L, byId.boutique, out, models),
     auction(K, L, byId.ventes, out, models),
   ];
-  return { list, arena: list.find((x) => x.id === 'arene'), trees: out.trees, benches: out.benches };
+  return { list, arena: list.find((x) => x.id === 'arene'), ventes: list.find((x) => x.id === 'ventes'), trees: out.trees, benches: out.benches };
 }

@@ -1274,6 +1274,59 @@ async function runTick(client, logger = console) {
   return evs;
 }
 
+/**
+ * Texte d'un refus de mise aux enchères (celui de la modale Slack, repris par la page web).
+ * res.error : erreur de trades.createAuction, ou 'pause' | 'no_card' | 'bad_code' (res.code) | 'bad_amount'.
+ */
+function auctionErrorText(res, card, userId, now = Date.now()) {
+  switch (res && res.error) {
+    case 'pause': return pauseText(weekend.pauseFor(userId, now));
+    case 'no_card': return 'Choisis une carte.';
+    case 'bad_code': return `Numéro inconnu : ${res.code}.`;
+    case 'floor': return `Prix de départ trop bas : ${trades.floor(card.rarity)} JP$ minimum pour cette carte.`;
+    case 'blocked_seller': return errorFor(res.error, userId, { asBuyer: false, now });
+    default: return ERROR_TEXT[res && res.error] || ERROR_TEXT.closed;
+  }
+}
+
+/**
+ * Texte d'un refus d'enchère (celui de la modale Slack, repris par la page web).
+ * res.error : erreur de trades.bid, ou 'pause' | 'no_amount'.
+ */
+function bidErrorText(res, userId, now = Date.now()) {
+  switch (res && res.error) {
+    case 'pause': return pauseText(weekend.pauseFor(userId, now));
+    case 'no_amount': return 'Indique ton enchère en JP$.';
+    case 'too_low': return `${ERROR_TEXT.too_low} Au moins ${trades.minBid(res.trade)} JP$.`;
+    case 'self': return ERROR_TEXT.self_bid;
+    case 'balance': return `${ERROR_TEXT.balance} (${credits.getBalance(userId)} JP$)`;
+    case 'blocked': { const reason = trades.blockReason(userId, now); return reason ? ERROR_TEXT[reason] : ERROR_TEXT.blocked; }
+    case 'already_best': return ERROR_TEXT.already_best;
+    default: return ERROR_TEXT.ended;
+  }
+}
+
+/** Après une mise aux enchères (Slack ou web) : annonce à chaque inscrit sauf le vendeur, suivi pour le vendeur. */
+async function afterAuctionCreated(client, res) {
+  const { trade, recipients } = res;
+  const seller = trade.seller;
+  console.log(`🔨 <@${seller}> met ${trade.card.code} aux enchères à ${trade.startPrice} JP$ → ${trade.id} (${recipients.length} inscrit(s) prévenus)`);
+  for (const u of [seller, ...recipients]) {
+    const ref = await safeDM(client, u, buildAuctionDM(trade, u));
+    if (ref) trades.setDm(trade.id, u, ref);
+  }
+  await refreshAll(client, [seller]);
+}
+
+/** Après une enchère (Slack ou web) : DM « dépassé », DM d'annonce et Accueils mis à jour. */
+async function afterBid(client, res, userId) {
+  const { trade, outbid } = res;
+  console.log(`🔨 ${trade.id} : <@${userId}> enchérit ${bestOf(trade).jp} JP$${outbid ? ` (dépasse <@${outbid}>)` : ''}`);
+  if (outbid) await safeDM(client, outbid, buildOutbidDM(trade, outbid));
+  await updateAuctionDMs(client, trade);
+  await refreshAll(client, [userId, outbid, trade.seller]);
+}
+
 function registerAuction(app, ctx) {
   // 🏠 Bouton de l'Accueil
   app.action('trade_auction_open', async ({ ack, body, client, logger }) => {
@@ -1288,29 +1341,20 @@ function registerAuction(app, ctx) {
     const values = view.state.values;
     const fail = (field, text) => ack({ response_action: 'errors', errors: { [values[field] ? field : 'card']: text } });
 
-    const pause = weekend.pauseFor(seller, now);
-    if (pause) return fail('card', pauseText(pause));
+    if (weekend.pauseFor(seller, now)) return fail('card', auctionErrorText({ error: 'pause' }, null, seller, now));
     const wanted = readCodes(values.card && values.card.value, seller);
-    if (wanted.bad.length || wanted.cards.length !== 1) return fail('card', wanted.bad.length ? `Numéro inconnu : ${wanted.bad[0]}.` : 'Choisis une carte.');
+    if (wanted.bad.length || wanted.cards.length !== 1) {
+      return fail('card', auctionErrorText(wanted.bad.length ? { error: 'bad_code', code: wanted.bad[0] } : { error: 'no_card' }, null, seller, now));
+    }
     const raw = values.price && values.price.value && values.price.value.value;
     const price = raw == null || String(raw).trim() === '' ? null : Number(raw);
-    if (price != null && !Number.isInteger(price)) return fail('price', ERROR_TEXT.bad_amount);
+    if (price != null && !Number.isInteger(price)) return fail('price', auctionErrorText({ error: 'bad_amount' }, null, seller, now));
 
     const card = wanted.cards[0];
     const res = trades.createAuction({ seller, code: card.code, startPrice: price, now });
-    if (!res.ok) {
-      if (res.error === 'floor') return fail('price', `Prix de départ trop bas : ${trades.floor(card.rarity)} JP$ minimum pour cette carte.`);
-      if (res.error === 'blocked_seller') return fail('card', errorFor(res.error, seller, { asBuyer: false, now }));
-      return fail('card', ERROR_TEXT[res.error] || ERROR_TEXT.closed);
-    }
+    if (!res.ok) return fail(res.error === 'floor' ? 'price' : 'card', auctionErrorText(res, card, seller, now));
     await ack();
-    const { trade, recipients } = res;
-    console.log(`🔨 <@${seller}> met ${trade.card.code} aux enchères à ${trade.startPrice} JP$ → ${trade.id} (${recipients.length} inscrit(s) prévenus)`);
-    for (const u of [seller, ...recipients]) {
-      const ref = await safeDM(client, u, buildAuctionDM(trade, u));
-      if (ref) trades.setDm(trade.id, u, ref);
-    }
-    await refreshAll(client, [seller]);
+    await afterAuctionCreated(client, res);
   });
 
   // 🔨 Bouton Enchérir (DM d'annonce ou DM « dépassé »)
@@ -1326,31 +1370,24 @@ function registerAuction(app, ctx) {
     const tradeId = view.private_metadata;
     const fail = (text) => ack({ response_action: 'errors', errors: { jp: text } });
 
-    const pause = weekend.pauseFor(userId, now);
-    if (pause) return fail(pauseText(pause));
+    if (weekend.pauseFor(userId, now)) return fail(bidErrorText({ error: 'pause' }, userId, now));
     const field = view.state.values.jp && view.state.values.jp.value;
     const raw = field && field.value;
-    if (raw == null || String(raw).trim() === '') return fail('Indique ton enchère en JP$.');
+    if (raw == null || String(raw).trim() === '') return fail(bidErrorText({ error: 'no_amount' }, userId, now));
 
     const res = trades.bid(tradeId, userId, Number(raw), now);
-    if (!res.ok) {
-      switch (res.error) {
-        case 'too_low': return fail(`${ERROR_TEXT.too_low} Au moins ${trades.minBid(res.trade)} JP$.`);
-        case 'self': return fail(ERROR_TEXT.self_bid);
-        case 'balance': return fail(`${ERROR_TEXT.balance} (${credits.getBalance(userId)} JP$)`);
-        case 'blocked': { const reason = trades.blockReason(userId, now); return fail(reason ? ERROR_TEXT[reason] : ERROR_TEXT.blocked); }
-        case 'already_best': return fail(ERROR_TEXT.already_best);
-        default: return fail(ERROR_TEXT.ended);
-      }
-    }
+    if (!res.ok) return fail(bidErrorText(res, userId, now));
     await ack();
-    const { trade, outbid } = res;
-    console.log(`🔨 ${trade.id} : <@${userId}> enchérit ${bestOf(trade).jp} JP$${outbid ? ` (dépasse <@${outbid}>)` : ''}`);
-    if (outbid) await safeDM(client, outbid, buildOutbidDM(trade, outbid));
-    await updateAuctionDMs(client, trade);
-    await refreshAll(client, [userId, outbid, trade.seller]);
+    await afterBid(client, res, userId);
   });
 }
+
+module.exports.auctionErrorText = auctionErrorText;
+module.exports.bidErrorText = bidErrorText;
+module.exports.afterAuctionCreated = afterAuctionCreated;
+module.exports.afterBid = afterBid;
+module.exports.pauseText = pauseText;
+module.exports.errorFor = errorFor;
 
 module.exports.SELLER_DM_BUILDERS = SELLER_DM_BUILDERS;
 module.exports.buildAuctionModal = buildAuctionModal;

@@ -16,6 +16,17 @@
 
 const RELEASES = [
   {
+    version: '4.2.0',
+    date: '2026-11-04',
+    title: 'La Salle des ventes ouvre',
+    changes: [
+      '🔨 La *Salle des ventes* de Jeanpip City est ouverte : clique sur le bâtiment pour voir toutes les enchères en cours, avec la carte, son vendeur, la meilleure offre et le temps qu’il reste.',
+      '💰 Tu peux *enchérir* directement sur la page, et *mettre une de tes cartes en vente*. Les règles ne changent pas : 12 h d’enchère (une fin la nuit est repoussée au lendemain 10 h), un prix de départ au moins égal au prix de rachat de la banque, et tes JP$ te sont rendus tout de suite si quelqu’un enchérit plus haut.',
+      '📜 La page montre aussi les *10 dernières ventes*, avec le prix final : pratique pour savoir ce que vaut une carte.',
+      '🪧 Dans la ville, un panneau sur la Salle des ventes indique combien d’enchères sont en cours.',
+    ],
+  },
+  {
     version: '4.1.0',
     date: '2026-11-04',
     title: 'Échanges, enchères et bruitages',

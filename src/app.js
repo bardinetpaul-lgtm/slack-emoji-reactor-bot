@@ -2461,6 +2461,9 @@ async function announceClosures(client, logger) {
       hooks: {
         onBoosterBought: (userId, result) => onWebBoosterBought(app.client, userId, result, console),
         onResold: (userId, result) => onWebResold(app.client, userId, result, console),
+        // 🔨 v4.2 : enchères de la Salle des ventes (mêmes DM et Accueils que dans Slack)
+        onAuctionCreated: (res) => tradesSlack.afterAuctionCreated(app.client, res),   // Tâche A
+        onBid: (res, userId) => tradesSlack.afterBid(app.client, res, userId),          // Tâche A
       },
     });
   } catch (webError) {
