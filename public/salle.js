@@ -13,7 +13,7 @@
 
   const RARITY = {
     common: 'Commune', rare: 'Rare', epic: 'Épique', legendary: 'Légendaire',
-    rose: 'Octobre Rose', halloween: 'Halloween', extra: 'Hors série',
+    rose: 'Octobre Rose', halloween: 'Halloween', rhum: 'Route du Rhum', extra: 'Hors série',
   };
   const rarityClass = (r) => `r-${RARITY[r] ? r : 'common'}`;
 

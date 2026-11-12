@@ -23,7 +23,7 @@ const countBy = (list, keyOf) => list.reduce((acc, x) => { const k = keyOf(x); a
 
 const LAST_PURCHASES = 20;
 // 🎀🎃 Cartes exclusives (hors série : Octobre Rose, Halloween) sorties d'un booster
-const EXCLUSIVE = new Set(['rose', 'halloween']);
+const EXCLUSIVE = new Set(['rose', 'halloween', 'rhum']);
 const roseCount = (cards) => (cards || []).filter((c) => c && EXCLUSIVE.has(c.rarity)).length;
 
 // 🎁 Boosters

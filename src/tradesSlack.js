@@ -21,10 +21,11 @@ const MAX_OPTIONS = 100;          // limite Slack d'un menu
 const MAX_HOME_LINES = 10;        // échanges en cours affichés dans l'Accueil
 const SECTION_MAX = 2900;         // limite Slack : 3 000 caractères par section
 
-const RARITY_ORDER = ['legendary', 'halloween', 'rose', 'epic', 'rare', 'common', 'extra'];
+const RARITY_ORDER = ['legendary', 'rhum', 'halloween', 'rose', 'epic', 'rare', 'common', 'extra'];
 const RARITY_LABEL = {
   legendary: '🟡 Légendaires',
   halloween: '🎃 Halloween',
+  rhum: '⛵ Route du Rhum',
   rose: '🎀 Octobre Rose',
   epic: '🟣 Épiques',
   rare: '🔵 Rares',

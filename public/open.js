@@ -21,9 +21,9 @@
   const token = new URLSearchParams(location.search).get('t') || '';
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-  const RARITY_RANK = { common: 0, rare: 1, epic: 2, rose: 2, halloween: 2, legendary: 3 };
+  const RARITY_RANK = { common: 0, rare: 1, epic: 2, rose: 2, halloween: 2, rhum: 2, legendary: 3 };
   // Pour choisir l'ambiance du pack : une carte 🎀 / 🎃 passe devant une épique
-  const SHOW_RANK = { common: 0, rare: 1, epic: 2, rose: 2.5, halloween: 2.5, legendary: 3 };
+  const SHOW_RANK = { common: 0, rare: 1, epic: 2, rose: 2.5, halloween: 2.5, rhum: 2.5, legendary: 3 };
   const RARITY = {
     common:    { label: 'Commune',    plural: 'Communes',    emoji: '⚪', color: '#d7dde6' },
     rare:      { label: 'Rare',       plural: 'Rares',       emoji: '🔵', color: '#3d8bff' },
@@ -31,6 +31,7 @@
     legendary: { label: 'Légendaire', plural: 'Légendaires', emoji: '🟡', color: '#ffc83d' },
     rose:      { label: 'Octobre Rose', plural: 'Octobre Rose', emoji: '🎀', color: '#ff5fa2' },
     halloween: { label: 'Halloween',    plural: 'Halloween',    emoji: '🎃', color: '#ff8c2b' },
+    rhum:      { label: 'Route du Rhum', plural: 'Route du Rhum', emoji: '⛵', color: '#19b5c9' },
   };
 
   const $ = (sel) => document.querySelector(sel);
@@ -220,6 +221,14 @@
       ctx.bezierCurveTo(s * 1.1, -s * 0.35, s * 0.5, -s * 1.2, 0, -s * 0.5);
       ctx.bezierCurveTo(-s * 0.5, -s * 1.2, -s * 1.1, -s * 0.35, 0, s * 0.55);
       ctx.fill();
+    } else if (shape === 'sail') {
+      ctx.beginPath();
+      ctx.moveTo(0, -s * 1.5);
+      ctx.lineTo(s * 0.95, s * 0.7);
+      ctx.lineTo(-s * 0.2, s * 0.7);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillRect(-s * 0.9, s * 0.85, s * 1.9, s * 0.3);
     } else if (shape === 'bat') {
       ctx.beginPath();
       ctx.moveTo(0, -s * 0.1);
@@ -429,6 +438,7 @@
   //    Un pack Halloween est sombre du premier au dernier écran.
   const THEMES = {
     halloween:    { cls: 'theme-halloween', rarity: 'halloween', text: 'HALLOWEEN',    rain: { shape: 'bat', up: true }, build: buildHalloween },
+    route_du_rhum: { cls: 'theme-rhum',     rarity: 'rhum',      text: 'ROUTE DU RHUM', rain: { shape: 'sail' }, build: buildRhum },
     octobre_rose: { cls: 'theme-rose',      rarity: 'rose',      text: 'OCTOBRE ROSE', rain: { shape: 'heart', dense: true }, build: buildRose },
   };
 
@@ -470,6 +480,33 @@
     }
   }
 
+  const GULL_SVG = '<svg width="W" height="H" viewBox="0 0 60 26"><g fill="none" stroke="#f4fbff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">'
+    + '<path class="w" d="M4 20 C14 2 26 2 30 14 C34 2 46 2 56 20"/></g></svg>';
+  const BOAT_SVG = '<svg width="W" height="H" viewBox="0 0 80 74">'
+    + '<path d="M40 2 L40 50 L10 50 Z" fill="#fff6e4"/><path d="M44 12 L44 50 L70 50 Z" fill="#ffd9a0"/>'
+    + '<path d="M4 54 H76 L66 68 H16 Z" fill="#d6432b"/><rect x="38" y="0" width="3" height="56" fill="#3b2a1d"/></svg>';
+  const SEA_SVG = '<svg viewBox="0 0 1200 120" preserveAspectRatio="none"><path fill="FILL" d="M0 60 C100 20 200 100 300 60 C400 20 500 100 600 60 C700 20 800 100 900 60 C1000 20 1100 100 1200 60 V120 H0Z"/></svg>';
+
+  function buildRhum(host) {
+    host.appendChild(sceneryNode('sc-sun', '', {}));
+    host.appendChild(sceneryNode('sc-sea far', SEA_SVG.replace('FILL', '#0b6f94'), {}));
+    for (let i = 0; i < 3; i++) {
+      const w = rnd(52, 86);
+      host.appendChild(sceneryNode('sc-boat', BOAT_SVG.replace('W', w.toFixed(0)).replace('H', (w * 0.92).toFixed(0)), {
+        bottom: rnd(16, 28) + '%',
+        animation: `boat-cross ${rnd(26, 42).toFixed(1)}s linear ${(-rnd(0, 40)).toFixed(1)}s infinite`,
+      }));
+    }
+    host.appendChild(sceneryNode('sc-sea near', SEA_SVG.replace('FILL', '#07506f'), {}));
+    for (let i = 0; i < 6; i++) {
+      const w = rnd(34, 64);
+      host.appendChild(sceneryNode('sc-gull', GULL_SVG.replace('W', w.toFixed(0)).replace('H', (w * 0.43).toFixed(0)), {
+        top: rnd(8, 55) + '%',
+        animation: `gull-cross ${rnd(11, 22).toFixed(1)}s linear ${(-rnd(0, 22)).toFixed(1)}s infinite`,
+      }));
+    }
+  }
+
   function buildRose(host) {
     host.appendChild(sceneryNode('sc-wash', '', {}));
     for (let i = 0; i < 18; i++) {
@@ -487,6 +524,7 @@
     const host = $('#scenery');
     document.body.classList.toggle('theme-halloween', !!theme && theme.cls === 'theme-halloween');
     document.body.classList.toggle('theme-rose', !!theme && theme.cls === 'theme-rose');
+    document.body.classList.toggle('theme-rhum', !!theme && theme.cls === 'theme-rhum');
     document.body.classList.toggle('is-themed', !!theme);
     host.innerHTML = '';
     if (theme && !reducedMotion) theme.build(host);
@@ -577,12 +615,12 @@
       text.classList.add('go');
       await sleep(r, 2800);
       fx.stopRain();
-    } else if (best === 'epic' || best === 'rose' || best === 'halloween') {
+    } else if (best === 'epic' || best === 'rose' || best === 'halloween' || best === 'rhum') {
       atmosphere({ dark: true, beams: true });
       sound.synthReveal(best); // l'annonce garde son son ; le mp3 vient à la révélation
       flash(best);
       fx.burst(innerWidth / 2, innerHeight / 2, RARITY[best].color, 90, 11);
-      text.textContent = { rose: 'OCTOBRE ROSE', halloween: 'HALLOWEEN' }[best] || 'ÉPIQUE';
+      text.textContent = { rose: 'OCTOBRE ROSE', halloween: 'HALLOWEEN', rhum: 'ROUTE DU RHUM' }[best] || 'ÉPIQUE';
       void text.offsetWidth;
       text.classList.add('go');
       await sleep(r, 2400);
@@ -678,6 +716,7 @@
       legendary: 'PACK LÉGENDAIRE ! 🏆',
       rose: 'PACK OCTOBRE ROSE ! 🎀',
       halloween: 'PACK HALLOWEEN ! 🎃',
+      rhum: 'PACK ROUTE DU RHUM ! ⛵',
       epic: 'QUEL PACK ! 🔥',
       rare: 'PAS MAL DU TOUT ! 👌',
       common: 'BOOSTER OUVERT ✅',

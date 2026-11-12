@@ -38,6 +38,9 @@ function buildRarityLine(media) {
   if (rarity === 'halloween') {
     return `${info.emoji} *Carte Halloween !* — _exclusive au booster Halloween_`;
   }
+  if (rarity === 'rhum') {
+    return `${info.emoji} *Carte Route du Rhum !* — _exclusive au booster Route du Rhum_`;
+  }
   if (rarity === 'legendary') {
     return `${info.emoji} *🎉 JEANPIP LÉGENDAIRE ! 🎉* — _seulement 0.5% de chance !_`;
   }

@@ -6,6 +6,7 @@
 //             et photos anti-spam ;
 //    • ORn  : 🎀 Octobre Rose ;
 //    • HWn  : 🎃 Halloween.
+//    • RRn  : ⛵ Route du Rhum.
 //
 //  Même ordre et même numérotation que album.buildAlbum :
 //  banque par numéro, puis OR…, HW…, anti-spam.
@@ -18,6 +19,7 @@ const { numberBank, numberFromTitle } = require('./album');
 const { SPAM_CARDS } = require('./spamCards');
 const { ROSE_CARDS } = require('./octobreRose');
 const { HALLOWEEN_CARDS } = require('./halloween');
+const { RHUM_CARDS } = require('./routeDuRhum');
 
 /**
  * Toutes les cartes connues (hors cartes retirées de la banque).
@@ -39,6 +41,7 @@ function listCards() {
   ordered.forEach(({ m, n }) => add(`#${n}`, m, rarityOf(m)));
   ROSE_CARDS.filter((c) => c.url).forEach((c) => add(`OR${c.number}`, c, 'rose'));
   HALLOWEEN_CARDS.filter((c) => c.url).forEach((c) => add(`HW${c.number}`, c, 'halloween'));
+  RHUM_CARDS.filter((c) => c.url).forEach((c) => add(`RR${c.number}`, c, 'rhum'));
   SPAM_CARDS.forEach((c) => add(`#${c.number}`, c, 'extra'));
   return list;
 }
@@ -73,7 +76,7 @@ function listCardsFor(userId) {
     const title = c.title || c.url;
     const code = n && !taken.has(`#${n}`) ? `#${n}` : title;
     taken.add(code.toUpperCase());
-    list.push({ code, url: c.url, title, rarity: (RARITIES[c.rarity] || ['rose', 'halloween', 'extra'].includes(c.rarity)) ? c.rarity : 'common', type: c.type || 'image', retired: true });
+    list.push({ code, url: c.url, title, rarity: (RARITIES[c.rarity] || ['rose', 'halloween', 'rhum', 'extra'].includes(c.rarity)) ? c.rarity : 'common', type: c.type || 'image', retired: true });
   }
   return list;
 }

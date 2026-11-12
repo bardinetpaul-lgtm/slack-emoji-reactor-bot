@@ -58,11 +58,12 @@ const RARITY_MODS = {
   legendary: { mult: 1.20, cost: 0 },   // v3.5 : 1,16 → 1,20
   rose:      { mult: 1.15, cost: 0 },   // 🎀 Octobre Rose (hors série) = puissance d'une épique
   halloween: { mult: 1.15, cost: 0 },   // 🎃 Halloween (hors série) = puissance d'une épique
+  rhum:      { mult: 1.15, cost: 0 },   // ⛵ Route du Rhum (hors série) = puissance d'une épique
 };
 
 // attaquant → archétype qu'il contre
 // ✨ Spécialités tirées automatiquement pour les épiques / légendaires
-const SPECIAL_RARITIES = ['epic', 'legendary', 'rose', 'halloween'];
+const SPECIAL_RARITIES = ['epic', 'legendary', 'rose', 'halloween', 'rhum'];
 const SPECIALTIES_BY_ARCH = {
   tank: ['bouclier', 'invocation'],
   guerrier: ['charge', 'vampire', 'explosion'],

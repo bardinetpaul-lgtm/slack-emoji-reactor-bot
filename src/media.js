@@ -231,6 +231,7 @@ function drawCardOfRarity(rarity) {
 const EXTRA_RARITIES = {
   rose: { emoji: '🎀', label: 'Octobre Rose' },
   halloween: { emoji: '🎃', label: 'Halloween' },
+  rhum: { emoji: '⛵', label: 'Route du Rhum' },
 };
 
 function getRarityInfo(rarity) {
