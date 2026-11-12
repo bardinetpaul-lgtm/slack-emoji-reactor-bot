@@ -17,13 +17,22 @@
 const RELEASES = [
   {
     version: '4.2.0',
-    date: '2026-11-04',
+    date: '2026-11-12',
     title: 'La Salle des ventes ouvre',
     changes: [
       '🔨 La *Salle des ventes* de Jeanpip City est ouverte : clique sur le bâtiment pour voir toutes les enchères en cours, avec la carte, son vendeur, la meilleure offre et le temps qu’il reste.',
       '💰 Tu peux *enchérir* directement sur la page, et *mettre une de tes cartes en vente*. Les règles ne changent pas : 12 h d’enchère (une fin la nuit est repoussée au lendemain 10 h), un prix de départ au moins égal au prix de rachat de la banque, et tes JP$ te sont rendus tout de suite si quelqu’un enchérit plus haut.',
       '📜 La page montre aussi les *10 dernières ventes*, avec le prix final : pratique pour savoir ce que vaut une carte.',
       '🪧 Dans la ville, un panneau sur la Salle des ventes indique combien d’enchères sont en cours.',
+    ],
+  },
+  {
+    version: '4.1.1',
+    date: '2026-11-05',
+    title: 'Échanges : 2 demandes par jour',
+    changes: [
+      '🚦 Pour éviter les avalanches de messages, chaque joueur peut lancer *2 demandes d’échange par jour* : demande à un joueur, demande générale et mise aux enchères comprises. Une demande refusée ou expirée compte quand même.',
+      '✅ Répondre aux demandes, faire une contre-offre et enchérir restent illimités. Le compteur repart à zéro chaque nuit à minuit, et ton Accueil t’indique combien de demandes il te reste.',
     ],
   },
   {

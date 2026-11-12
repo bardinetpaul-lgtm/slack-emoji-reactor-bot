@@ -19,7 +19,9 @@
 
 const villeToken = require('./villeToken');
 const trades = require('./trades');
-const tradesSlack = require('./tradesSlack');
+// Chargé à la demande : tradesSlack lit trades au chargement, et web.js (donc ce module)
+// peut être requis pendant que trades.js se charge encore (dépendance circulaire).
+const tradesSlack = new Proxy({}, { get: (_, key) => require('./tradesSlack')[key] });
 const cardIndex = require('./cardIndex');
 const credits = require('./credits');
 const broadcast = require('./broadcast');

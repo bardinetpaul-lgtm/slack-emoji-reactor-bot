@@ -34,6 +34,7 @@ const RARITY_LABEL = {
 
 /** Erreurs de trades.* → texte pour le joueur (texte brut : sert aussi d'erreur de modale). */
 const ERROR_TEXT = {
+  daily_limit: `Tu as déjà lancé tes ${trades.dailyLimit()} demandes d'échange du jour (demandes et enchères comprises). Reviens demain !`,
   self: 'Tu ne peux pas échanger avec toi-même.',
   blocked_buyer: 'L\'acheteur ne peut pas échanger en ce moment (pas inscrit, en pause, en plein raid ou sous pénalité anti-farm).',
   blocked_seller: 'Ce joueur ne peut pas échanger en ce moment (pas inscrit, en pause, en plein raid ou sous pénalité anti-farm).',
@@ -162,6 +163,8 @@ function buildTradeBlocks(userId, now = Date.now()) {
   const pause = weekend.pauseFor(userId, now);
   if (pause) {
     blocks.push(context(pauseText(pause)));
+  } else if (trades.requestsLeftToday(userId, now) <= 0) {
+    blocks.push(context(`🚦 Tu as lancé tes ${trades.dailyLimit()} demandes d'échange du jour. Tu pourras en relancer demain ; tu peux toujours répondre aux demandes et enchérir.`));
   } else {
     blocks.push({
       type: 'actions',
@@ -172,6 +175,8 @@ function buildTradeBlocks(userId, now = Date.now()) {
         button('🔨 Mettre aux enchères', 'trade_auction_open'),
       ],
     });
+    const left = trades.requestsLeftToday(userId, now);
+    blocks.push(context(`🚦 Encore *${left}* demande${left > 1 ? 's' : ''} possible${left > 1 ? 's' : ''} aujourd'hui (${trades.dailyLimit()} par jour, enchères comprises).`));
   }
   const endOf = (t) => t.expiresAt ?? t.endsAt;   // une enchère n'a que endsAt
   const mine = trades.openTradesOf(userId).sort((a, b) => endOf(a) - endOf(b));

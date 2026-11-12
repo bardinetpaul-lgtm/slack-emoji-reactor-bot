@@ -17,6 +17,7 @@
 //  réelle touchée), horloge simulée.
 //  Usage : npx -y -p node@20 node scripts/test-trades-crash.js
 // ═══════════════════════════════════════════════════════════
+process.env.TRADES_DAILY_LIMIT = '1000';   // v4.1.1 : la limite de 2 demandes/jour a son propre test (test-trades-limit.js)
 const fs = require('fs');
 const os = require('os');
 const path = require('path');

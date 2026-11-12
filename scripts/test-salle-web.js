@@ -42,6 +42,7 @@ const advance = (ms) => { NOW += ms; };
 
 process.env.WEB_PUBLIC_URL = 'http://jeanpip.test';
 process.env.WEB_SECRET = 'test-secret';
+process.env.TRADES_DAILY_LIMIT = '50';   // v4.1.1 : 2 demandes/jour par défaut ; ce test en lance plus (la limite a ses propres tests)
 let PORT = 0;
 
 const origLog = console.log;

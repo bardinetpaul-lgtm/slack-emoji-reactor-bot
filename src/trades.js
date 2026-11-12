@@ -164,6 +164,25 @@ function blockReason(userId, now = Date.now()) {
   return null;
 }
 
+/** v4.1.1 anti-spam : demandes qu'un joueur peut lancer par jour (à une personne, générale, enchère). */
+const DAILY_LIMIT = 2;
+/** Plafond en vigueur (les tests le relèvent via TRADES_DAILY_LIMIT ; la prod reste à 2). */
+const dailyLimit = () => Number(process.env.TRADES_DAILY_LIMIT) || DAILY_LIMIT;
+
+/**
+ * Demandes lancées par ce joueur aujourd'hui (jour de Paris), quelle qu'en soit l'issue :
+ * demandes à une personne et générales (acheteur), mises aux enchères (vendeur).
+ * Les contre-offres et les mises ne comptent pas.
+ */
+function requestsToday(userId, now = Date.now(), data = _load()) {
+  const today = parisDay(now);
+  return Object.values(data.trades).filter((t) => parisDay(t.createdAt) === today
+    && (t.kind === 'auction' ? t.seller === userId : t.buyer === userId)).length;
+}
+
+/** Combien de demandes ce joueur peut encore lancer aujourd'hui (0 au plafond). */
+const requestsLeftToday = (userId, now = Date.now()) => Math.max(0, dailyLimit() - requestsToday(userId, now));
+
 /** Les cartes `urls` (répétitions = plusieurs exemplaires) sont-elles toutes cessibles ? */
 function cardsAvailable(userId, urls, data) {
   const free = cessible(userId, data);
@@ -204,6 +223,7 @@ function createDirect({ buyer, seller, code, jp = 0, cards = [], now = Date.now(
   if (!seller || blockReason(seller, now)) return { ok: false, error: 'blocked_seller' };
 
   const data = _load();
+  if (requestsToday(buyer, now, data) >= dailyLimit()) return { ok: false, error: 'daily_limit' };
   const card = cardIndex.byCode(code, seller);
   if (!card || _cessibleCount(seller, card.url, data) < 1) return { ok: false, error: 'unavailable' };
 
@@ -303,6 +323,10 @@ module.exports = {
   REQUEST_MS,
   AUCTION_MS,
   floor,
+  DAILY_LIMIT,
+  dailyLimit,
+  requestsToday,
+  requestsLeftToday,
   blockReason,
   reservedCounts,
   cessible,
@@ -373,6 +397,7 @@ function createAuction({ seller, code, startPrice, now = Date.now() }) {
   if (weekend.isPausedDay(parisDay(endsAt))) return { ok: false, error: 'ends_in_pause' };
 
   const data = _load();
+  if (requestsToday(seller, now, data) >= dailyLimit()) return { ok: false, error: 'daily_limit' };
   const card = cardIndex.byCode(code, seller);
   if (!card || _cessibleCount(seller, card.url, data) < 1) return { ok: false, error: 'unavailable' };
   const price = startPrice == null ? floor(card.rarity) : Number(startPrice);
@@ -523,6 +548,7 @@ function withoutTrade(data, tradeId) {
 function createGeneral({ buyer, code, jp = 0, cards = [], now = Date.now() }) {
   if (!buyer || blockReason(buyer, now)) return { ok: false, error: 'blocked_buyer' };
   const data = _load();
+  if (requestsToday(buyer, now, data) >= dailyLimit()) return { ok: false, error: 'daily_limit' };
   const card = cardIndex.byCode(code);
   if (!card) return { ok: false, error: 'unavailable' };
 
