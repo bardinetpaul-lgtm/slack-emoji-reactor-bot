@@ -131,8 +131,8 @@ function buildHomeView(userId, ctx) {
   //    reste dans la liste comme un booster normal (ni limite par personne, ni stock partagé).
   const special = boosters.listBoosters(now).find((b) => b.seasonal && !b.dailyStock);
   const specialLine = special ? `
-${special.emoji} *Booster ${special.label}* (${special.price} JP$) : 1 ou 2 cartes exclusives qu'on ne trouve nulle part ailleurs, et 30 % de chances d'une légendaire. *Sans limite par personne*, jusqu'à *${special.season.CLOSE.text}* (fermé samedi et dimanche, comme tout le reste).${special.season.waveOpen(2, now) ? '' : `
-🌑 _${special.season.lockedCount(now)} des ${special.season.cardCount()} cartes Halloween n'arrivent que ${special.season.WAVES[2].label} : impossible de les avoir avant._`}` : '';
+${special.emoji} *Booster ${special.label}* (${special.price} JP$) : 1 ou 2 cartes exclusives qu'on ne trouve nulle part ailleurs, et 30 % de chances d'une légendaire. *Sans limite par personne*, jusqu'à *${special.season.CLOSE.text}* (fermé samedi et dimanche, comme tout le reste).${!special.season.WAVES || special.season.waveOpen(2, now) ? '' : `
+🌑 _${special.season.lockedCount(now)} des ${special.season.cardCount()} cartes ${special.label} n'arrivent que ${special.season.WAVES[2].label} : impossible de les avoir avant._`}` : '';
   blocks.push(section(`🎁 *Boosters* — 8 cartes chacun, plus il est cher, plus les cartes rares sont probables.${specialLine}${seasonal
     ? `
 ${seasonal.emoji} *Booster ${seasonal.label}* : 1 ou 2 cartes exclusives qu'on ne trouve nulle part ailleurs, et 30 % de chances d'une légendaire. Seulement *${seasonal.dailyStock} par jour pour tout le monde*${seasonal.weekdaysOnly ? ', *du lundi au vendredi*' : ''}${seasonal.dailyPerUser ? `, *${seasonal.dailyPerUser} par personne*` : ''} !${seasonalStatus ? `

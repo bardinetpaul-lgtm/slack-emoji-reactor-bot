@@ -25,6 +25,7 @@ const { cardThumbUrl } = require('./cardImages');
 const { SPAM_CARDS } = require('./spamCards');
 const { ROSE_CARDS } = require('./octobreRose');
 const { HALLOWEEN_CARDS } = require('./halloween');
+const { RHUM_CARDS } = require('./routeDuRhum');
 
 const SECTION_ORDER = ['common', 'rare', 'epic', 'legendary'];
 
@@ -110,6 +111,13 @@ function buildAlbum(userId) {
     const card = owned.get(c.url);
     const sticker = card ? ownedSticker(c.number, 'halloween', card, c) : { n: c.number, rarity: 'halloween', owned: false };
     return { ...sticker, code: `HW${c.number}` };
+  }));
+  // ⛵ … les cartes Route du Rhum (une fois leurs liens renseignés)…
+  extra.push(...RHUM_CARDS.filter((c) => c.url && !seen.has(c.url)).map((c) => {
+    seen.add(c.url);
+    const card = owned.get(c.url);
+    const sticker = card ? ownedSticker(c.number, 'rhum', card, c) : { n: c.number, rarity: 'rhum', owned: false };
+    return { ...sticker, code: `RR${c.number}` };
   }));
   // 🚨 … les photos anti-spam (emplacements fixes)…
   extra.push(...SPAM_CARDS.filter((c) => !seen.has(c.url)).map((c) => {

@@ -26,6 +26,8 @@
   --rose: #ff5fa2;
   --rose-deep: #a3134f;
   --halloween: #ff8c2b;
+  --rhum: #19b5c9;
+  --rhum-deep: #064a63;
   --halloween-deep: #7a2d00;
 
   --display: 'Bebas Neue', Impact, 'Arial Narrow', sans-serif;
@@ -278,6 +280,7 @@ button { font: inherit; color: inherit; }
 .r-extra     { --c: var(--extra); --c-deep: var(--extra-deep); }
 .r-rose      { --c: var(--rose); --c-deep: var(--rose-deep); }
 .r-halloween { --c: var(--halloween); --c-deep: var(--halloween-deep); }
+.r-rhum      { --c: var(--rhum); --c-deep: var(--rhum-deep); }
 
 /* ─────────────────────────────────────────────
    📒 Le classeur (cuir cousu + anneaux)
@@ -515,7 +518,7 @@ button { font: inherit; color: inherit; }
   color: rgba(255, 255, 255, 0.85);
 }
 /* Foil holographique : épiques et légendaires */
-.sticker.r-epic .art::after, .sticker.r-legendary .art::after, .sticker.r-rose .art::after, .sticker.r-halloween .art::after {
+.sticker.r-epic .art::after, .sticker.r-legendary .art::after, .sticker.r-rose .art::after, .sticker.r-halloween .art::after, .sticker.r-rhum .art::after {
   content: '';
   position: absolute;
   inset: 0;

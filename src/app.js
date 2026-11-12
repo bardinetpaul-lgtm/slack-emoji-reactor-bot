@@ -26,6 +26,7 @@ const boosterSpam = require('./boosterSpam');
 const boosterBans = require('./boosterBans');
 const octobreRose = require('./octobreRose');
 const halloween = require('./halloween');
+const routeDuRhum = require('./routeDuRhum');
 const weekend = require('./weekend');
 const leave = require('./leave');
 const closure = require('./closure');
@@ -2472,7 +2473,7 @@ async function announceClosures(client, logger) {
 
   // 🎭 Personnages d'Arène : cartes sans look (ou aux règles périmées) faites en fond
   //    (banque + Hors série jouable dans l'Arène depuis la v3.4 : Octobre Rose, anti-spam, cartes retirées)
-  looks.backfill([...getAllMedia(), ...octobreRose.ROSE_CARDS.filter((c) => c.url), ...halloween.HALLOWEEN_CARDS.filter((c) => c.url), ...SPAM_CARDS, ...getRemovedMedia()], { client: app.client, logger: console })
+  looks.backfill([...getAllMedia(), ...octobreRose.ROSE_CARDS.filter((c) => c.url), ...halloween.HALLOWEEN_CARDS.filter((c) => c.url), ...routeDuRhum.RHUM_CARDS.filter((c) => c.url), ...SPAM_CARDS, ...getRemovedMedia()], { client: app.client, logger: console })
     .then((r) => { if (r.done) console.log(`🎭 Personnages d'Arène : ${r.done} créé(s) — ${r.haiku} analysé(s) par Haiku, ${r.pixels} par leurs couleurs`); })
     .catch((error) => console.error('❌ Personnages d\'Arène :', error.message));
 

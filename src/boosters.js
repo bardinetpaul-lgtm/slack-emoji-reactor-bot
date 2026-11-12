@@ -28,6 +28,7 @@ const { readJson, writeJsonAtomic } = require('./storage');
 const { drawCardOfRarity } = require('./media');
 const octobreRose = require('./octobreRose');
 const halloween = require('./halloween');
+const routeDuRhum = require('./routeDuRhum');
 const boosterBans = require('./boosterBans');
 const weekend = require('./weekend');
 
@@ -137,10 +138,35 @@ const BOOSTERS = {
       { halloween: 100 },
     ],
   },
+  // ⛵ Route du Rhum (v4.3) : comme Octobre Rose, du vendredi 13/11 au vendredi
+  //    20/11 (voir src/routeDuRhum.js) : 3 boosters par jour pour tout le monde,
+  //    1 par personne, qui arrivent à une minute aléatoire entre 9h et 10h.
+  //    Mêmes probabilités qu'Halloween. Invisible tant qu'un lien de carte manque.
+  route_du_rhum: {
+    type: 'route_du_rhum',
+    label: 'Route du Rhum',
+    emoji: '⛵',
+    price: 80,
+    dailyStock: 3,
+    dailyPerUser: 1,
+    seasonal: true,
+    season: routeDuRhum,
+    schedule: [
+      { from: '2026-11-13', weekdaysOnly: true },
+    ],
+    slots: [
+      ...commonSlots(3),
+      { rare: 40, common: 30, epic: 30 },
+      { rare: 40, common: 30, epic: 30 },
+      { legendary: 30, rare: 35, epic: 35 },
+      { rhum: 30, rare: 35, epic: 35 },
+      { rhum: 100 },
+    ],
+  },
 };
 
 // Ordre d'affichage des boutons d'achat.
-const BOOSTER_ORDER = ['common', 'rare', 'epic', 'octobre_rose', 'halloween'];
+const BOOSTER_ORDER = ['common', 'rare', 'epic', 'octobre_rose', 'halloween', 'route_du_rhum'];
 
 // ─────────────────────────────────────────────
 // 🎯 Tirage d'une rareté selon une table {rarity: poids%}
@@ -289,6 +315,7 @@ function buttonLabel(booster, now = Date.now()) {
 const SEASONAL_DRAW = {
   rose:      (drawn, exclude) => octobreRose.drawRoseCard(drawn, exclude),
   halloween: (drawn, exclude, now) => halloween.drawHalloweenCard(drawn, exclude, now),
+  rhum:      (drawn, exclude) => routeDuRhum.drawRhumCard(drawn, exclude),
 };
 
 function openBooster(type, now = Date.now()) {

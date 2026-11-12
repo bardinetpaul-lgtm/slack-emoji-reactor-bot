@@ -19,7 +19,7 @@
   const LABELS = {
     reaction: 'Réactions', weekly_gift: 'Cadeaux du vendredi', arena_reward: 'Récompenses arène', arena_streak: 'Séries arène', bug_bounty: 'Bugs signalés', media_author: 'Auteurs de médias',
     admin_gift: 'Dons admin', unknown: '❓ Inconnu', booster: 'Boosters', arena_shop: 'Boutique arène', attack: 'Attaques', raid: 'Raids', resale: '♻️ Revente de doublons', scratch: 'Tickets à gratter', ticket: 'achat', win: 'gains',
-    common: 'Commun', rare: 'Rare', epic: 'Épique', legendary: 'Légendaire', rose: 'Octobre Rose', octobre_rose: '🎀 Octobre Rose', halloween: '🎃 Halloween',
+    common: 'Commun', rare: 'Rare', epic: 'Épique', legendary: 'Légendaire', rose: 'Octobre Rose', octobre_rose: '🎀 Octobre Rose', halloween: '🎃 Halloween', rhum: '⛵ Route du Rhum', route_du_rhum: '⛵ Route du Rhum',
   };
   const label = (key) => String(key).split('/').map((k) => LABELS[k] || k).join(' · ');
   const who = (id) => names[id] || id;

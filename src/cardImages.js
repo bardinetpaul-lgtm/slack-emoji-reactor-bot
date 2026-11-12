@@ -24,6 +24,7 @@ const { getAllMedia, getRemovedMedia } = require('./media');
 const { SPAM_CARDS } = require('./spamCards');
 const { ROSE_CARDS } = require('./octobreRose');
 const { HALLOWEEN_CARDS } = require('./halloween');
+const { RHUM_CARDS } = require('./routeDuRhum');
 const { decode, shrink } = require('./imageResize');
 const { writeFileAtomic } = require('./storage');
 
@@ -48,7 +49,7 @@ function slackFileId(url) {
 }
 
 function findMediaByFileId(fileId) {
-  return [...getAllMedia(), ...getRemovedMedia(), ...SPAM_CARDS, ...ROSE_CARDS.filter((c) => c.url), ...HALLOWEEN_CARDS.filter((c) => c.url)].find((m) => slackFileId(m.url) === fileId) || null;
+  return [...getAllMedia(), ...getRemovedMedia(), ...SPAM_CARDS, ...ROSE_CARDS.filter((c) => c.url), ...HALLOWEEN_CARDS.filter((c) => c.url), ...RHUM_CARDS.filter((c) => c.url)].find((m) => slackFileId(m.url) === fileId) || null;
 }
 
 // ─────────────────────────────────────────────

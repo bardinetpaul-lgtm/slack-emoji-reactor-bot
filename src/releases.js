@@ -18,8 +18,9 @@ const RELEASES = [
   {
     version: '4.3.0',
     date: '2026-11-12',
-    title: 'Les cartes Hors série valent plus cher',
+    title: 'Booster Route du Rhum et Hors série à 30 JP$',
     changes: [
+      '⛵ Nouveau : le *Booster Route du Rhum*, aux couleurs de la course, avec *6 cartes exclusives* à collectionner (rangées dans le Hors série du classeur, jouables dans l’Arène). *80 JP$*, du *vendredi 13 au vendredi 20 novembre*, du lundi au vendredi : *3 boosters par jour pour tout le monde*, *1 par personne*, qui tombent à une minute aléatoire entre 9h et 10h. Un seul clic suffit 😉',
       '♻️ Les cartes du *Hors série* (🎀 Octobre Rose et 🎃 Halloween) se revendent maintenant *30 JP$* l’exemplaire en double, au lieu de 10. Le prix de départ minimum d’un échange ou d’une enchère sur ces cartes monte aussi à 30 JP$.',
     ],
   },
