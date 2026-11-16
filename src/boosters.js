@@ -5,7 +5,7 @@
 //
 //  Règles :
 //    • Un booster = TOUJOURS 8 cartes.
-//    • Les 5 premières cartes sont toujours communes.
+//    • Les 5 premières cartes sont toujours communes (3 pour l'Épique, v4.4).
 //    • Les 3 dernières suivent une distribution PAR SLOT (tables ci-dessous).
 //    • Chaque table de slot totalise exactement 100%.
 //    • Exception : les boosters saisonniers 🎀 Octobre Rose (stock
@@ -45,7 +45,7 @@ function commonSlots(n) {
 
 // ─────────────────────────────────────────────
 // 📦 Catalogue des boosters (data-driven, extensible)
-//    Prix : common 20 · rare 45 · epic 60
+//    Prix : common 20 · rare 45 · epic 70
 //    Chaque `slots` = 8 distributions (une par carte).
 //    Les tables des 3 derniers slots totalisent 100% chacune.
 // ─────────────────────────────────────────────
@@ -79,12 +79,21 @@ const BOOSTERS = {
     type: 'epic',
     label: 'Épique',
     emoji: '🟣',
-    price: 60,
+    price: 70,
+    // 🟣 v4.4 (décision de Paul le 16/11) : 70 JP$ ; rares et épiques calquées
+    //    carte par carte sur les boosters Hors série (Route du Rhum) ; légendaires
+    //    inchangées (2 % · 2 % · 30 %). Là où le Hors série donne sa carte
+    //    exclusive, l'Épique donne une commune.
+    //    Les cartes tirées sont ensuite rangées de la moins rare à la plus rare :
+    //    la meilleure est révélée en dernier (l'ordre ne change pas les chances).
+    revealByRarity: true,
     slots: [
-      ...commonSlots(5),
-      { common: 40, rare: 30, epic: 28, legendary: 2 },
-      { common: 20, rare: 50, epic: 28, legendary: 2 },
-      { rare: 20, epic: 50, legendary: 30 },
+      ...commonSlots(3),
+      { rare: 40, common: 30, epic: 30 },
+      { rare: 40, common: 30, epic: 30 },
+      { rare: 35, epic: 35, legendary: 2, common: 28 },
+      { rare: 35, epic: 35, legendary: 2, common: 28 },
+      { legendary: 30, common: 70 },
     ],
   },
   // 🎀 Octobre Rose : du 1er au 31 octobre, 2 boosters par jour pour TOUT
@@ -325,7 +334,7 @@ function openBooster(type, now = Date.now()) {
   const drawnByRarity = {};      // rareté → Map(url → nb de sorties), calculée au 1er besoin
   const inThisBooster = new Set();
 
-  return booster.slots.map((distribution) => {
+  const cards = booster.slots.map((distribution) => {
     const rarity = rollRarity(distribution);
     const draw = SEASONAL_DRAW[rarity];
     if (!draw) return drawCardOfRarity(rarity);
@@ -337,7 +346,15 @@ function openBooster(type, now = Date.now()) {
     inThisBooster.add(card.url);
     return card;
   });
+
+  // 🟣 v4.4 : la plus rare en dernier (tri stable : à rareté égale, ordre de tirage)
+  if (booster.revealByRarity) {
+    cards.sort((a, b) => (REVEAL_RANK[a.rarity] ?? 4) - (REVEAL_RANK[b.rarity] ?? 4));
+  }
+  return cards;
 }
+
+const REVEAL_RANK = { common: 0, rare: 1, epic: 2, legendary: 3 };
 
 /** Combien de fois chaque carte de cette rareté hors série est déjà sortie d'un booster. */
 function countDrawn(rarity) {

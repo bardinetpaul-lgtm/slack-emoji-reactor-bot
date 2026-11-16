@@ -24,6 +24,7 @@ const RELEASES = [
       '🚧 Les travaux prennent du temps : 3 heures pour la Maison fleurie, puis 1 jour, 3 jours et *5 jours* pour le Château. Pendant le chantier, une grue s’active devant chez toi 🏗️',
       '🏆 La Mairie affiche maintenant *les plus belles maisons de la ville* (le premier arrivé au plus haut niveau passe devant), et toute la ville est prévenue quand une maison monte de niveau.',
       '🌾 Nouveau : la *ferme à Jeanpips*. Achète un Potager (220 JP$) : il fait pousser *3 JP$ toutes les 4 heures* dans un silo de 6 JP$. Viens *récolter* avant qu’il soit plein ! Agrandis-le en Serre (450 JP$, deux fois plus de JP$, avec sa serre tunnel) puis en Ferme (900 JP$, trois fois plus, avec son silo). Ta ferme ne pousse et ne se récolte que *les jours ouvrés* : pas le week-end, pas pendant une fermeture, pas pendant tes congés.',
+      '🟣 Le *Booster Épique* passe à *70 JP$* et devient plus riche : *autant de rares et d’épiques que dans un booster Hors série* (en moyenne 1,5 rare et 1,3 épique au lieu de 1 et 1), seulement 3 communes garanties au lieu de 5. Les chances de légendaire ne bougent pas : *une chance sur trois* par booster.',
     ],
   },
   {
