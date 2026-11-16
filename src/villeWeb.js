@@ -7,6 +7,12 @@
 //    GET /api/ville/stream?t=         → flux SSE : jp, arena, house, auctions, ping
 //    GET /api/ville/card/<userId>?t=  → carte de visite d'un joueur
 //    GET /api/ville/avatar/<userId>?t=→ photo Slack (proxy, 1 h en mémoire)
+//    POST /api/ville/maison/house?t= { to }  → agrandir sa maison (v4.4)
+//    POST /api/ville/maison/farm?t=  { to }  → acheter / agrandir sa ferme (v4.4)
+//    POST /api/ville/maison/collect?t=       → récolter le silo de la ferme (v4.4)
+//
+//  v4.4 : chaque maison a un niveau et une ferme (src/maison.js), vus par
+//  tous ; un changement part aussitôt en 'house' { action:'update' }.
 //
 //  Jeton : src/villeToken.js (« ville|<userId> »). Sans jeton valide → 403.
 //  Maisons = inscrits à la liste de diffusion (src/broadcast.js) ; leur
@@ -45,12 +51,14 @@ const arenaStore = require('./game/arenaStore');
 const tvFeed = require('./game/tvFeed');
 const dailyStreak = require('./game/dailyStreak');
 const trades = require('./trades');
+const maison = require('./maison');
 
 const PING_MS = 15 * 1000;
 const ARENA_CHECK_MS = 2 * 1000;
 const HOUSES_CHECK_MS = 30 * 1000;
 const AUCTIONS_CHECK_MS = 10 * 1000;
 const RANKING_SIZE = 10;
+const CONTEST_SIZE = 5;      // 🏆 plus belles maisons affichées à la Mairie (v4.4)
 const MAX_CLIENTS = 300;
 const MAX_STREAMS_PER_USER = 3;
 const BLOCKED_MAX_MS = 30 * 1000;
@@ -124,7 +132,15 @@ function openAuctions(now = Date.now()) {
 
 async function housesFor(query) {
   const list = villePlots.list(broadcast.getSubscribers());
-  return Promise.all(list.map(async ({ userId, plot }) => ({ ...(await person(userId, query)), plot })));
+  const looks = maison.publicMap(list.map((h) => h.userId));
+  return Promise.all(list.map(async ({ userId, plot }) => ({ ...(await person(userId, query)), plot, ...looks.get(userId) })));
+}
+
+/** Maisons actuelles : Map userId → { plot, level, farm }. */
+function houseMap() {
+  const list = villePlots.list(broadcast.getSubscribers());
+  const looks = maison.publicMap(list.map((h) => h.userId));
+  return new Map(list.map((h) => [h.userId, { plot: h.plot, ...looks.get(h.userId) }]));
 }
 
 // ─────────────────────────────────────────────
@@ -135,11 +151,14 @@ async function state(userId, query, now = Date.now()) {
   const pause = weekend.pauseFor(userId, now);
   const links = ctx.buildUrls(userId);
   const rel = releases.current();
-  const [me, houses, ranking] = await Promise.all([
+  const [me, houses, ranking, contest] = await Promise.all([
     person(userId, query),
     housesFor(query),
     Promise.all(arenaStore.ranking({ limit: RANKING_SIZE }).top.map(async (r) => ({
       ...(await person(r.userId, query)), rank: r.rank, wins: r.wins, losses: r.losses,
+    }))),
+    Promise.all(maison.contest(broadcast.getSubscribers(), now).slice(0, CONTEST_SIZE).map(async (c) => ({
+      ...(await person(c.userId, query)), rank: c.rank, level: c.level, levelName: c.name,
     }))),
   ]);
   return {
@@ -154,6 +173,7 @@ async function state(userId, query, now = Date.now()) {
     mairie: {
       release: { version: rel.version, title: rel.title, date: rel.date, changes: (rel.changes || []).map(plain) },
       ranking,
+      contest,
     },
   };
 }
@@ -173,7 +193,17 @@ async function card(viewerId, userId, query, now = Date.now()) {
     legendaries: cards.filter((c) => c.rarity === 'legendary').length,
     streak: dailyStreak.preview(arenaStore.getStreak(userId), now).step || 0,
   };
-  if (viewerId === userId) out.balance = credits.getBalance(userId);
+  const look = maison.publicOf(userId);
+  out.maison = {
+    level: look.level, levelName: maison.HOUSE_LEVELS[look.level].name,
+    farm: look.farm, farmName: look.farm ? maison.FARM_LEVELS[look.farm].name : null,
+    works: maison.worksOf(userId, now), // chantiers en cours : visibles par tous
+    rank: (maison.contest(broadcast.getSubscribers(), now).find((c) => c.userId === userId) || {}).rank || null,
+  };
+  if (viewerId === userId) {
+    out.balance = credits.getBalance(userId);
+    if (broadcast.isSubscribed(userId)) out.owner = maison.ownerView(userId, now);
+  }
   return out;
 }
 
@@ -277,7 +307,7 @@ async function getAvatar(userId, now = Date.now()) {
 const clients = new Set();   // { res, userId, query }
 let loop = null;             // { arenaTimer, housesTimer, auctionsTimer, pingTimer }
 let lastArena = null;        // clé « live|tvUrl » du dernier envoi
-let lastHouses = null;       // Map userId → plot
+let lastHouses = null;       // Map userId → { plot, level, farm }
 let lastAuctions = null;     // dernier nombre d'enchères en cours envoyé
 
 /**
@@ -359,20 +389,21 @@ function checkAuctions() {
 
 async function checkHouses() {
   try {
-    const now = new Map(villePlots.list(broadcast.getSubscribers()).map((h) => [h.userId, h.plot]));
+    const now = houseMap();
     const before = lastHouses;
     lastHouses = now;
     if (!before) return;
     const added = [...now.keys()].filter((u) => !before.has(u));
     const removed = [...before.keys()].filter((u) => !now.has(u));
-    for (const userId of removed) {
+    const changed = [...now.keys()].filter((u) => before.has(u)
+      && ['level', 'farm', 'building'].some((k) => before.get(u)[k] !== now.get(u)[k]));
+    const send = async (action, userId, h) => {
       const p = await profileOf(userId);
-      sendAll('house', (c) => ({ action: 'remove', house: { userId, name: p.name, avatar: p.hasAvatar ? avatarPath(userId, c.query) : null, plot: before.get(userId) } }));
-    }
-    for (const userId of added) {
-      const p = await profileOf(userId);
-      sendAll('house', (c) => ({ action: 'add', house: { userId, name: p.name, avatar: p.hasAvatar ? avatarPath(userId, c.query) : null, plot: now.get(userId) } }));
-    }
+      sendAll('house', (c) => ({ action, house: { userId, name: p.name, avatar: p.hasAvatar ? avatarPath(userId, c.query) : null, ...h } }));
+    };
+    for (const userId of removed) await send('remove', userId, before.get(userId));
+    for (const userId of added) await send('add', userId, now.get(userId));
+    for (const userId of changed) await send('update', userId, now.get(userId));
   } catch (e) {
     ctx.logger.error('[ville] maisons :', e.message);
   }
@@ -382,7 +413,7 @@ function startLoop() {
   if (loop) return;
   lastArena = null;
   lastAuctions = null;
-  lastHouses = new Map(villePlots.list(broadcast.getSubscribers()).map((h) => [h.userId, h.plot]));
+  lastHouses = houseMap();
   bus.on('jp', jpListener);
   loop = {
     arenaTimer: setInterval(checkArena, ARENA_CHECK_MS),
@@ -451,12 +482,59 @@ function handleStream(req, res, userId, query) {
 }
 
 // ─────────────────────────────────────────────
+// 🏡 Maison et ferme (v4.4) : POST seulement
+// ─────────────────────────────────────────────
+
+const MAISON_TEXT = {
+  pause: "⏸️ Le jeu est en pause : les travaux attendront la reprise. Aucun JP$ n'a été débité.",
+  max: "🏆 C'est déjà le niveau maximum !",
+  stale: "🔄 Ta maison a déjà changé (double clic ?). La fenêtre est à jour, aucun JP$ de plus n'a été débité.",
+  insufficient: "💸 Pas assez de JP$ pour ces travaux. Aucun JP$ n'a été débité.",
+  busy: "🚧 Un chantier est déjà en cours : attends qu'il soit fini. Aucun JP$ n'a été débité.",
+  building: '🚧 Ta ferme est encore en chantier : rien à récolter pour l\'instant.',
+  no_house: '🏠 Il faut être inscrit à Jeanpip pour avoir une maison en ville.',
+  no_farm: "🌾 Tu n'as pas encore de ferme.",
+  empty: "🌱 Rien à récolter pour l'instant : il faut au moins 1 JP$ dans le silo.",
+  error: "😕 Les travaux n'ont pas pu se faire. Aucun JP$ n'a été débité, réessaie dans un instant.",
+};
+
+async function handleMaison(req, res, url) {
+  if (req.method !== 'POST') { ctx.send(res, 405, 'Method not allowed', { Allow: 'POST' }); return; }
+  const userId = villeToken.read(url.searchParams.get('t'));
+  if (!userId) { ctx.sendJson(res, 403, { ok: false, reason: 'invalid' }); return; }
+  const action = url.pathname.slice('/api/ville/maison/'.length);
+  if (!['house', 'farm', 'collect'].includes(action)) { ctx.sendJson(res, 404, { ok: false, reason: 'not_found' }); return; }
+  const body = await ctx.readJson(req);
+  let r;
+  if (!broadcast.isSubscribed(userId)) r = { ok: false, reason: 'no_house' };
+  else if (action === 'house') r = maison.upgradeHouse(userId, Number(body.to));
+  else if (action === 'farm') r = maison.upgradeFarm(userId, Number(body.to));
+  else r = maison.collect(userId);
+
+  if (!r.ok && r.reason === 'pause' && action === 'collect') {
+    r.text = "⏸️ Pas de récolte pendant la pause (week-end, fermeture ou congés) : rien ne pousse et ton silo t'attend à la reprise.";
+  }
+  if (r.ok) {
+    ctx.logger.info(action === 'collect'
+      ? `🌾 Ville : <@${userId}> récolte ${r.amount} JP$ de sa ferme`
+      : `🏡 Ville : <@${userId}> passe sa ${action === 'house' ? 'maison' : 'ferme'} au niveau ${r.level} (${r.price} JP$)`);
+    if (action !== 'collect' && loop) checkHouses(); // tout le monde voit les travaux tout de suite
+  }
+  ctx.sendJson(res, 200, {
+    ...r,
+    text: r.ok ? null : r.text || MAISON_TEXT[r.reason] || MAISON_TEXT.error,
+    owner: broadcast.isSubscribed(userId) ? maison.ownerView(userId) : null,
+  });
+}
+
+// ─────────────────────────────────────────────
 // 🚦 Routage : true si la requête était pour la ville
 // ─────────────────────────────────────────────
 
 async function route(req, res, url) {
   const { pathname } = url;
   if (pathname !== '/ville' && pathname !== '/api/ville' && !pathname.startsWith('/api/ville/')) return false;
+  if (pathname.startsWith('/api/ville/maison/')) { await handleMaison(req, res, url); return true; }
   if (req.method !== 'GET') { ctx.send(res, 405, 'Method not allowed', { Allow: 'GET' }); return true; }
   if (pathname === '/ville') { ctx.servePage(res, 'ville', VILLE_ASSETS); return true; }
 

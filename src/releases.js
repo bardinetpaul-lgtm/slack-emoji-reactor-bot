@@ -16,6 +16,17 @@
 
 const RELEASES = [
   {
+    version: '4.4.0',
+    date: '2026-11-16',
+    title: 'La plus belle maison de Jeanpip City, et ta ferme à JP$',
+    changes: [
+      '🏡 Nouveau dans Jeanpip City : clique sur *ta maison* pour lancer des *travaux*, et *tout le monde voit ta maison changer* en direct. 🌷 Maison fleurie (150 JP$) : clôture blanche, jardinières de fleurs, boîte aux lettres. 🏡 Grande maison (400 JP$) : plus grande, arche fleurie, lanternes la nuit, cheminée qui fume. ⭐ Villa (900 JP$) : toit de tuiles neuf, grille en fer forgé, façade illuminée, drapeau doré. 🏰 *Château Jeanpip* (2 000 JP$) : ta maison devient un château façon Chambord, avec ses tours à toits d’ardoise, sa lanterne centrale, son tapis rouge, la statue de Jeanpip en or et une étoile dorée qui tourne au-dessus.',
+      '🚧 Les travaux prennent du temps : 3 heures pour la Maison fleurie, puis 1 jour, 3 jours et *5 jours* pour le Château. Pendant le chantier, une grue s’active devant chez toi 🏗️',
+      '🏆 La Mairie affiche maintenant *les plus belles maisons de la ville* (le premier arrivé au plus haut niveau passe devant), et toute la ville est prévenue quand une maison monte de niveau.',
+      '🌾 Nouveau : la *ferme à Jeanpips*. Achète un Potager (220 JP$) : il fait pousser *3 JP$ toutes les 4 heures* dans un silo de 6 JP$. Viens *récolter* avant qu’il soit plein ! Agrandis-le en Serre (450 JP$, deux fois plus de JP$, avec sa serre tunnel) puis en Ferme (900 JP$, trois fois plus, avec son silo). Ta ferme ne pousse et ne se récolte que *les jours ouvrés* : pas le week-end, pas pendant une fermeture, pas pendant tes congés.',
+    ],
+  },
+  {
     version: '4.3.0',
     date: '2026-11-12',
     title: 'Booster Route du Rhum et Hors série à 30 JP$',

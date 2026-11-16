@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<!--
+  🏡 Vitrine des maisons (v4.4) — outil d'aperçu, PAS livré aux joueurs.
+  Servie par scripts/preview-ville.js sur /vitrine : les 5 niveaux de maison
+  côte à côte (rangée du fond), puis les 3 niveaux de ferme et un chantier.
+  Mêmes modules que la vraie ville (ville-scene/kit.js, houses.js).
+  Glisser pour tourner, molette pour zoomer ; bouton Jour / Nuit.
+  ?focus=N cadre un seul modèle (0 = Maison … 4 = Château, 5-7 = fermes, 8 = chantier) ; ?night=1 de nuit.
+-->
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Vitrine des maisons</title>
+  <script type="importmap">
+    { "imports": { "three": "./vendor/three/three.module.js", "three/addons/": "./vendor/three/addons/" } }
+  </script>
+  <style>
+    html, body { margin: 0; height: 100%; overflow: hidden; background: #cfe4f5; font-family: Inter, Arial, sans-serif; }
+    #labels { position: absolute; inset: 0; pointer-events: none; }
+    .tag { position: absolute; transform: translate(-50%, 0); background: #fff; color: #1d2c4c; font-weight: 800; font-size: 13px;
+      padding: 4px 9px; border-radius: 10px; box-shadow: 0 2px 6px rgba(0,0,0,.2); white-space: nowrap; }
+    .tag small { display: block; font-weight: 600; color: #5b6475; font-size: 11px; }
+    button { position: absolute; top: 12px; right: 12px; padding: 8px 14px; border: 0; border-radius: 12px; font-weight: 800; background: #1d2c4c; color: #fff; cursor: pointer; }
+    h1 { position: absolute; top: 4px; left: 14px; margin: 0; font-size: 18px; color: #1d2c4c; }
+  </style>
+</head>
+<body>
+  <h1>🏡 Vitrine des maisons de Jeanpip City</h1>
+  <button id="night" type="button">🌙 Nuit</button>
+  <div id="labels"></div>
+  <script src="ville-logic.js"></script>
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import * as K from './ville-scene/kit.js';
+    import * as Houses from './ville-scene/houses.js';
+
+    const V = window.VilleLogic;
+    const SHOW = [
+      { level: 1, name: '🏠 Maison', sub: 'départ, gratuit' },
+      { level: 2, name: '🌷 Maison fleurie', sub: '150 JP$ · 3 h' },
+      { level: 3, name: '🏡 Grande maison', sub: '400 JP$ · 1 jour' },
+      { level: 4, name: '⭐ Villa', sub: '900 JP$ · 3 jours' },
+      { level: 5, name: '🏰 Château Jeanpip', sub: '2 000 JP$ · 5 jours' },
+      { level: 1, farm: 1, name: '🌱 Potager', sub: 'ferme niveau 1' },
+      { level: 1, farm: 2, name: '🪴 Serre', sub: 'ferme niveau 2' },
+      { level: 1, farm: 3, name: '🌾 Ferme', sub: 'ferme niveau 3' },
+      { level: 2, building: true, name: '🚧 Chantier en cours', sub: 'visible par tous' },
+    ];
+    // Parcelles de vitrine : 5 maisons devant, 4 derrière (toutes face à la caméra)
+    const L = {
+      ...V,
+      plotPosition(n) {
+        const back = n >= 5;
+        const x = back ? (n - 6.5) * 11 : (n - 2) * 11;
+        const z = back ? -20 : 0;
+        return { n, ring: 1, x, z, rot: 0, front: { x, z: z + 4.8 } };
+      },
+    };
+    const houses = SHOW.map((s, i) => ({ userId: `VITRINE${i}`, name: s.name, avatar: null, plot: i, level: s.level, farm: s.farm || 0, building: Boolean(s.building) }));
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    document.body.appendChild(renderer.domElement);
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0xcfe4f5);
+    const camera = new THREE.PerspectiveCamera(38, innerWidth / innerHeight, 0.5, 500);
+    camera.position.set(0, 19, 54);
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.target.set(0, 2, -8);
+    controls.update();
+    const hemi = new THREE.HemisphereLight(0xcfe6ff, 0x6d7a5a, 0.9);
+    const sun = new THREE.DirectionalLight(0xffffff, 2.4);
+    sun.position.set(30, 50, 40);
+    sun.castShadow = true;
+    sun.shadow.mapSize.set(2048, 2048);
+    Object.assign(sun.shadow.camera, { left: -45, right: 45, top: 45, bottom: -45, near: 5, far: 200 });
+    scene.add(hemi, sun);
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(200, 120), new THREE.MeshStandardMaterial({ color: 0x8fc46a }));
+    ground.rotation.x = -Math.PI / 2;
+    ground.position.set(0, 0.2, -10);
+    ground.receiveShadow = true;
+    scene.add(ground);
+
+    const models = await K.loadModels('assets/ville', {
+      suburban: ['building-type-a', 'building-type-b', 'building-type-c', 'building-type-d', 'building-type-f', 'building-type-h', 'building-type-j', 'building-type-l', 'building-type-o', 'building-type-t', 'building-type-u'],
+    }, { lit: ['suburban'] });
+    const set = Houses.create(K, L, models, houses, {});
+    scene.add(set.group);
+    K.applyNight(0);
+
+    // ?focus=N : cadre le modèle N de près (de 0 à 8), ?night=1 : de nuit
+    const params = new URLSearchParams(location.search);
+    const focus = params.has('focus') ? set.all()[Number(params.get('focus'))] || null : null;
+    if (focus) {
+      const h = Math.max(4, focus.top);
+      controls.target.set(focus.x, h * 0.45, focus.z + 1);
+      camera.position.set(focus.x + 5, h * 0.9 + 4, focus.z + 15 + h);
+      controls.update();
+    }
+    const tags = set.all().map((inf, i) => {
+      const el = document.createElement('div');
+      el.className = 'tag';
+      el.innerHTML = `${SHOW[i].name}<small>${SHOW[i].sub}</small>`;
+      document.getElementById('labels').appendChild(el);
+      return { el, i, pos: new THREE.Vector3(inf.x, 0.3, inf.front.z + 0.8) };
+    });
+
+    let night = false;
+    document.getElementById('night').addEventListener('click', (e) => {
+      night = !night;
+      e.target.textContent = night ? '☀️ Jour' : '🌙 Nuit';
+      K.applyNight(night ? 1 : 0);
+      hemi.intensity = night ? 0.25 : 0.9;
+      sun.intensity = night ? 0.15 : 2.4;
+      scene.background.setHex(night ? 0x0f1830 : 0xcfe4f5);
+    });
+    addEventListener('resize', () => {
+      camera.aspect = innerWidth / innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(innerWidth, innerHeight);
+    });
+    const clock = new THREE.Clock();
+    const v = new THREE.Vector3();
+    renderer.setAnimationLoop(() => {
+      set.update(clock.getElapsedTime());
+      controls.update();
+      renderer.render(scene, camera);
+      for (const t of tags) {
+        v.copy(t.pos).project(camera);
+        t.el.style.left = `${(v.x * 0.5 + 0.5) * innerWidth}px`;
+        t.el.style.top = `${(-v.y * 0.5 + 0.5) * innerHeight}px`;
+        t.el.hidden = v.z > 1 || (focus && t.i !== Number(params.get('focus')));
+      }
+    });
+    if (params.get('night') === '1') document.getElementById('night').click();
+    window.__vitrineReady = true;
+  </script>
+</body>
+</html>

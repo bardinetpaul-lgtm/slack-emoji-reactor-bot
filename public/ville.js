@@ -109,6 +109,12 @@ function mairiePanel() {
       ${r.title ? `<p><b>${esc(r.title)}</b>${date ? ` <span class="muted">(${esc(date)})</span>` : ''}</p>` : ''}
       <ul>${(r.changes || []).map((c) => `<li>${esc(c)}</li>`).join('')}</ul>
     </section>
+    <h3>👑 Les plus belles maisons</h3>
+    ${(m.contest || []).length ? `<ol class="rank">${m.contest.map((p) => `
+      <li class="${p.userId === meId ? 'me' : ''}"><span class="pos">${p.rank <= 3 ? ['🥇', '🥈', '🥉'][p.rank - 1] : esc(p.rank)}</span>
+        ${avatarHtml(p)} <span>${esc(p.name)}</span>
+        <span class="rec">${HOUSE_ICONS[p.level] || ''} ${esc(p.levelName)}</span></li>`).join('')}</ol>`
+    : '<p class="muted">Personne n’a encore fait de travaux : la plus belle maison de la ville est à prendre !</p>'}
     <h3>🏆 Classement de l’Arène</h3>
     ${ranking.length ? `<ol class="rank">${ranking.map((p) => `
       <li class="${p.userId === meId ? 'me' : ''}"><span class="pos">${p.rank <= 3 ? ['🥇', '🥈', '🥉'][p.rank - 1] : esc(p.rank)}</span>
@@ -135,11 +141,87 @@ async function cardPanel(userId) {
         <div class="stat"><b>${fmt(c.legendaries)}</b><span>Légendaires</span></div>
         ${c.balance != null ? `<div class="stat gold" style="grid-column:1/-1"><b>${fmt(c.balance)} JP$</b><span>Ton solde (toi seul le vois)</span></div>` : ''}
       </div>
+      ${maisonHtml(c)}
       ${mine && state.links.museum ? `<div class="actions"><a class="btn" href="#" data-go="${esc(state.links.museum)}">🏛️ Ouvrir mon classeur</a></div>` : ''}`;
     $('panel-body').querySelectorAll('[data-go]').forEach((el) => el.addEventListener('click', (e) => { e.preventDefault(); go(el.getAttribute('data-go')); }));
+    bindMaison(userId);
   } catch {
     $('panel-body').innerHTML = '<p>La carte de visite ne répond pas. Réessaie dans un instant.</p>';
   }
+}
+
+// ── 🏡 Maison et ferme (v4.4) ───────────────────────────────
+const HOUSE_NAMES = [null, 'Maison', 'Maison fleurie', 'Grande maison', 'Villa', 'Château Jeanpip'];
+const HOUSE_ICONS = [null, '🏠', '🌷', '🏡', '⭐', '🏰'];
+function durationText(hours) {
+  const h = Number(hours) || 0;
+  if (!h) return 'immédiats';
+  return h < 24 ? `${h} h` : `${Math.round(h / 24)} jour${h >= 48 ? 's' : ''}`;
+}
+/** « fini vers 15h30 » / « fini jeudi vers 9h » (heure de Paris). */
+function untilText(endsAt) {
+  const d = new Date(Number(endsAt));
+  const opts = { timeZone: 'Europe/Paris' };
+  const hm = d.toLocaleTimeString('fr-FR', { ...opts, hour: '2-digit', minute: '2-digit' }).replace(':', 'h');
+  const sameDay = d.toLocaleDateString('fr-FR', opts) === new Date(nowServer()).toLocaleDateString('fr-FR', opts);
+  return sameDay ? `fini vers ${hm}` : `fini ${d.toLocaleDateString('fr-FR', { ...opts, weekday: 'long', day: 'numeric', month: 'long' })} vers ${hm}`;
+}
+function maisonHtml(c) {
+  const m = c.maison;
+  if (!m) return '';
+  const w = m.works || {};
+  const site = [w.house, w.farm].filter(Boolean).map((x) => `<p class="maison-site">🚧 Chantier : <b>${esc(x.name)}</b>, ${esc(untilText(x.endsAt))}</p>`).join('');
+  const rank = m.rank ? `<p class="maison-rank">🏆 ${m.rank === 1 ? '<b>La plus belle maison de Jeanpip City !</b>' : `<b>${esc(m.rank)}<sup>e</sup></b> plus belle maison de Jeanpip City`}</p>` : '';
+  const look = `<p class="maison-look">${HOUSE_ICONS[m.level] || '🏠'} <b>${esc(m.levelName)}</b> (niveau ${esc(m.level)} sur 5)${m.farm ? ` · 🌾 <b>${esc(m.farmName)}</b>` : ''}</p>${rank}${site}`;
+  const o = c.owner;
+  if (!o) return look;
+  const h = o.house; const f = o.farm;
+  const houseBtn = h.works
+    ? '<span class="muted">🚧 Chantier en cours : un seul à la fois pour la maison.</span>'
+    : h.next
+      ? `<button type="button" class="btn" data-maison="house" data-to="${esc(h.next.level)}">🔨 ${esc(h.next.name)} · ${fmt(h.next.price)} JP$</button><small class="muted">${esc(h.next.desc)} Travaux : ${esc(durationText(h.next.hours))}.</small>`
+      : '<span class="muted">🏆 Ta maison est au niveau maximum.</span>';
+  const farmLine = f.level
+    ? `<p>🌾 Silo : <b>${fmt(f.ready)} / ${fmt(f.silo)} JP$</b> · pousse ${fmt(f.perHour)} JP$ par heure${f.full ? ' · <b>plein, récolte-le !</b>' : ''}${f.paused ? ' · en pause' : ''}</p>
+       <button type="button" class="btn gold" data-maison="collect"${f.ready < 1 ? ' disabled' : ''}>🧺 Récolter ${fmt(f.ready)} JP$</button>`
+    : f.works ? '' : '<p class="muted">Une ferme fait pousser des JP$ toute la journée (sauf pendant la pause du jeu). Viens récolter son silo avant qu’il soit plein.</p>';
+  const farmBtn = f.next
+    ? `<button type="button" class="btn" data-maison="farm" data-to="${esc(f.next.level)}">${f.level ? '🔨' : '🌱'} ${esc(f.next.name)} · ${fmt(f.next.price)} JP$</button><small class="muted">${fmt(f.next.perHour)} JP$/h, silo de ${fmt(f.next.silo)} JP$. Travaux : ${esc(durationText(f.next.hours))}.</small>`
+    : '';
+  return `${look}
+    <section class="maison">
+      <h3>🔨 Travaux</h3>
+      <div class="maison-row">${houseBtn}</div>
+      <h3>🌾 Ma ferme${f.level ? ` · ${esc(f.name)}` : ''}</h3>
+      ${farmLine}
+      ${farmBtn ? `<div class="maison-row">${farmBtn}</div>` : ''}
+      <p class="maison-msg" id="maison-msg" role="status"></p>
+    </section>`;
+}
+
+function bindMaison(userId) {
+  $('panel-body').querySelectorAll('[data-maison]').forEach((btn) => btn.addEventListener('click', async () => {
+    const action = btn.dataset.maison;
+    $('panel-body').querySelectorAll('[data-maison]').forEach((b) => { b.disabled = true; });
+    try {
+      const r = await fetch(api(`api/ville/maison/${action}`), {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ to: Number(btn.dataset.to) || null }),
+      });
+      const j = await r.json();
+      if (j.balance != null && state.me) { state.me.balance = j.balance; $('balance').textContent = fmt(j.balance); }
+      if (j.ok) {
+        toast(action === 'collect' ? `🧺 +${fmt(j.amount)} JP$ récoltés !` : `🚧 Chantier lancé : ${j.name}, ${untilText(j.endsAt)}`);
+        cardPanel(userId); // la maison en 3D change avec le direct ('house' update)
+      } else {
+        $('maison-msg').textContent = j.text || 'Les travaux ne répondent pas.';
+        $('panel-body').querySelectorAll('[data-maison]').forEach((b) => { b.disabled = false; });
+      }
+    } catch {
+      $('maison-msg').textContent = 'Les travaux ne répondent pas. Réessaie dans un instant.';
+      $('panel-body').querySelectorAll('[data-maison]').forEach((b) => { b.disabled = false; });
+    }
+  }));
 }
 
 /** Clic sur une destination (bâtiment, étiquette, menu). */
@@ -453,7 +535,8 @@ async function start3d() {
       const el = document.createElement('button');
       el.type = 'button';
       el.className = `lbl lbl-house${inf.userId === meId ? ' me' : ''}`;
-      el.innerHTML = `${avatarHtml(inf)}<span>${inf.userId === meId ? 'Ta maison' : esc(inf.name)}</span>`;
+      const badges = `${inf.building ? ' 🚧' : ''}${inf.level >= 5 ? ' 🏰' : inf.level >= 4 ? ' ⭐' : ''}${inf.farm ? ' 🌾' : ''}`;
+      el.innerHTML = `${avatarHtml(inf)}<span>${inf.userId === meId ? 'Ta maison' : esc(inf.name)}${badges}</span>`;
       el.addEventListener('click', () => activate('house', inf.userId));
       el.addEventListener('pointerenter', () => setHover({ kind: 'house', userId: inf.userId }));
       el.addEventListener('pointerleave', () => setHover(null));
@@ -686,8 +769,14 @@ async function start3d() {
       try {
         const { action, house } = JSON.parse(e.data);
         if (!house || !house.userId) return;
+        // v4.4 : fin de chantier → toute la ville est prévenue
+        const prev = houses.find((h) => h.userId === house.userId);
+        if (action === 'update' && prev && Number(house.level) > Number(prev.level || 1)) {
+          const who = house.userId === meId ? 'Ta maison' : `La maison de ${house.name}`;
+          toast(`${Number(house.level) >= 5 ? '🏰' : '🎉'} ${who} devient : ${HOUSE_NAMES[house.level] || 'plus belle'} !`);
+        }
         houses = houses.filter((h) => h.userId !== house.userId);
-        if (action === 'add') houses.push(house);
+        if (action === 'add' || action === 'update') houses.push(house); // v4.4 : travaux
         const r = ringOf(houses);
         const rebuildLife = r !== ring;
         ring = r;
@@ -697,7 +786,7 @@ async function start3d() {
           queue.list().forEach((w) => { queue.remove(w.userId); retireWalker(w); });
           buildLife();
         }
-        if (meId && house.userId === meId) $('btn-home').hidden = action !== 'add';
+        if (meId && house.userId === meId) $('btn-home').hidden = action === 'remove';
       } catch (err) { console.warn('[ville] maison', err); }
     });
   }
@@ -788,6 +877,7 @@ async function start3d() {
     if (camera.position.y < 6) camera.position.y = 6;
 
     world.update(t);
+    if (houseSet) houseSet.update(t); // v4.4 : étoile du Château, fumée des cheminées
     lm.list.forEach((x) => x.update && x.update(t, nowServer()));
     life.current.update(dt, t);
     const finished = life.current.walkers.update(dt);
