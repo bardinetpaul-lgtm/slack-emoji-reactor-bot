@@ -64,7 +64,7 @@ function stateFor() {
     serverTime: Date.now(),
     me: { ...person(byId.get(ME)), balance: 1234 },
     pause: flag('pause') ? { title: 'Pause du week-end', kind: 'weekend', icon: '😴' } : null,
-    houses: [...houses].map(([userId, plot]) => ({ ...person(byId.get(userId)), plot })),
+    houses: [...houses].map(([userId, plot]) => ({ ...person(byId.get(userId)), plot, level: ((plot + 1) % 5) + 1, farm: (plot * 3) % 4, building: plot % 7 === 6 })), // v4.4 : niveaux et fermes variés
     arena: { live, myMatchUrl: MINE ? `arena/m-preview?${query}` : null, tvUrl: tvUrl() },
     auctions: { open: openAuctions() },
     links: { museum: `collection/${ME}?t=c0ffee`, kiosk: 'tickets?t=k1osk', deck: 'deck?t=d3ck', boutique: `boutique?${query}`, banque: `banque?${query}`, salle: `salle?${query}` },
@@ -74,6 +74,12 @@ function stateFor() {
         changes: ['🏙️ Nouveau : Jeanpip City en 3D.', '🏢 Chaque bâtiment mène à sa partie du jeu.', '🏠 Les inscrits ont leur maison.'],
       },
       ranking: players.slice(0, 10).map((p, i) => ({ ...person(p), rank: i + 1, wins: 30 - i * 2, losses: 5 + i })),
+      // v4.4 : plus belles maisons (fausses valeurs)
+      contest: [
+        { ...person(players[4]), rank: 1, level: 5, levelName: 'Château Jeanpip' },
+        { ...person(players[3]), rank: 2, level: 4, levelName: 'Villa' },
+        { ...person(players[2]), rank: 3, level: 3, levelName: 'Grande maison' },
+      ],
     },
   };
 }
@@ -147,6 +153,8 @@ const server = http.createServer((req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
   const p = url.pathname;
   if (p === '/' ) { res.writeHead(302, { Location: `ville?${query}` }); return res.end(); }
+  // v4.4 : vitrine des maisons (5 niveaux, fermes, chantier) côte à côte
+  if (p === '/vitrine') return send(res, 200, fs.readFileSync(path.join(__dirname, 'vitrine-maisons.html'), 'utf-8'), TYPES['.html']);
   if (p === '/ville') {
     const html = fs.readFileSync(path.join(PUBLIC, 'ville.html'), 'utf-8').replace(/__ASSET_VERSION__/g, version());
     return send(res, 200, html, TYPES['.html']);
@@ -177,6 +185,12 @@ const server = http.createServer((req, res) => {
       return json(res, 200, {
         ok: true, ...person(pl), rank: i >= 0 && i < 12 ? i + 1 : null, distinctCards: 40 + ((i * 17) % 80), legendaries: i % 4, streak: i % 7,
         ...(pl.userId === ME ? { balance: 1234 } : {}),
+        // v4.4 : maison et ferme (fausses valeurs)
+        maison: { level: 2, levelName: 'Maison fleurie', farm: 1, farmName: 'Potager à Jeanpips', rank: 4 },
+        ...(pl.userId === ME ? { owner: {
+          house: { level: 2, name: 'Maison fleurie', next: { level: 3, name: 'Grande maison', price: 400, desc: 'Plus grande, avec deux lampadaires.' } },
+          farm: { level: 1, name: 'Potager à Jeanpips', perHour: 0.75, silo: 6, stock: 5.4, ready: 5, full: false, paused: false, next: { level: 2, name: 'Serre à Jeanpips', price: 450, hours: 24, perHour: 1.5, silo: 12 } },
+        } } : {}),
       });
     }
     m = /^\/api\/ville\/avatar\/([^/]+)$/.exec(p);
@@ -205,6 +219,7 @@ server.listen(PORT, '127.0.0.1', () => {
   console.log('\n👀 Jeanpip City (fausses données) :');
   console.log(`   http://127.0.0.1:${PORT}/ville?${query}`);
   console.log(`   nuit : http://127.0.0.1:${PORT}/ville?${query}&hour=22`);
-  console.log(`   sans jeton (403) : http://127.0.0.1:${PORT}/ville`);
+  console.log(`   sans jeton (403) : http://127.0.0.1:${PORT}/ville
+   vitrine des maisons : http://127.0.0.1:${PORT}/vitrine`);
   console.log('   Ctrl+C pour arrêter\n');
 });

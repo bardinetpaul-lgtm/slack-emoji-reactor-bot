@@ -165,3 +165,14 @@ button, a { font: inherit; }
 /* vue lointaine : étiquettes compactes (sous-titres masqués, sauf combat en cours) */
 .labels.far .lbl-building:not(.live):not(.hot) small { display: none; }
 .labels.far .lbl-building { padding: 4px 10px 4px 7px; font-size: 13px; }
+
+/* 🏡 v4.4 : maison et ferme (carte de visite) */
+.maison-look { margin: 12px 0 0; }
+.maison { margin-top: 12px; padding: 12px; border-radius: 14px; background: #f6f2e6; }
+.maison h3 { margin: 6px 0 8px; font-size: 15px; }
+.maison p { margin: 6px 0; }
+.maison-row { display: flex; flex-direction: column; gap: 4px; margin: 6px 0 10px; }
+.maison .btn[disabled] { opacity: .5; cursor: default; filter: none; outline: none; }
+.maison-msg { min-height: 1em; color: var(--red); font-weight: 700; }
+.maison-site { margin: 6px 0 0; padding: 8px 10px; border-radius: 10px; background: #fff1e0; font-size: 14px; }
+.maison-rank { margin: 6px 0 0; color: #8a6400; }
