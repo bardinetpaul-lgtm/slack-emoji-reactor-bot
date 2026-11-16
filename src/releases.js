@@ -16,6 +16,14 @@
 
 const RELEASES = [
   {
+    version: '4.4.1',
+    date: '2026-11-16',
+    title: 'Se déplacer dans Jeanpip City, enfin facile',
+    changes: [
+      '🧭 Dans Jeanpip City, *glisse pour te déplacer* dans toute la ville, comme sur une carte (un doigt sur téléphone). Pour tourner la vue : *clic droit* (ou deux doigts). La molette zoome *vers l’endroit que tu vises*. Fini d’être bloqué au centre !',
+    ],
+  },
+  {
     version: '4.4.0',
     date: '2026-11-16',
     title: 'La plus belle maison de Jeanpip City, et ta ferme à JP$',

@@ -473,6 +473,13 @@ async function start3d() {
   controls.zoomSpeed = 0.9;
   controls.listenToKeyEvents(window);
   controls.keyPanSpeed = 14;
+  // v4.4.1 : on se déplace comme sur une carte. Glisser (ou un doigt) = se
+  // déplacer ; clic droit (ou deux doigts) = tourner ; molette = zoomer vers
+  // l'endroit visé. Avant, glisser faisait tourner autour du centre.
+  controls.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE };
+  controls.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_ROTATE };
+  controls.zoomToCursor = true;
+  controls.panSpeed = 1.2;
   const HOME_TARGET = new THREE.Vector3(-16, 0, 6);
   function homeView() {
     const d = 150 + (ring - 2) * 26;
@@ -869,11 +876,16 @@ async function start3d() {
     }
     controls.maxDistance = 200 + ring * 40;
     controls.update();
-    // la caméra reste au-dessus de la ville (et pas sous le sol)
+    // la caméra reste au-dessus de la ville (et pas sous le sol). Au bord, la
+    // caméra recule AVEC le point visé : la vue glisse, elle ne pivote plus.
     const b = world.bounds;
-    controls.target.x = THREE.MathUtils.clamp(controls.target.x, b.minX, b.maxX);
-    controls.target.z = THREE.MathUtils.clamp(controls.target.z, b.minZ, 120);
-    controls.target.y = 0;
+    const M = 12; // un peu de marge autour de la ville
+    v.set(
+      THREE.MathUtils.clamp(controls.target.x, b.minX - M, b.maxX + M) - controls.target.x,
+      -controls.target.y,
+      THREE.MathUtils.clamp(controls.target.z, b.minZ - M, 120) - controls.target.z, // côté mer : jusqu’au port
+    );
+    if (v.lengthSq() > 0) { controls.target.add(v); camera.position.add(v); }
     if (camera.position.y < 6) camera.position.y = 6;
 
     world.update(t);
