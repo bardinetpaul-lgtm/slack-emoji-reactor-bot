@@ -4,7 +4,8 @@
 //    • Modale : description + jusqu'à 3 captures (file_input)
 //    • DM à chaque admin : description, captures (renvoyées par le bot,
 //      scope files:write), boutons ✅ Valider (+10 JP$) / ✖️ Refuser
-//    • Accueil admin : bugs validés à corriger, bouton 🛠️ Corrigé
+//    • Accueil admin : bugs validés à corriger, bouton 🔎 Voir (v4.4.2) →
+//      fenêtre avec le texte complet, le lien des captures et 🛠️ Corrigé
 //    • DM à l'auteur à chaque étape (reçu, validé / refusé, corrigé)
 //  Règles et stockage : src/bugs.js. Ici : messages et boutons.
 //  Constructeurs (build*) purs → testés par scripts/test-bugs.js.
@@ -48,10 +49,55 @@ function buildAdminBugBlocks(toFix = bugs.list('validated'), c = bugs.counts()) 
     return blocks;
   }
   for (const b of toFix.slice(0, MAX_SHOWN)) {
-    blocks.push(section(`*n° ${b.id}* · <@${b.reporter}> · ${day(b.at)}\n${short(b.text)}`, button('🛠️ Corrigé', 'bug_fixed', { value: String(b.id) })));
+    // 🐛 v4.4.2 : le texte est coupé ici → 🔎 Voir ouvre le bug en entier (et son bouton Corrigé)
+    blocks.push(section(`*n° ${b.id}* · <@${b.reporter}> · ${day(b.at)}\n${short(b.text)}`, button('🔎 Voir', 'bug_view', { value: String(b.id) })));
   }
   if (toFix.length > MAX_SHOWN) blocks.push(context(`_… et ${toFix.length - MAX_SHOWN} autre(s), les plus récents._`));
   return blocks;
+}
+
+/** Texte en citation découpé en blocs de moins de 3 000 caractères (limite Slack d'une section). */
+function quoteSections(text, max = 2900) {
+  const out = [];
+  let cur = '';
+  const push = (part) => {
+    if (cur && cur.length + part.length + 1 > max) { out.push(cur); cur = ''; }
+    cur = cur ? `${cur}\n${part}` : part;
+  };
+  for (const line of quote(text).split('\n')) {
+    if (line.length <= max) push(line);
+    else for (let i = 0; i < line.length; i += max - 2) push(`${i ? '> ' : ''}${line.slice(i, i + max - 2)}`);
+  }
+  if (cur) out.push(cur);
+  return out.map((t) => section(t));
+}
+
+/** 🔎 v4.4.2 : fenêtre admin avec le bug EN ENTIER, ses captures et le bouton Corrigé. */
+function buildBugViewModal(bug, { capturesUrl = null } = {}) {
+  const status = { pending: '⏳ En attente de validation', validated: '🛠️ À corriger', refused: '✖️ Refusé', fixed: '✅ Corrigé' }[bug.status] || bug.status;
+  const blocks = [
+    section(`🐛 *Bug n° ${bug.id}* signalé par <@${bug.reporter}> · ${day(bug.at)}\n${status}`),
+    ...quoteSections(bug.text),
+  ];
+  if (bug.files.length) {
+    const n = `${bug.files.length} capture${bug.files.length > 1 ? 's' : ''}`;
+    blocks.push(capturesUrl
+      ? section(`📎 ${n}, dans le fil du message reçu en DM.`, { type: 'button', text: { type: 'plain_text', text: '📎 Voir les captures', emoji: true }, action_id: 'bug_captures', url: capturesUrl })
+      : context(`📎 ${n} : dans le fil du message reçu en DM.`));
+  }
+  if (bug.status === 'validated') {
+    blocks.push({ type: 'actions', block_id: `bug_fix_${bug.id}`, elements: [button('🛠️ Corrigé', 'bug_fixed', { value: String(bug.id), style: 'primary' })] });
+  } else if (STATUS_LINE[bug.status]) {
+    blocks.push(context(STATUS_LINE[bug.status](bug)));
+  }
+  return {
+    type: 'modal',
+    callback_id: 'bug_view',
+    private_metadata: String(bug.id),
+    title: { type: 'plain_text', text: `Bug n° ${bug.id}`.slice(0, 24) },
+    close: { type: 'plain_text', text: 'Fermer' },
+    blocks,
+  };
 }
 
 // ─────────────────────────────────────────────
@@ -224,7 +270,24 @@ function register(app, ctx) {
   decideAction('bug_validate', true);
   decideAction('bug_refuse', false);
 
-  // 🛠️ Corrigé (Accueil admin)
+  // 🔎 Voir un bug en entier (Accueil admin, v4.4.2)
+  const capturesUrl = async (client, bug, adminId) => {
+    if (!bug.files.length) return null;
+    const refs = bug.adminMessages || [];
+    const ref = refs.find((r) => r.adminId === adminId) || refs[0];
+    if (!ref || !client.chat.getPermalink) return null;
+    try { return (await client.chat.getPermalink({ channel: ref.channel, message_ts: ref.ts })).permalink || null; } catch (e) { log('lien des captures', e); return null; }
+  };
+  app.action('bug_view', async ({ ack, body, action, client, logger }) => {
+    await ack();
+    if (!ctx.isAdmin(body.user.id)) return;
+    const bug = bugs.get(action.value);
+    if (!bug) return;
+    await ctx.openModal(client, body, buildBugViewModal(bug, { capturesUrl: await capturesUrl(client, bug, body.user.id) }), logger);
+  });
+  app.action('bug_captures', async ({ ack }) => { await ack(); });   // bouton-lien : Slack exige quand même un ack
+
+  // 🛠️ Corrigé (fenêtre « Voir » depuis la v4.4.2 ; avant : directement dans l'Accueil admin)
   app.action('bug_fixed', async ({ ack, body, action, client }) => {
     await ack();
     if (!ctx.isAdmin(body.user.id)) return;
@@ -234,8 +297,13 @@ function register(app, ctx) {
       await dm(client, res.bug.reporter, buildReporterDM(res.bug, 'fixed'));
       await updateAdminDMs(client, res.bug);
     }
+    // Cliqué depuis la fenêtre « Voir » : on la met à jour (plus de bouton, « Corrigé »)
+    const bug = bugs.get(action.value);
+    if (body.view && body.view.callback_id === 'bug_view' && bug) {
+      try { await client.views.update({ view_id: body.view.id, view: buildBugViewModal(bug, { capturesUrl: await capturesUrl(client, bug, body.user.id) }) }); } catch (e) { log('mise à jour de la fenêtre', e); }
+    }
     await refreshAdmins(client);
   });
 }
 
-module.exports = { buildReportBlocks, buildAdminBugBlocks, buildReportModal, buildAdminDM, buildReporterDM, register };
+module.exports = { buildReportBlocks, buildAdminBugBlocks, buildBugViewModal, buildReportModal, buildAdminDM, buildReporterDM, register };

@@ -7,7 +7,7 @@
 const { App, LogLevel } = require('@slack/bolt');
 require('dotenv').config();
 
-const { getRandomMedia, normalizeRarity, getAllMedia, getRemovedMedia, RARITIES } = require('./media');
+const { getRandomMedia, normalizeRarity, getAllMedia, getRemovedMedia, getRarityInfo, RARITIES } = require('./media');
 const { buildMediaBlocks } = require('./blocks');
 const scores = require('./scores');
 const targets = require('./targets');
@@ -58,6 +58,8 @@ const cards = require('./game/cards');
 const arenaSlack = require('./arenaSlack');
 const bugsSlack = require('./bugsSlack');
 const tradesSlack = require('./tradesSlack');
+const cardReview = require('./cardReview');
+const cardReviewSlack = require('./cardReviewSlack');
 const events = require('./events');
 
 // 🗄️ Base SQLite (crédits + journal des stats) : sans elle, pas de démarrage
@@ -468,11 +470,26 @@ app.event('reaction_added', async ({ event, client, logger }) => {
         inclusive: true,
         limit: 1,
       });
-      if (!result.messages || result.messages.length === 0) {
-        logger.warn('⚠️  Message original introuvable → aucun JP$');
+      // 🐛 v4.4.2 (bug n° 29) : une réponse dans un fil n'est pas dans l'historique du
+      //    canal ; history renvoyait alors un AUTRE message (auteur faux, voire <@null>).
+      //    On ne garde que le message réagi lui-même, sinon on le cherche dans les fils.
+      //    Slack donne aussi l'auteur dans l'événement (item_user) : il passe en premier.
+      let original = (result.messages || []).find((m) => m.ts === messageTs);
+      if (!original && !event.item_user) {
+        try {
+          const replies = await client.conversations.replies({ channel: channelId, ts: messageTs, latest: messageTs, oldest: messageTs, inclusive: true, limit: 1 });
+          original = (replies.messages || []).find((m) => m.ts === messageTs);
+        } catch (repliesError) {
+          logger.warn(`⚠️  Lecture du fil impossible (${repliesError.data ? repliesError.data.error : repliesError.message})`);
+        }
+      }
+      originalAuthorId = event.item_user || (original && original.user) || null;
+      if (!originalAuthorId) {
+        // 🤖 Message d'une appli ou d'un flux de travail (aucun auteur humain) : jamais « <@null> »
+        logger.info(`🤖 Réaction de <@${reactingUserId}> sur un message sans auteur humain → rien, prévenu`);
+        await notifyReactor(client, channelId, reactingUserId, '🤖 Ce message vient d\'une appli ou d\'un flux de travail, pas d\'une personne : ta réaction ne compte pas et tu ne reçois rien.', logger);
         return;
       }
-      originalAuthorId = result.messages[0].user || null;
     } catch (historyError) {
       const reason = historyError.data ? historyError.data.error : historyError.message;
       logger.warn(`🚫 Bot absent de la conversation (${reason}) → aucun JP$ pour <@${reactingUserId}>`);
@@ -966,13 +983,17 @@ app.command('/jeanpip-addmedia', async ({ command, ack, client, logger }) => {
       return;
     }
 
-    const result = adminActions.addMediaToBank(adminId, { url, rarity, title, authorId }, logger);
-    if (result.ok) createCardLook(client, result.media, logger);
-    await sendAdminResult(client, adminId, result, logger);
-    if (result.ok && authorId) {
-      await adminActions.notifyMediaAuthor(client, result, logger);
-      await refreshHomeIfSeen(client, authorId, logger);
+    // 👀 v4.4.2 : avec un valideur (CARD_REVIEWER), la carte attend sa décision (12 h max)
+    if (cardReview.reviewer()) {
+      if (cardReview.pendingUrl(url)) {
+        await safeSendDM(client, adminId, { text: 'ℹ️ Cette carte attend déjà sa validation.', blocks: [{ type: 'section', text: { type: 'mrkdwn', text: 'ℹ️ *Cette carte attend déjà sa validation.*' } }] }, logger);
+        return;
+      }
+      await cardReviews.submit(client, { url, rarity, title, authorId, adminId, arch: null }, logger);
+      return;
     }
+    const result = publishCard(client, { url, rarity, title, authorId, adminId }, logger);
+    await sendAdminResult(client, adminId, result, logger);
   } catch (error) {
     logger.error('❌ Erreur dans /jeanpip-addmedia:', error);
   }
@@ -1678,6 +1699,7 @@ const arenaHooks = arenaSlack.register(app, {
   refreshHome: refreshHomeIfSeen,
   homeViewers: () => [...homeViewers],   // 🏆 classement en direct : Accueils à republier en fin de combat
   links: ARENA_LINKS,
+  admins: JEANPIP_ADMINS,                // 🕵️ v4.4.2 : alerte des combats suspects / arrangés
 });
 
 // 🐛 Bugs signalés : modale joueur, DM admin (Valider / Refuser), suivi « Corrigé » dans l'Accueil
@@ -1788,20 +1810,25 @@ app.view('admin_addmedia_submit', async ({ ack, body, view, client, logger }) =>
   if (!rarity) return ack(fieldError('rarity', 'Choisis une rareté.'));
   if (authorId && await isBot(client, authorId)) return ack(fieldError('author', 'Impossible d\'attribuer un média à un bot.'));
 
-  // ⚔️ Type en Arène choisi : imposé avant l'ajout (le DM de confirmation montre le bon personnage)
-  if (arch) cards.setArchetype(url, arch);
-  const result = adminActions.addMediaToBank(adminId, { url, rarity, title, authorId }, logger);
+  // 👀 v4.4.2 : avec un valideur (CARD_REVIEWER), la carte attend sa décision (12 h max)
+  if (cardReview.reviewer()) {
+    if (cardReview.pendingUrl(url)) return ack(fieldError('url', 'Cette carte attend déjà sa validation.'));
+    await ack();
+    try {
+      await cardReviews.submit(client, { url, rarity, title, authorId, adminId, arch }, logger);
+    } catch (error) {
+      logger.error('❌ Erreur dans admin_addmedia_submit (validation):', error);
+    }
+    return;
+  }
+
+  const result = publishCard(client, { url, rarity, title, authorId, adminId, arch }, logger);
   if (!result.ok) return ack(fieldError('url', plain(result.text.split('\n')[1] || result.text)));
-  createCardLook(client, result.media, logger);
 
   await ack();
   try {
     // Confirmation + aperçu en DM (l'admin vérifie que le lien s'affiche bien)
     await sendAdminResult(client, adminId, result, logger);
-    if (authorId) {
-      await adminActions.notifyMediaAuthor(client, result, logger);
-      await refreshHomeIfSeen(client, authorId, logger);
-    }
   } catch (error) {
     logger.error('❌ Erreur dans admin_addmedia_submit:', error);
   }
@@ -2191,6 +2218,36 @@ async function sendDM(client, userId, message) {
 // 🎭 Personnage d'Arène d'une carte : analyse de sa photo (Claude
 //    Haiku 4.5 si une clé est configurée, sinon ses couleurs), en fond.
 // ─────────────────────────────────────────────
+/**
+ * 🖼️ Met une carte dans le jeu (banque + personnage d'Arène + auteur payé et prévenu).
+ * SYNCHRONE jusqu'à l'ajout à la banque ; DM à l'auteur et Accueil ensuite, sans attendre.
+ * Utilisé directement (sans valideur) ou à la décision du valideur (v4.4.2).
+ */
+function publishCard(client, { url, rarity, title, authorId, adminId, arch }, logger) {
+  if (arch) cards.setArchetype(url, arch);   // ⚔️ type d'Arène imposé avant l'ajout
+  const result = adminActions.addMediaToBank(adminId, { url, rarity, title, authorId }, logger);
+  if (!result.ok) return result;
+  createCardLook(client, result.media, logger);
+  if (authorId) {
+    adminActions.notifyMediaAuthor(client, result, logger)
+      .then(() => refreshHomeIfSeen(client, authorId, logger))
+      .catch((error) => logger.error('❌ DM à l\'auteur de la carte :', error.message));
+  }
+  return result;
+}
+
+// 👀 v4.4.2 : validation des nouvelles cartes par CARD_REVIEWER (Jean Lamiré)
+const cardReviews = cardReviewSlack.register(app, {
+  sendDM: (client, userId, msg) => sendDM(client, userId, msg).catch((error) => {
+    console.error(`❌ Validation des cartes : DM à <@${userId}> impossible :`, error.data ? error.data.error : error.message);
+    return null;
+  }),
+  publish: publishCard,
+  remove: (client, number, userId, logger) => adminActions.removeMediaFromBank(userId, number, logger),
+  rarityInfo: (rarity) => getRarityInfo(rarity),
+});
+module.exports.cardReviews = cardReviews;   // 🧪 tests : minuterie des 12 h appelée à la main
+
 function createCardLook(client, media, logger) {
   if (!media) return;
   looks.ensureLook(media, { client, logger })
@@ -2440,6 +2497,12 @@ async function announceClosures(client, logger) {
     .catch((error) => console.error('❌ Minuterie des échanges :', error.message));
   tradeTick();
   setInterval(tradeTick, 10 * 1000);
+
+  // 👀 v4.4.2 : cartes sans réponse du valideur depuis 12 h → publiées telles quelles
+  const cardReviewTick = () => cardReviews.runTick(app.client, console)
+    .catch((error) => console.error('❌ Validation des cartes :', error.message));
+  cardReviewTick();
+  setInterval(cardReviewTick, 60 * 1000);
 
   // 🙈 v3.2 : arrivée du stock du jour → le bouton d'achat apparaît dans tous les Accueils ouverts
   const dropTick = () => checkBoosterDrop(app.client, console)

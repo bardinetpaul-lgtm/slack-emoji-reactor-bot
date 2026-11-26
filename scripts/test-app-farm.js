@@ -11,6 +11,7 @@
 //    • un Jeanpip envoyé à un joueur sanctionné ne compte pas (aucun JP$)
 //      mais son auteur reçoit quand même SON image ;
 //    • à la fin de la pénalité, tout revient (envoi + réception).
+//    • v4.4.2 : réaction sur une réponse dans un fil → auteur lu dans le fil (bug n° 29).
 //
 //  Usage : node scripts/test-app-farm.js
 // ═══════════════════════════════════════════════════════════
@@ -38,10 +39,14 @@ const realSetTimeout = global.setTimeout;
 const posted = [];
 const ephemerals = [];
 const authorOf = {};   // ts du message → auteur
+const threadAuthorOf = {};   // ts d'une réponse dans un fil → auteur
 const fakeClient = {
   conversations: {
     open: async ({ users }) => ({ channel: { id: `D_${users}` } }),
-    history: async ({ latest }) => ({ messages: [{ user: authorOf[latest] }] }),
+    // Réponse dans un fil (threadAuthorOf) : l'historique du canal renvoie un AUTRE message
+    // (le parent, posté par un bot) ; seul conversations.replies donne le bon.
+    history: async ({ latest }) => ({ messages: [threadAuthorOf[latest] ? { bot_id: 'B_AUTRE', ts: '0.5' } : { user: authorOf[latest], ts: latest }] }),
+    replies: async ({ ts }) => ({ messages: [{ user: threadAuthorOf[ts], ts, thread_ts: '0.5' }] }),
   },
   chat: {
     postEphemeral: async (m) => { ephemerals.push(m); return { ok: true }; },
@@ -193,6 +198,44 @@ const wait = (ms) => new Promise((r) => realSetTimeout(r, ms));
     const out = await react('U_FARMER', 'U_AUTEUR');
     assert.strictEqual(dmsTo(out, 'U_FARMER').length, 1, 'réacteur');
     assert.strictEqual(dmsTo(out, 'U_AUTEUR').length, 0, 'auteur');
+  });
+
+  // 🐛 v4.4.2 (bug n° 29) : réaction sur une réponse dans un fil → le bon auteur
+  await test('réaction dans un fil : auteur lu dans le fil, Jeanpip compté, pas de message « <@null> »', async () => {
+    farm.clear('U_AUTRE');
+    const ts = '9999.000';
+    threadAuthorOf[ts] = 'U_AUTEUR';
+    const eph = ephemerals.length;
+    const before = posted.length;
+    await events.reaction_added({ event: { reaction: 'jeanpip', user: 'U_AUTRE', item: { channel: 'C1', ts } }, client: fakeClient, logger });
+    const out = posted.slice(before);
+    assert.strictEqual(ephemerals.length, eph, `aucun message d'erreur au réacteur (${JSON.stringify(ephemerals.slice(eph))})`);
+    assert.strictEqual(dmsTo(out, 'U_AUTRE').length, 1, 'le réacteur reçoit son image');
+  });
+
+  // 🐛 v4.4.2 (capture du 26/11) : réaction sur le message de Lauryne, l'historique renvoie
+  //    le message du flux « Rappel CRA hebdo » (sans auteur) ; l'événement donne item_user.
+  await test('auteur donné par Slack (item_user) : compté même si l\'historique renvoie un message d\'appli', async () => {
+    farm.clear('U_AUTRE');
+    const ts = '9998.000';
+    threadAuthorOf[ts] = 'U_INCONNU';   // l'historique renvoie un message d'appli (bot_id, sans user)
+    const eph = ephemerals.length;
+    const before = posted.length;
+    await events.reaction_added({ event: { reaction: 'jeanpip', user: 'U_AUTRE', item_user: 'U_AUTEUR', item: { channel: 'C1', ts } }, client: fakeClient, logger });
+    assert.strictEqual(ephemerals.length, eph, `aucun message « <@null> » (${JSON.stringify(ephemerals.slice(eph))})`);
+    assert.strictEqual(dmsTo(posted.slice(before), 'U_AUTRE').length, 1, 'le réacteur reçoit son image');
+  });
+
+  await test('réaction sur un message d\'appli : message clair, jamais « <@null> »', async () => {
+    const ts = '9997.000';
+    authorOf[ts] = undefined;   // message sans auteur humain (flux de travail)
+    const eph = ephemerals.length;
+    const before = posted.length;
+    await events.reaction_added({ event: { reaction: 'jeanpip', user: 'U_AUTRE', item: { channel: 'C1', ts } }, client: fakeClient, logger });
+    const said = JSON.stringify(ephemerals.slice(eph));
+    assert.ok(/vient d'une appli/.test(said), `message clair au réacteur (${said})`);
+    assert.ok(!/null/.test(said), 'jamais « <@null> »');
+    assert.strictEqual(dmsTo(posted.slice(before), 'U_AUTRE').length, 0, 'rien reçu');
   });
 
   const errors = logs.filter((l) => l.startsWith('ERR'));

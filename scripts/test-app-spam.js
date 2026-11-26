@@ -40,7 +40,7 @@ let failNext = 0; // nombre de prochains DM qui échouent
 const fakeClient = {
   conversations: {
     open: async () => ({ channel: { id: 'D_SPAM' } }),
-    history: async () => ({ messages: [{ user: 'U_AUTEUR' }] }),
+    history: async ({ latest }) => ({ messages: [{ user: 'U_AUTEUR', ts: latest }] }),
   },
   chat: {
     postMessage: async (m) => {

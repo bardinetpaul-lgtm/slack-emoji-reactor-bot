@@ -122,9 +122,9 @@ function buildHomeView(userId, ctx) {
   const ban = seasonalBlock === 'banned' ? boosterBans.activeBan(userId, seasonal.type, now) : null;
   const seasonalStatus = {
     banned: ban && `🚫 *Booster interdit jusqu'au ${banEndText(ban.until)}* (sanction d'un admin${ban.reason ? ` : ${ban.reason}` : ''}).`,
-    weekend: boosters.restockText(now),   // « Pas de booster le week-end » : ligne commune plus bas
+    weekend: boosters.restockText(now, seasonal),   // « Pas de booster le week-end » : ligne commune plus bas
     user_limit: `✅ *Tu as déjà eu le tien aujourd'hui.* ${boosters.comeBackDay(seasonal, now) ? `Reviens ${boosters.comeBackDay(seasonal, now)} 😉` : "C'était le dernier jour de la saison 😢"}`,
-    sold_out: seasonal && `😢 *Épuisé pour aujourd'hui* : les ${seasonal.dailyStock} boosters du jour sont partis. ${boosters.restockText(now)}`,
+    sold_out: seasonal && `😢 *Épuisé pour aujourd'hui* : les ${seasonal.dailyStock} boosters du jour sont partis. ${boosters.restockText(now, seasonal)}`,
     not_yet: `⏳ ${boosters.DROP_TEXT} *Le bouton d'achat apparaîtra ici à leur arrivée.*`,
   }[seasonalBlock] || '';
   // 🎃 v3.7 : saisonnier SANS stock du jour (Halloween) — sa propre ligne, et son bouton

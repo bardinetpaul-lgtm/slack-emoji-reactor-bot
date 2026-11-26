@@ -594,6 +594,8 @@ ${DeckEditor.roleText(e.archetype)}`;
     if (s.stolen) line('Volée', `${s.stolen.title} part chez ton adversaire`);
     if (s.boosterId) line('Récompense', `1 booster Commun + ${s.credits} JP$`);
     if (s.streak) line(`📅 Série, jour ${s.streak.step}/6`, s.streak.boosterId ? '1 booster Rare (à ouvrir depuis Slack)' : `+${s.streak.credits} JP$`);
+    // 🕵️ v4.4.2 : combat jugé arrangé (ex. perdant sans aucune pose) → rien de gagné
+    if (v.summary.farm && v.summary.farm.verdict === 'farm') line('🕵️ Combat non récompensé', 'pas de booster, pas de JP$, pas de jour de série, et la victoire ne compte pas au classement. Un vrai combat, ça se joue des deux côtés.');
   }
 
   // ─────────────────────────────────────────────

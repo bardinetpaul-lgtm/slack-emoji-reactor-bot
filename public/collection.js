@@ -65,6 +65,12 @@
   let pages = [];        // [{ kind: 'cover' } | { kind: 'section', key, stickers, part, parts }]
   let view = 0;          // index de la vue affichée (1 ou 2 pages)
   let turning = false;
+  // 🐛 v4.4.2 : fin de la page qui tourne en ce moment (null sinon). Un clic pendant
+  //    l'animation la termine aussitôt au lieu d'être ignoré, et le minuteur de secours
+  //    d'une ANCIENNE page ne peut plus défaire la suivante (classeur « mélangé »).
+  let finishTurn = null;
+  let renderPending = false;   // le direct a changé les pages pendant l'animation
+  let picked = null;           // onglet cliqué : reste surligné tant que sa page est affichée
   const fresh = new Set();   // liens des cartes arrivées en direct (animation « collage »)
   const bumped = new Set();  // liens des cartes dont le nombre d'exemplaires a augmenté
 
@@ -225,9 +231,11 @@
   // ─────────────────────────────────────────────
 
   function renderChrome() {
-    const [first] = pagesOf(view);
-    const desc = pages[first] || pages[0];
-    const activeKey = desc.kind === 'cover' ? 'cover' : desc.key;
+    const keyOf = (i) => (pages[i] ? (pages[i].kind === 'cover' ? 'cover' : pages[i].key) : null);
+    const visible = pagesOf(view).map(keyOf).filter(Boolean);
+    // 🐛 v4.4.2 : deux rubriques sur la même double page (Épiques | Légendaires) → l'onglet
+    //    cliqué reste surligné, au lieu de celui de la page de gauche.
+    const activeKey = picked && visible.includes(picked) ? picked : (visible[0] || 'cover');
     for (const tab of $('#tabs').children) tab.classList.toggle('is-active', tab.dataset.key === activeKey);
 
     $('#btn-prev').disabled = view <= 0;
@@ -239,13 +247,15 @@
   }
 
   function render() {
+    renderPending = false;
     $('#spread').replaceChildren(...pagesOf(view).map((i) => buildPage(i)));
     renderChrome();
   }
 
   function goTo(target) {
+    if (finishTurn) finishTurn();   // un clic pendant l'animation : on la termine d'abord
     target = Math.max(0, Math.min(viewCount() - 1, target));
-    if (target === view || turning) return;
+    if (target === view) return;
     if (reducedMotion) {
       view = target;
       return render();
@@ -276,7 +286,8 @@
     void leaf.offsetWidth;
     leaf.classList.add('is-turning');
     const done = () => {
-      if (!turning) return;
+      if (finishTurn !== done) return;   // déjà fini, ou minuteur d'une ancienne page
+      finishTurn = null;
       turning = false;
       if (single.matches) {
         leaf.remove();
@@ -288,7 +299,9 @@
         else spread.replaceChild(back, spread.children[1]);
         leaf.remove();
       }
+      if (renderPending) render();
     };
+    finishTurn = done;
     leaf.addEventListener('transitionend', (e) => { if (e.target === leaf) done(); });
     setTimeout(done, 1000); // filet de sécurité
   }
@@ -301,14 +314,14 @@
   function renderTabs() {
     const tabs = [el('button', 'tab', 'Résumé')];
     tabs[0].dataset.key = 'cover';
-    tabs[0].addEventListener('click', () => goToPage(0));
+    tabs[0].addEventListener('click', () => { picked = 'cover'; goToPage(0); renderChrome(); });
     for (const s of data.sections) {
       const tab = el('button', `tab r-${s.key}`, SECTION[s.key].label);
       tab.type = 'button';
       tab.dataset.key = s.key;
       const r = data.stats.byRarity[s.key];
       if (r) tab.appendChild(el('small', null, `${r.owned}/${r.total}`));
-      tab.addEventListener('click', () => goToPage(pages.findIndex((p) => p.key === s.key)));
+      tab.addEventListener('click', () => { picked = s.key; goToPage(pages.findIndex((p) => p.key === s.key)); renderChrome(); });
       tabs.push(tab);
     }
     tabs[0].type = 'button';
@@ -470,6 +483,7 @@
     renderProgress();
     document.title = next.owner && next.owner.name ? `Classeur de ${next.owner.name} · Jeanpip` : 'Mon classeur · Jeanpip';
     if (!turning) render();
+    else renderPending = true;
   }
 
   let timer = null;
@@ -534,6 +548,7 @@
 
   single.addEventListener('change', () => {
     if (!data) return;
+    if (finishTurn) finishTurn();
     const firstPage = view * (single.matches ? 2 : 1); // perView a déjà changé
     view = Math.floor(firstPage / perView());
     render();

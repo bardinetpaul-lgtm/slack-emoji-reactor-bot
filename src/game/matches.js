@@ -403,7 +403,7 @@ function view(match, userId) {
     phase: match.status,   // 'ended' | 'cancelled'
     cancelReason: match.cancelReason || null,
     result: match.engine ? match.engine.result : null,
-    summary: match.summary ? { you: match.summary[side], opponent: match.summary[foe] } : null,
+    summary: match.summary ? { you: match.summary[side], opponent: match.summary[foe], farm: match.summary.farm || null } : null,
     rented: match.players[side].rented || [],   // 🛒 cartes achetées pour ce combat
   };
 }

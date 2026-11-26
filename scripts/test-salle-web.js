@@ -51,6 +51,10 @@ const req = (m) => require(path.join(TMP, 'src', m));
 const web = req('web.js');
 const villeToken = req('villeToken.js');
 const collections = req('collections.js');
+// v4.4.2 : depuis la v4.3, la revente Hors série vaut 30 JP$, donc le plancher des
+// échanges aussi (vérifié dans test-trades-slack.js). Ces scénarios, écrits avec un
+// plancher de 10, le gardent pour ne pas réécrire tous leurs montants.
+req('resale.js').PRICES.halloween = 10;
 const credits = req('credits.js');
 const broadcast = req('broadcast.js');
 const cardIndex = req('cardIndex.js');

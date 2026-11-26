@@ -16,7 +16,10 @@
 //    • 📅 série (v2.2) : chaque joueur d'un combat allé au bout (victoire,
 //      défaite ou nul) avance d'un jour de série, une fois par jour
 //      (règles et récompenses : dailyStreak.js) ;
-//    • combat annulé → rien.
+//    • combat annulé → rien ;
+//    • 🕵️ v4.4.2 : combat jugé « farm » (farmCheck.js, ex. le perdant n'a rien
+//      posé) → ni booster, ni JP$, ni série, ni victoire au classement ; les
+//      pertes et le butin restent ceux du combat. summary.farm = { verdict, signals }.
 // ═══════════════════════════════════════════════════════════
 
 const collections = require('../collections');
@@ -25,6 +28,7 @@ const boosters = require('../boosters');
 const arenaStore = require('./arenaStore');
 const dailyStreak = require('./dailyStreak');
 const events = require('../events');
+const farmCheck = require('./farmCheck');
 
 const REWARD_BOOSTER = 'common';
 const REWARD_CREDITS = 10;
@@ -93,8 +97,20 @@ function settleMatch({ matchId, players, result, cancelled, arena }, { random = 
     if (s.lost.length) collections.removeCards(s.userId, s.lost.map((p) => p.url));
   }
 
-  // 📅 Série : les deux joueurs, quel que soit le résultat
-  for (const side of ['A', 'B']) summary[side].streak = rewardStreak(summary[side].userId, matchId, now);
+  // 🕵️ Contrôle anti-farm (comparé aux combats du jour de la même paire)
+  const check = farmCheck.analyze({ players, result, history: arenaStore.history(), now });
+  const farmed = check.verdict === 'farm';
+  if (check.verdict !== 'ok') {
+    summary.farm = { verdict: check.verdict, signals: check.signals, alert: check.alert };
+    events.record('arena_farm', null, { matchId, verdict: check.verdict, signals: check.signals, winnerId: players[winner], loserId: players[loser], poses: check.poses },
+      { at: new Date(now).toISOString(), dedup: `arena_farm:${matchId}` });
+  }
+  detail.poses = check.poses;
+  detail.unplayed = check.unplayed;
+  if (check.verdict !== 'ok') { detail.farm = check.verdict; detail.signals = check.signals; }
+
+  // 📅 Série : les deux joueurs, quel que soit le résultat (pas pour un combat « farm »)
+  if (!farmed) for (const side of ['A', 'B']) summary[side].streak = rewardStreak(summary[side].userId, matchId, now);
 
   if (!loser) {
     arenaStore.recordResult({ matchId, at: now, draw: true, ...detail });
@@ -110,7 +126,11 @@ function settleMatch({ matchId, players, result, cancelled, arena }, { random = 
     l.stolen = brief(loot);
   }
 
-  // 🎁 Pack + crédits, à chaque victoire
+  // 🎁 Pack + crédits, à chaque victoire (sauf combat « farm »)
+  if (farmed) {
+    arenaStore.recordResult({ matchId, at: now, winnerId: w.userId, loserId: l.userId, draw: false, loot: w.loot, ...detail });
+    return summary;
+  }
   w.rewarded = true;
   w.boosterId = boosters.createPending(w.userId, REWARD_BOOSTER);
   events.record('booster_granted', w.userId, { boosterId: w.boosterId, boosterType: REWARD_BOOSTER, reason: 'arena' },

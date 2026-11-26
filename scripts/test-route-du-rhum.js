@@ -183,6 +183,13 @@ const at = (iso) => { NOW = RealDate.parse(iso); };
   check(boosters.stockLeft(rr) === 0 && boosters.purchaseBlock(rr, Date.now(), 'UD') === 'sold_out', 'UB et UC achètent : plus de stock (3/3 vendus), UD voit « épuisé »');
   await buy('UD');
   check(credits.getBalance('UD') === 500 && boosters.countPending('UD') === 0, 'UD refusé : rien débité');
+  // 🐛 v4.4.2 : épuisé un jeudi → « reviennent demain », jamais « dernier jour de la saison »
+  //    (le texte se basait sur Octobre Rose, dont la saison est finie).
+  const soldOutMsg = posted.at(-1).text;
+  check(/reviennent demain/.test(soldOutMsg) && !/dernier jour/.test(soldOutMsg), `message Slack épuisé (jeudi) : « ${soldOutMsg.split('\n').pop()} »`);
+  const homeSoldOut = JSON.stringify(req('home.js').buildHomeView('UD', { isAdmin: false, attackPrice: 30, creditsPerJeanpipLabel: '1', targetEmoji: 'jeanpip', farmRemainingMs: 0, farmQuota: { used: 0, max: 20, nextFreeMs: 0 }, formatRemaining: String }));
+  check(/Épuisé pour aujourd'hui/.test(homeSoldOut) && /reviennent demain/.test(homeSoldOut) && !/dernier jour/.test(homeSoldOut), 'Accueil épuisé (jeudi) : « reviennent demain », pas « dernier jour »');
+  check(!/dernier jour/.test(boosters.restockText()), 'sans booster précisé : plus jamais « dernier jour » par défaut');
   at(paris('2026-11-20', drop('2026-11-20') + 1));
   check(boosters.stockLeft(rr) === 3 && boosters.purchaseBlock(rr, Date.now(), 'UA') === null, 'le lendemain : stock remis à 3, UA peut de nouveau en prendre un');
   at('2026-11-14T13:00:00Z');

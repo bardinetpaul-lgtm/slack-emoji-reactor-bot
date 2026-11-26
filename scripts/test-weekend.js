@@ -55,7 +55,7 @@ const published = [];
 const fakeClient = {
   conversations: {
     open: async ({ users }) => ({ channel: { id: `D_${users}` } }),
-    history: async () => ({ messages: [{ user: 'UAUTHOR', ts: '1.1' }] }),
+    history: async ({ latest }) => ({ messages: [{ user: 'UAUTHOR', ts: latest }] }),
   },
   chat: {
     postMessage: async (m) => { posted.push(m); return { ok: true, channel: m.channel, ts: String(1000 + posted.length) }; },
