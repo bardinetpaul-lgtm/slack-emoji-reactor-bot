@@ -40,7 +40,7 @@ const authorOf = {};
 const fakeClient = {
   conversations: {
     open: async ({ users }) => ({ channel: { id: `D_${users}` } }),
-    history: async ({ latest }) => ({ messages: [{ user: authorOf[latest] }] }),
+    history: async ({ latest }) => ({ messages: [{ user: authorOf[latest], ts: latest }] }),
   },
   chat: {
     postEphemeral: async (m) => { ephemerals.push(m); return { ok: true }; },

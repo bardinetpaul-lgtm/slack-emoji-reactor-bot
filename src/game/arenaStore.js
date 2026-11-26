@@ -157,14 +157,17 @@ function getStats(userId) {
  * Enregistre l'issue d'un combat.
  * Nul : `draw: true` + `players: [U1, U2]`.
  */
-function recordResult({ matchId, at, winnerId, loserId, draw, loot, players, towers, reason, durationMs, arena }) {
+function recordResult({ matchId, at, winnerId, loserId, draw, loot, players, towers, reason, durationMs, arena, poses, farm, unplayed, signals }) {
   const data = load();
   const stats = (u) => {
     data.stats[u] = { ...emptyStats(), ...(data.stats[u] || {}) };
     return data.stats[u];
   };
 
-  if (draw) {
+  // 🕵️ v4.4.2 : combat jugé « farm » (farmCheck.js) → gardé dans l'historique, hors classement
+  if (farm === 'farm') {
+    // rien : ni victoire, ni défaite, ni série de victoires
+  } else if (draw) {
     for (const u of players || []) {
       const s = stats(u);
       s.draws += 1;
@@ -191,6 +194,9 @@ function recordResult({ matchId, at, winnerId, loserId, draw, loot, players, tow
     players: Array.isArray(players) && players.length === 2 ? players.slice() : null,
     towers: towers || null, reason: reason || null,
     durationMs: typeof durationMs === 'number' ? durationMs : null, arena: arena || null,
+    poses: poses || null,             // v4.4.2 : cartes posées par joueur { userId: n }
+    unplayed: unplayed || null,       // v4.4.2 : cartes restées en main par joueur { userId: n }
+    ...(farm ? { farm, signals: signals || [] } : {}),   // v4.4.2 : 'farm' | 'suspect' + signaux
   });
   if (data.history.length > HISTORY_MAX) data.history = data.history.slice(-HISTORY_MAX);
   save(data);
@@ -200,7 +206,7 @@ function recordResult({ matchId, at, winnerId, loserId, draw, loot, players, tow
 function weeklyTop(now = Date.now(), limit = 5) {
   const wins = {};
   for (const h of load().history) {
-    if (h.draw || !h.winnerId || now - h.at > WEEK_MS) continue;
+    if (h.draw || !h.winnerId || h.farm === 'farm' || now - h.at > WEEK_MS) continue;
     wins[h.winnerId] = (wins[h.winnerId] || 0) + 1;
   }
   return Object.entries(wins)
@@ -277,7 +283,11 @@ function markSettled(matchId) {
   save(data);
 }
 
+/** Historique des combats (le plus ancien d'abord), pour le contrôle anti-farm. */
+const history = () => load().history;
+
 module.exports = {
+  history,
   DECK_SLOTS,
   getDecks,
   setDecks,

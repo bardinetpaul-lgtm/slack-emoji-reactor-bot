@@ -5,7 +5,7 @@
 //  Faux Slack : signalement (modale) → DM de reçu à l'auteur + DM à
 //  chaque admin avec les captures renvoyées dans le fil → Valider
 //  (+10 JP$, une seule fois même si deux admins cliquent) ou Refuser
-//  → « Corrigé » depuis l'Accueil → DM à l'auteur.
+//  → « 🔎 Voir » (texte complet, v4.4.2) puis « Corrigé » → DM à l'auteur.
 //  Travaille dans une COPIE temporaire du projet.
 //
 //  Usage : node scripts/test-bugs.js
@@ -41,11 +41,14 @@ const app = { action: (id, fn) => { handlers.action[id] = fn; }, view: (id, fn) 
 const sent = []; const updates = []; const uploads = []; const posts = []; const modals = []; const refreshed = [];
 let ts = 0;
 let uploadFails = false;
+const viewUpdates = [];
 const client = {
   chat: {
     update: async (m) => { updates.push(m); },
     postMessage: async (m) => { posts.push(m); return { ok: true }; },
+    getPermalink: async ({ channel, message_ts }) => ({ permalink: `https://slack.test/${channel}/${message_ts}` }),
   },
+  views: { update: async (m) => { viewUpdates.push(m); } },
   files: {
     info: async ({ file }) => ({ file: { url_private: `https://files.test/${file}`, name: `${file}.png`, size: 1000 } }),
     uploadV2: async (m) => { if (uploadFails) throw new Error('missing_scope'); uploads.push(m); },
@@ -121,10 +124,28 @@ async function submit(userId, text, files = []) {
 
   // 🛠️ Suivi dans l'Accueil admin
   const adminHome = flat(home.buildHomeView('ADM1', ctx(true)));
-  check('Accueil admin : bug n° 1 à corriger avec bouton « Corrigé »', adminHome.includes('n° 1') && adminHome.includes('bug_fixed') && adminHome.includes('1 à corriger'));
+  check('Accueil admin : bug n° 1 à corriger avec bouton « Voir »', adminHome.includes('n° 1') && adminHome.includes('bug_view') && adminHome.includes('1 à corriger'));
+
+  // 🔎 v4.4.2 : le texte est coupé dans l'Accueil → « Voir » ouvre le bug en entier
+  const longText = `Début du bug. ${'Une phrase assez longue pour dépasser la coupure de l’Accueil. '.repeat(12)}FIN-DU-BUG`;
+  const dbPath = path.join(TMP, 'data', 'bugs.json');   // texte long écrit dans la copie temporaire
+  const bugDb = JSON.parse(fs.readFileSync(dbPath, 'utf8'));
+  bugDb.bugs.find((x) => x.id === 1).text = longText;
+  fs.writeFileSync(dbPath, JSON.stringify(bugDb));
+  check('Accueil admin : texte long coupé (…)', !flat(home.buildHomeView('ADM1', ctx(true))).includes('FIN-DU-BUG'));
+  const nModals = modals.length;
+  await act('bug_view', 'P1', '1');
+  check('non-admin : « Voir » n’ouvre rien', modals.length === nModals);
+  await act('bug_view', 'ADM1', '1');
+  const vm = modals.at(-1);
+  check('« Voir » : fenêtre avec le texte complet', vm.callback_id === 'bug_view' && flat(vm).includes('FIN-DU-BUG') && flat(vm).includes('Début du bug'));
+  check('« Voir » : lien vers les captures (DM de cet admin) + bouton Corrigé', flat(vm).includes('https://slack.test/DADM1/') && flat(vm).includes('bug_fixed'));
+  const huge = bugsSlack.buildBugViewModal({ ...bugs.get(1), text: 'x'.repeat(2000) + '\n'.repeat(300) + 'y'.repeat(2000) });
+  check('texte de 2 000+ caractères : découpé en sections < 3 000 caractères, rien de perdu', huge.blocks.every((b) => !b.text || b.text.text.length <= 3000) && (flat(huge).match(/x/g) || []).length >= 2000 && (flat(huge).match(/y/g) || []).length >= 2000);
   await act('bug_fixed', 'P1', '1');
   check('non-admin : ne peut pas marquer corrigé', bugs.get(1).status === 'validated');
-  await act('bug_fixed', 'ADM2', '1');
+  await handlers.action.bug_fixed({ ack: async () => {}, body: { user: { id: 'ADM2' }, view: { id: 'V9', callback_id: 'bug_view' } }, action: { value: '1' }, client, logger: console });
+  check('Corrigé depuis la fenêtre : elle se met à jour (« Corrigé », plus de bouton)', viewUpdates.length === 1 && viewUpdates[0].view_id === 'V9' && flat(viewUpdates[0].view).includes('Corrigé') && !flat(viewUpdates[0].view).includes('"action_id":"bug_fixed"'));
   check('corrigé : statut + DM à l’auteur', bugs.get(1).status === 'fixed' && bugs.get(1).fixedBy === 'ADM2' && lastTo('P1').text.includes('corrigé'));
   check('corrigé : plus dans la liste à corriger', !flat(home.buildHomeView('ADM1', ctx(true))).includes('bug_fixed'));
   check('compteurs', flat(bugsSlack.buildAdminBugBlocks()).includes('1 corrigé') && flat(bugsSlack.buildAdminBugBlocks()).includes('1 refusé'));

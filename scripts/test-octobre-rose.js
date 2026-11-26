@@ -219,7 +219,7 @@ const at = (iso) => { NOW = RealDate.parse(iso); };
     await buy(u);
   }
   check(boosters.stockLeft(rose) === 0 && boosters.buttonLabel(rose) === '🎀 Octobre Rose (80) · épuisé, retour lundi', `vendredi épuisé : « ${boosters.buttonLabel(rose)} »`);
-  check(boosters.restockText() .includes('lundi'), `vendredi : « ${boosters.restockText()} »`);
+  check(boosters.restockText(Date.now(), rose).includes('lundi'), `vendredi : « ${boosters.restockText(Date.now(), rose)} »`);
 
   // Samedi 17 et dimanche 18/10 : pas de booster
   at('2026-10-17T09:30:00Z');

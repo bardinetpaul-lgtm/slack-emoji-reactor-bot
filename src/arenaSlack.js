@@ -18,6 +18,7 @@ const matchmaking = require('./game/matchmaking');
 const matches = require('./game/matches');
 const arenaStore = require('./game/arenaStore');
 const dailyStreak = require('./game/dailyStreak');
+const farmCheck = require('./game/farmCheck');
 const arenas = require('./game/arenas');
 const deckRules = require('./game/deck');
 const collections = require('./collections');
@@ -240,6 +241,10 @@ function buildResultDM(match, summary, userId, links = {}) {
   if (me.loot) lines.push(`🃏 Butin : *${me.loot.title}* rejoint ta collection !`);
   if (me.stolen) lines.push(`🃏 *${me.stolen.title}* part chez <@${opponent}>.`);
   if (me.boosterId) lines.push(`🎁 Récompense : *1 booster Commun* + *${me.credits} JP$* !`);
+  // 🕵️ v4.4.2 : combat jugé arrangé → rien de gagné, et on dit pourquoi
+  if (summary && summary.farm && summary.farm.verdict === 'farm') {
+    lines.push(`🕵️ *Combat non récompensé* : ${farmCheck.describe(summary.farm.signals)}. Pas de booster, pas de JP$, pas de jour de série, et la victoire ne compte pas au classement. Un vrai combat, ça se joue des deux côtés 😉`);
+  }
   if (me.streak) {
     const gain = me.streak.boosterId ? '*1 booster Rare*' : `*+${me.streak.credits} JP$*`;
     const last = me.streak.step >= dailyStreak.LENGTH ? ' Série complète : elle repart au jour 1 au prochain combat.' : '';
@@ -261,6 +266,19 @@ function buildResultDM(match, summary, userId, links = {}) {
   if (me.streak && me.streak.boosterId) blocks.push(boosterButtons(me.streak.boosterId, 'booster Rare'));
   const text = `${winner === side ? '🏆 Victoire' : winner ? '💥 Défaite' : '🤝 Match nul'} contre <@${opponent}>`;
   return { text, blocks };
+}
+
+/** 🕵️ DM admin : combat suspect (récompensé) ou arrangé (non récompensé). */
+function buildFarmAlertDM(match, summary) {
+  const winner = match.engine && match.engine.result && match.engine.result.winner;
+  const w = winner ? match.players[winner].userId : null;
+  const l = winner ? match.players[winner === 'A' ? 'B' : 'A'].userId : null;
+  const farmed = summary.farm.verdict === 'farm';
+  const head = farmed ? '🕵️ *Arène : combat arrangé, non récompensé*' : '👀 *Arène : combat suspect* (récompensé quand même)';
+  const text = `${head}
+<@${w}> bat <@${l}> · ${farmCheck.describe(summary.farm.signals)}.
+_Combat ${match.id}. Détail des combats du jour : \`node scripts/check-arena-farm.js\` sur la VM._`;
+  return { text: `${farmed ? '🕵️ Combat arrangé' : '👀 Combat suspect'} : ${w ? `<@${w}>` : '?'} / ${l ? `<@${l}>` : '?'}`, blocks: [section(text)] };
 }
 
 // ─────────────────────────────────────────────
@@ -434,6 +452,10 @@ function register(app, ctx) {
       const userId = match.players[side].userId;
       await dm(userId, buildResultDM(match, summary, userId, ctx.links));
     }
+    // 🕵️ v4.4.2 : combat suspect ou arrangé → les admins sont prévenus
+    if (summary && summary.farm && summary.farm.alert !== false && ctx.admins) {
+      for (const admin of ctx.admins) await dm(admin, buildFarmAlertDM(match, summary));
+    }
     const fighters = [match.players.A.userId, match.players.B.userId];
     await refresh(...fighters);
     // 🏆 Le classement a bougé : les autres Accueils déjà ouverts aussi (un par un, combat allé au bout seulement)
@@ -445,4 +467,4 @@ function register(app, ctx) {
   return { setClient: (c) => { client = c; } };
 }
 
-module.exports = { homeState, buildHomeBlocks, buildRankingBlocks, streakLine, buildChallengeModal, buildChallengeDM, buildMatchDM, buildResultDM, buildClosedDM, reasonText, register };
+module.exports = { buildFarmAlertDM, homeState, buildHomeBlocks, buildRankingBlocks, streakLine, buildChallengeModal, buildChallengeDM, buildMatchDM, buildResultDM, buildClosedDM, reasonText, register };

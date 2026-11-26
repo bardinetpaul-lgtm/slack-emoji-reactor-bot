@@ -103,18 +103,19 @@ check('annulé : pas de stats', arenaStore.getStats('UE').wins + arenaStore.getS
 check('annulé : pas de série', !c.A.streak && arenaStore.getStreak('UE') === null && credits.getBalance('UE') === 0);
 
 // ─── 💰 Aucun plafond : 7 victoires le même jour contre le même adversaire, toutes récompensées ───
+//    (v4.4.2 : de VRAIS combats, le perdant pose 2 cartes ; les combats bâclés ont leur test : test-arena-farm.js)
 for (let i = 0; i < 7; i += 1) {
   give('UG', [`g${i}`]);
-  give('UH', [`h${i}`]);
+  give('UH', [`h${i}`, `hh${i}`]);
 }
 const results = [0, 1, 2, 3, 4, 5, 6].map((i) => settleMatch({
   matchId: `cap${i}`,
   players: { A: 'UG', B: 'UH' },
-  result: { winner: 'A', reason: 'qg', poses: [pose('B', `h${i}`, 'destroyed')] },
+  result: { winner: 'A', reason: 'qg', poses: [pose('B', `h${i}`, 'destroyed'), pose('B', `hh${i}`, 'destroyed')] },
 }, { now: T0 }));
 check('7 victoires : pack + JP$ à chaque fois', results.every((r) => r.A.boosterId && r.A.rewarded === true && r.A.credits === REWARD_CREDITS));
 check('7 boosters distincts', new Set(results.map((r) => r.A.boosterId)).size === 7);
-check('le butin s\'applique toujours', results[6].A.loot && collections.getCount('UG', 'h6') === 1);
+check('le butin s\'applique toujours', results[6].A.loot && ['h6', 'hh6'].includes(results[6].A.loot.url) && collections.getCount('UG', results[6].A.loot.url) === 1);
 check('série : seul le 1er combat du jour compte', results[0].A.streak && results[0].A.streak.step === 1 && results.slice(1).every((x) => x.A.streak === null && x.B.streak === null));
 
 // ─── 📅 Série sur 6 jours ouvrés : JP$ puis booster Rare, puis retour au jour 1 ───
@@ -166,7 +167,8 @@ check('Vigie : redescendue mais combat perdu → carte perdue (comme l’ancienn
 
 // ─── Perdant qui n'a rien posé ───
 const empty = settleMatch({ matchId: 'm4', players: { A: 'UI', B: 'UJ' }, result: { winner: 'B', reason: 'forfeit', poses: [] } }, { now: T0 });
-check('perdant sans pose : pas de butin, récompense quand même', !empty.B.loot && empty.B.boosterId);
+// v4.4.2 : combat arrangé (le perdant ne joue pas) → plus de récompense (avant : récompensé quand même)
+check('perdant sans pose : pas de butin, et plus de récompense (anti-farm v4.4.2)', !empty.B.loot && !empty.B.boosterId && empty.farm && empty.farm.verdict === 'farm');
 
 try { require(path.join(TMP, 'src', 'db.js')).close(); } catch { /* base jamais ouverte */ }   // Windows : fichier ouvert = non supprimable
 fs.rmSync(TMP, { recursive: true, force: true });

@@ -287,9 +287,11 @@ function nextSaleTs(booster, now = Date.now()) {
  * finie d'ici là (v3.7 : le dernier jour, on ne promet pas un retour).
  */
 function comeBackDay(booster, now = Date.now()) {
-  const b = rulesOf(booster || BOOSTERS.octobre_rose, now);
+  // v4.4.2 : sans booster précisé, plus de repli sur Octobre Rose (saison finie →
+  // « dernier jour » affiché à tort pour la Route du Rhum).
+  const b = booster ? rulesOf(booster, now) : null;
   if (b && b.seasonal && !isOnSale(b, nextSaleTs(b, now))) return null;
-  return b && b.weekdaysOnly && isWeekend(now + DAY_MS) ? 'lundi' : 'demain';
+  return (!b || b.weekdaysOnly) && isWeekend(now + DAY_MS) ? 'lundi' : 'demain';
 }
 
 /** « demain » / « lundi » (saison finie : « demain », pour les textes qui l'exigent). */

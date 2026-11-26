@@ -880,6 +880,8 @@ function endMatch(state, winner, reason, events = []) {
     // 📺 JP TV : tours détruites PAR chaque camp, durée réelle du combat
     towers: { A: towersDestroyed(state, 'B'), B: towersDestroyed(state, 'A') },
     durationMs: state.timeMs,
+    // 🕵️ v4.4.2 : cartes restées en main (non jouées) par camp, pour le contrôle anti-farm
+    unplayed: { A: state.players.A.hand.length, B: state.players.B.hand.length },
     // les poses « free » (Écho) n'engagent aucune carte : exclues du bilan
     poses: state.poses.filter((p) => !p.free).map(({ side, url, title, rarity, archetype, status }) => ({ side, url, title, rarity, archetype, status })),
   };

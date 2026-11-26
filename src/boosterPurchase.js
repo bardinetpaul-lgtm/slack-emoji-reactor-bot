@@ -105,16 +105,16 @@ const texts = {
     }
     if (blocked === 'weekend') {
       const p = weekend.pauseFor(userId, now);
-      return `${p.icon} *Pas de Booster ${booster.emoji} ${booster.label} ${p.short} !* Jeanpip est en pause ${p.until}.${booster.dailyStock && p.kind === 'weekend' ? ` ${boosters.restockText()}` : ''}`;
+      return `${p.icon} *Pas de Booster ${booster.emoji} ${booster.label} ${p.short} !* Jeanpip est en pause ${p.until}.${booster.dailyStock && p.kind === 'weekend' ? ` ${boosters.restockText(now, booster)}` : ''}`;
     }
     if (blocked === 'user_limit') {
-      return `🎀 *Tu as déjà eu ton Booster ${booster.emoji} ${booster.label} aujourd'hui !* C'est ${booster.dailyPerUser} par personne et par jour, pour en laisser aux autres. ${boosters.comeBackDay(booster) ? `Reviens ${boosters.comeBackDay(booster)} 😉` : "C'était le dernier jour de la saison 😢"}`;
+      return `🎀 *Tu as déjà eu ton Booster ${booster.emoji} ${booster.label} aujourd'hui !* C'est ${booster.dailyPerUser} par personne et par jour, pour en laisser aux autres. ${boosters.comeBackDay(booster, now) ? `Reviens ${boosters.comeBackDay(booster, now)} 😉` : "C'était le dernier jour de la saison 😢"}`;
     }
     if (blocked === 'not_yet') {
       return `⏳ *Pas encore de Booster ${booster.emoji} ${booster.label} aujourd'hui !* ${boosters.DROP_TEXT} Reviens un peu plus tard 😉`;
     }
     if (blocked === 'sold_out') {
-      return `😢 *Plus de Booster ${booster.emoji} ${booster.label} aujourd'hui !* Les ${booster.dailyStock} du jour sont partis.\n\n${boosters.restockText()} Sois rapide 😉`;
+      return `😢 *Plus de Booster ${booster.emoji} ${booster.label} aujourd'hui !* Les ${booster.dailyStock} du jour sont partis.\n\n${boosters.restockText(now, booster)} Sois rapide 😉`;
     }
     return `⏳ *Le Booster ${booster.emoji} ${booster.label} n'est plus en vente.*`;
   },

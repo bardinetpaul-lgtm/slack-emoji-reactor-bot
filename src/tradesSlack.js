@@ -13,6 +13,7 @@
 
 const trades = require('./trades');
 const cardIndex = require('./cardIndex');
+const collections = require('./collections');
 const credits = require('./credits');
 const broadcast = require('./broadcast');
 const weekend = require('./weekend');
@@ -32,6 +33,10 @@ const RARITY_LABEL = {
   common: '⚪ Communes',
   extra: '📸 Photos anti-spam',
 };
+
+// 🐛 v4.4.2 : planchers lus dans la revente (src/resale.js), plus écrits en dur
+//    (le texte affichait « hors série 10 » alors que la v4.3 l'a passé à 30).
+const floorsText = () => `commune ${trades.floor('common')}, rare ${trades.floor('rare')}, épique ${trades.floor('epic')}, hors série ${trades.floor('halloween')}, légendaire ${trades.floor('legendary')}`;
 
 /** Erreurs de trades.* → texte pour le joueur (texte brut : sert aussi d'erreur de modale). */
 const ERROR_TEXT = {
@@ -141,6 +146,25 @@ function describeOffer(offer, holders = []) {
 }
 
 const cardLine = (card) => `*${codeOf(card)}* (${(RARITY_LABEL[card.rarity] || RARITY_LABEL.common).replace(/s$/, '')})`;
+
+// 🐛 v4.4.2 (bug n° 21) : celui qui reçoit une offre voit chaque carte proposée
+//    (vignette, rareté) et combien il en a déjà, au lieu d'un simple numéro.
+const MAX_PREVIEWS = 5;
+function offerPreviewBlocks(offer, holders, receiverId) {
+  const urls = (offer && offer.cards) || [];
+  const blocks = urls.slice(0, MAX_PREVIEWS).map((url) => {
+    const card = holders.map((h) => cardIndex.listCardsFor(h).find((c) => c.url === url)).find(Boolean)
+      || cardIndex.listCards().find((c) => c.url === url) || { url, code: urlCode(url, holders) };
+    const owned = receiverId ? collections.getCount(receiverId, url) : 0;
+    const have = owned ? `tu en as déjà *${owned}*` : '🆕 *tu ne l\'as pas encore*';
+    const title = card.title && card.title !== card.code ? ` — ${card.title}` : '';
+    const img = cardImage(card);
+    return section(`🃏 ${cardLine(card)}${title}\n${have}`,
+      img ? { type: 'image', image_url: img, alt_text: String(card.title || codeOf(card)).slice(0, 2000) } : null);
+  });
+  if (urls.length > MAX_PREVIEWS) blocks.push(context(`… et ${urls.length - MAX_PREVIEWS} autre${urls.length - MAX_PREVIEWS > 1 ? 's' : ''} carte${urls.length - MAX_PREVIEWS > 1 ? 's' : ''}.`));
+  return blocks;
+}
 
 // ─────────────────────────────────────────────
 // 🏠 Accueil
@@ -269,8 +293,7 @@ function buildDirectModal(buyer, seller = null, now = Date.now()) {
   const free = trades.cessible(seller);
   const all = cardIndex.listCardsFor(seller);   // + ses cartes retirées de la banque
   const available = all.filter((c) => free.has(c.url));
-  const lines = byRarity(all).map(([r, list]) => `${RARITY_LABEL[r]} : ${list.map((c) => (free.has(c.url) ? `*${c.code}*` : `~${c.code}~`)).join(' ')}`);
-  blocks.push(...chunkSections([`*Les cartes de <@${seller}>* — en gras : disponibles · ~barrées~ : non disponibles`, ...lines]));
+  blocks.push(...chunkSections(codeListLines(`*Les cartes de <@${seller}>* — ${CODES_LEGEND}`, free, seller)));
   if (!available.length) {
     blocks.push(section('😕 Ce joueur n\'a aucune carte à céder pour le moment.'));
     return view;
@@ -285,7 +308,7 @@ function buildDirectModal(buyer, seller = null, now = Date.now()) {
     optional: true,
     label: plainText('Ton offre en JP$'),
     element: { type: 'number_input', action_id: 'value', is_decimal_allowed: false, min_value: '0', placeholder: plainText('0') },
-    hint: plainText('Sans carte en échange : au moins le prix de rachat de la banque (commune 1, rare 2, épique 5, hors série 10, légendaire 20).'),
+    hint: plainText(`Sans carte en échange : au moins le prix de rachat de la banque (${floorsText()}).`),
   });
   const mineFree = trades.cessible(buyer);
   const mine = cardIndex.listCardsFor(buyer).filter((c) => mineFree.has(c.url));
@@ -319,6 +342,7 @@ function buildSellerDM(trade, sellerId) {
   const blocks = [];
   if (trade.status === 'open') {
     blocks.push(section(`${head}\n⏳ Réponds avant *${hour(trade.expiresAt)}*, sinon la demande expire.`));
+    blocks.push(...offerPreviewBlocks(trade.offer, [trade.buyer, trade.seller], sellerId));
     blocks.push({
       type: 'actions',
       block_id: `trade_${trade.id}`,
@@ -576,10 +600,17 @@ function buyerFreeCards(trade) {
   return trades.cessible(trade.buyer, data);
 }
 
-/** Liste des numéros (index + cartes retirées de `holder`) : en gras si `free` les contient, barrés sinon. */
+// 🐛 v4.4.2 (bug n° 28) : une carte possédée mais bloquée (dans un deck d'Arène, ou déjà
+//    promise dans un autre échange) était barrée comme une carte absente. Elle porte
+//    maintenant un 🔒 (sans dire laquelle des deux raisons : la composition des decks reste secrète).
+const CODES_LEGEND = 'en gras : disponibles · 🔒 : possédées mais bloquées (dans un deck d\'Arène ou promises dans un autre échange) · ~barrées~ : pas dans son classeur';
+
+/** Liste des numéros (index + cartes retirées de `holder`) : en gras si `free` les contient, 🔒 si possédées mais bloquées, barrés sinon. */
 function codeListLines(title, free, holder) {
   const all = cardIndex.listCardsFor(holder);
-  return [title, ...byRarity(all).map(([r, list]) => `${RARITY_LABEL[r]} : ${list.map((c) => (free.has(c.url) ? `*${c.code}*` : `~${c.code}~`)).join(' ')}`)];
+  const owned = new Set(collections.getCollection(holder).filter((c) => c.count > 0).map((c) => c.url));
+  const show = (c) => (free.has(c.url) ? `*${c.code}*` : owned.has(c.url) ? `🔒${c.code}` : `~${c.code}~`);
+  return [title, ...byRarity(all).map(([r, list]) => `${RARITY_LABEL[r]} : ${list.map(show).join(' ')}`)];
 }
 
 // ─────────────────────────────────────────────
@@ -604,7 +635,7 @@ function buildGeneralModal(buyer, now = Date.now()) {
       optional: true,
       label: plainText('Ton offre en JP$'),
       element: { type: 'number_input', action_id: 'value', is_decimal_allowed: false, min_value: '0', placeholder: plainText('0') },
-      hint: plainText('Sans carte en échange : au moins le prix de rachat de la banque (commune 1, rare 2, épique 5, hors série 10, légendaire 20).'),
+      hint: plainText(`Sans carte en échange : au moins le prix de rachat de la banque (${floorsText()}).`),
     },
   ];
   // Ses cartes proposées : index + ses cartes retirées de la banque (la carte recherchée, elle, vient de l'index)
@@ -648,11 +679,11 @@ function buildCounterModal(trade, sellerId, now = Date.now()) {
     optional: true,
     label: plainText('JP$ demandés'),
     element: { type: 'number_input', action_id: 'value', is_decimal_allowed: false, min_value: '0', placeholder: plainText('0') },
-    hint: plainText('Sans carte : au moins le prix de rachat de la banque (commune 1, rare 2, épique 5, hors série 10, légendaire 20).'),
+    hint: plainText(`Sans carte : au moins le prix de rachat de la banque (${floorsText()}).`),
   });
   const free = buyerFreeCards(trade);
   const theirs = cardIndex.listCardsFor(trade.buyer).filter((c) => free.has(c.url));
-  blocks.push(...chunkSections(codeListLines(`*Les cartes de <@${trade.buyer}>* — en gras : disponibles · ~barrées~ : non disponibles`, free, trade.buyer)));
+  blocks.push(...chunkSections(codeListLines(`*Les cartes de <@${trade.buyer}>* — ${CODES_LEGEND}`, free, trade.buyer)));
   if (theirs.length) {
     const picker = cardPicker(theirs, { multi: true, placeholder: 'Choisis ses cartes', textHint: '#12, HW3' });
     blocks.push({ type: 'input', block_id: 'cards', optional: true, label: plainText('Et / ou ses cartes'), ...picker });
@@ -720,6 +751,7 @@ function buildRequestDM(trade, ownerId, { declined = Boolean(trade.declined && t
   const blocks = [];
   if (trade.status === 'open' && !declined) {
     blocks.push(section(`${head}\n⏳ Réponds avant *${hour(trade.expiresAt)}*${general ? ' : le premier qui accepte conclut' : ', sinon la demande expire'}.`));
+    blocks.push(...offerPreviewBlocks(trade.offer, holdersOf(trade, ownerId), ownerId));
     if (co) blocks.push(context(counterStatusLine(trade, ownerId)));
     const elements = [
       button('✅ Accepter', 'trade_accept', { value: trade.id, style: 'primary' }),
@@ -746,6 +778,7 @@ function buildCounterBuyerDM(trade, sellerId) {
   const blocks = [];
   if (trade.status === 'open' && co.status === 'open') {
     blocks.push(section(`${head}${money}\n⏳ Réponds avant *${hour(co.expiresAt)}*.`));
+    blocks.push(...offerPreviewBlocks(co, holdersOf(trade, sellerId), trade.buyer));
     blocks.push({
       type: 'actions',
       block_id: `trade_counter_${trade.id}_${sellerId}`,
@@ -945,6 +978,7 @@ module.exports.buildGeneralModal = buildGeneralModal;
 module.exports.buildCounterModal = buildCounterModal;
 module.exports.buildRequestDM = buildRequestDM;
 module.exports.buildCounterBuyerDM = buildCounterBuyerDM;
+module.exports.offerPreviewBlocks = offerPreviewBlocks;
 
 // ═══════════════════════════════════════════════════════════
 //  🔨 ENCHÈRES ET MINUTERIE (v3.9, tâche 8)
@@ -1061,7 +1095,7 @@ function buildAuctionModal(seller, now = Date.now()) {
         optional: true,
         label: plainText('Prix de départ en JP$'),
         element: { type: 'number_input', action_id: 'value', is_decimal_allowed: false, min_value: '1', placeholder: plainText('Le minimum de la carte') },
-        hint: plainText('Au moins le prix de rachat de la banque (commune 1, rare 2, épique 5, hors série 10, légendaire 20). Vide : ce minimum.'),
+        hint: plainText(`Au moins le prix de rachat de la banque (${floorsText()}). Vide : ce minimum.`),
       },
       context(`⏰ Durée : 12 h. Lancée maintenant, elle finit *${whenText(endsAt)}* (une fin entre 20h et 9h est repoussée à 10h). Ta carte est réservée jusque-là ; sans enchère, elle te reste.`),
     ],
@@ -1394,6 +1428,7 @@ module.exports.afterAuctionCreated = afterAuctionCreated;
 module.exports.afterBid = afterBid;
 module.exports.pauseText = pauseText;
 module.exports.errorFor = errorFor;
+module.exports.floorsText = floorsText;
 
 module.exports.SELLER_DM_BUILDERS = SELLER_DM_BUILDERS;
 module.exports.buildAuctionModal = buildAuctionModal;

@@ -16,6 +16,20 @@
 
 const RELEASES = [
   {
+    version: '4.4.2',
+    date: '2026-11-26',
+    title: 'Correctifs : classeur, échanges, réactions et Arène plus juste',
+    changes: [
+      '⚔️ *Arène plus juste* : un combat où le perdant *ne pose aucune carte* (ou une 3e fois dans la journée contre le même joueur avec une carte au plus) ne rapporte *plus rien* : ni booster, ni JP$, ni jour de série, et la victoire ne compte pas au classement. Un vrai combat, ça se joue des deux côtés 😉',
+      '🤝 *Échanges* : quand on te propose des cartes, tu vois maintenant *chaque carte en vignette*, sa rareté, et *combien tu en as déjà* (ou si elle est nouvelle pour toi).',
+      '🔒 Dans la liste des cartes d’un joueur, une carte qu’il possède mais qu’il ne peut pas céder (rangée dans un deck d’Arène ou déjà promise dans un autre échange) porte maintenant un *🔒* au lieu d’être barrée comme une carte absente.',
+      '💰 Les fenêtres d’échange affichent le bon prix minimum des cartes Hors série : *30 JP$* (et non plus 10).',
+      '📒 *Classeur* : changer vite d’onglet (Rares, Épiques…) ne mélange plus les pages.',
+      '👍 Une réaction Jeanpip *dans un fil de discussion* compte maintenant normalement, et une réaction sur le message d’une appli explique pourquoi elle ne compte pas (fini le message « @null »).',
+      '⛵ Quand un booster de saison est épuisé pour la journée, le jeu n’annonce plus à tort « C’était le dernier jour de la saison ».',
+    ],
+  },
+  {
     version: '4.4.1',
     date: '2026-11-16',
     title: 'Se déplacer dans Jeanpip City, enfin facile',
